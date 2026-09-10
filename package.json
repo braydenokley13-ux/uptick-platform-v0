@@ -1,0 +1,48 @@
+{
+  "name": "uptick-platform-v0",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --hostname 127.0.0.1",
+    "build": "next build",
+    "start": "next start --hostname 127.0.0.1",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "db:migrate": "node --import tsx scripts/migrate.ts",
+    "db:seed": "node --import tsx scripts/seed.ts",
+    "test:e2e": "playwright test",
+    "format": "prettier --write src scripts tests docs *.ts *.mjs *.json README.md",
+    "format:check": "prettier --check src scripts tests docs *.ts *.mjs *.json README.md",
+    "bootstrap:operator": "node --import tsx scripts/bootstrap-operator.ts"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.3.14",
+    "@fontsource/geist-mono": "^5.3.0",
+    "@fontsource/geist-sans": "^5.3.0",
+    "@fontsource/newsreader": "^5.3.0",
+    "@supabase/supabase-js": "^2.57.0",
+    "libphonenumber-js": "^1.12.0",
+    "lucide-react": "^0.468.0",
+    "next": "16.3.4",
+    "postgres": "^3.4.7",
+    "qrcode": "^1.5.4",
+    "react": "19.1.1",
+    "react-dom": "19.1.1",
+    "twilio": "^5.10.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@types/node": "^22",
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.4",
+    "prettier": "^3.9.6",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  },
+  "type": "module"
+}
