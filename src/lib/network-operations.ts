@@ -4,13 +4,20 @@ import {
   audit,
   authorize,
   offerSelect,
+  rateLimit,
   weekKey,
   type Actor,
   type Offer,
 } from "./domain";
 import { RequestError } from "./http";
-import { id, token } from "./security";
+import { id, token, hash, normalizePhone } from "./security";
 import { allocateMember, marketCoverage, supplyUsage } from "./network";
+import { prepareMembershipWeek } from "./member-experience";
+import {
+  configureMemberSender,
+  dispatchMemberMessages,
+  memberMessagingReadiness,
+} from "./member-messaging";
 
 const text = (max = 200) => z.string().trim().max(max);
 const optionalNumber = (minimum: number, maximum: number) =>
@@ -456,6 +463,11 @@ export async function approveSupply(db: DB, actor: Actor, supplyId: string) {
       throw new RequestError(
         "Submit this Drop supply for review before approval.",
       );
+    if (supply.offer_version !== supply.current_offer_version)
+      throw new RequestError(
+        "This offer changed after its supply was submitted. Save the supply again to review the latest offer version before approval.",
+      );
+    await assertSupplyTapReady(tx, supply);
     if (new Date(supply.expires_at).getTime() <= Date.now())
       throw new RequestError(
         "This Drop has already expired. Create a new offer window.",
@@ -636,8 +648,9 @@ export async function resumeSupply(db: DB, actor: Actor, raw: unknown) {
       state: string;
       approved_by: string | null;
       expires_at: string;
+      verification_mode: string;
     }>(
-      "select organization_id,market_id,location_id,state,approved_by,expires_at from network_drop_supplies where id=$1 for update",
+      "select organization_id,market_id,location_id,state,approved_by,expires_at,verification_mode from network_drop_supplies where id=$1 for update",
       [data.supplyId],
     );
     if (!supply || supply.state !== "paused" || !supply.approved_by)
@@ -648,6 +661,7 @@ export async function resumeSupply(db: DB, actor: Actor, raw: unknown) {
       throw new RequestError(
         "This Drop has expired. Create a new offer window.",
       );
+    await assertSupplyTapReady(tx, supply);
     if (
       !(
         await tx.query(
@@ -769,6 +783,9 @@ export type SupplyRow = {
   location_id: string;
   offer_id: string;
   offer_version: number;
+  current_offer_version: number;
+  staff_tap_count: number;
+  public_tap_count: number;
   state: string;
   starts_at: string;
   expires_at: string;
@@ -793,7 +810,33 @@ export type SupplyRow = {
   address: string;
   timezone: string;
 };
-const supplySelect = `select s.*,o.title,v.reward,v.qualification,v.terms,g.name merchant,g.timezone,l.address,pm.reward_cost from network_drop_supplies s left join offer_product_metadata pm on pm.offer_id=s.offer_id and pm.version=s.offer_version join offers o on o.id=s.offer_id join offer_versions v on v.offer_id=s.offer_id and v.version=s.offer_version join organizations g on g.id=s.organization_id join locations l on l.id=s.location_id`;
+const supplySelect = `select s.*,o.current_version current_offer_version,(select count(*)::int from redemption_points rp where rp.organization_id=s.organization_id and rp.location_id=s.location_id and rp.state='active' and rp.exposure='staff' and exists(select 1 from redemption_credentials rc where rc.point_id=rp.id and rc.state='active')) staff_tap_count,(select count(*)::int from redemption_points rp where rp.organization_id=s.organization_id and rp.location_id=s.location_id and rp.state='active' and rp.exposure='public' and exists(select 1 from redemption_credentials rc where rc.point_id=rp.id and rc.state='active')) public_tap_count,o.title,v.reward,v.qualification,v.terms,g.name merchant,g.timezone,l.address,pm.reward_cost from network_drop_supplies s left join offer_product_metadata pm on pm.offer_id=s.offer_id and pm.version=s.offer_version join offers o on o.id=s.offer_id join offer_versions v on v.offer_id=s.offer_id and v.version=s.offer_version join organizations g on g.id=s.organization_id join locations l on l.id=s.location_id`;
+
+async function assertSupplyTapReady(
+  db: DB,
+  supply: {
+    organization_id: string;
+    location_id: string;
+    verification_mode: string;
+  },
+) {
+  if (supply.verification_mode === "self_confirm") return;
+  const points = await db.query<{ exposure: string }>(
+    "select distinct p.exposure from redemption_points p join redemption_credentials c on c.point_id=p.id where p.organization_id=$1 and p.location_id=$2 and p.state='active' and c.state='active'",
+    [supply.organization_id, supply.location_id],
+  );
+  if (!points.some((point) => point.exposure === "staff"))
+    throw new RequestError(
+      "Configure an active staff-controlled Uptick Tap at this location before approval. A public Tap also needs its staff fallback.",
+    );
+  if (
+    supply.verification_mode === "public_tap" &&
+    !points.some((point) => point.exposure === "public")
+  )
+    throw new RequestError(
+      "Configure an active public Uptick Tap at this location before approving the public Tap policy.",
+    );
+}
 export type MemberSummary = {
   joined: number;
   verified: number;
@@ -911,3 +954,196 @@ export async function networkOperations(
   };
 }
 export type NetworkOperations = Awaited<ReturnType<typeof networkOperations>>;
+
+export async function saveMembershipSender(db: DB, actor: Actor, raw: unknown) {
+  requireOperator(actor);
+  const input = z
+    .object({ serviceSid: text(34), phone: text(20), approved: yes })
+    .parse(raw);
+  return configureMemberSender(db, actor, input);
+}
+
+export async function prepareMembershipMessages(db: DB, actor: Actor) {
+  requireOperator(actor);
+  if (!(await memberMessagingReadiness(db)).ready)
+    throw new RequestError(
+      "Complete membership messaging setup before preparing a delivery batch.",
+    );
+  const queued = await prepareMembershipWeek(db, 100);
+  await audit(db, actor.id, null, "membership.week_prepared", "membership", {
+    queued,
+    limit: 100,
+    sendsMessages: false,
+  });
+  return queued;
+}
+
+export async function dispatchMembershipMessages(
+  db: DB,
+  actor: Actor,
+  raw: unknown,
+) {
+  requireOperator(actor);
+  const { reviewed } = z.object({ reviewed: yes }).parse(raw);
+  if (!reviewed)
+    throw new RequestError(
+      "Review the membership queue and confirm the delivery step.",
+    );
+  const readiness = await memberMessagingReadiness(db);
+  if (!readiness.ready)
+    throw new RequestError(
+      "Complete membership messaging setup before dispatching.",
+    );
+  const processed = await dispatchMemberMessages(db, 20);
+  await audit(db, actor.id, null, "membership.queue_dispatched", "membership", {
+    processed,
+    limit: 20,
+    environment: readiness.environment,
+    simulated: readiness.simulated,
+  });
+  return { processed, simulated: readiness.simulated };
+}
+
+/** Operator-only cross-market delivery ledger. Never select private access credentials. */
+export async function membershipMessagingOperations(db: DB, actor: Actor) {
+  requireOperator(actor);
+  const [readiness, counts, messages, preparations] = await Promise.all([
+    memberMessagingReadiness(db),
+    db.query<{ state: string; count: number }>(
+      "select state,count(*)::int count from member_messages group by state order by state",
+    ),
+    db.query<{
+      id: string;
+      member_ref: string;
+      phone_hint: string;
+      market: string | null;
+      purpose: string;
+      week_key: string | null;
+      state: string;
+      environment: string;
+      scheduled_at: string;
+      expires_at: string;
+      created_at: string;
+      error_code: string | null;
+      suppression_reason: string | null;
+      provider_sid: string | null;
+    }>(
+      `select msg.id,upper(right(msg.member_id,6)) member_ref,right(c.phone,4) phone_hint,k.name market,msg.purpose,msg.week_key,msg.state,msg.environment,msg.scheduled_at,msg.expires_at,msg.created_at,msg.error_code,msg.suppression_reason,msg.provider_sid from member_messages msg join uptick_members m on m.id=msg.member_id join customers c on c.id=m.customer_id left join market_cells k on k.id=m.market_id order by msg.created_at desc,msg.id limit 80`,
+    ),
+    db.query<{ state: string; count: number }>(
+      "select p.state,count(*)::int count from member_week_preparations p join uptick_members m on m.id=p.member_id join market_cells k on k.id=m.market_id where p.week_key=to_char(date_trunc('week',now() at time zone k.timezone),'YYYY-MM-DD') group by p.state",
+    ),
+  ]);
+  return { readiness, counts, messages, preparations };
+}
+export type MembershipMessagingOperations = Awaited<
+  ReturnType<typeof membershipMessagingOperations>
+>;
+
+export async function lookupNetworkMember(db: DB, actor: Actor, raw: unknown) {
+  requireOperator(actor);
+  const input = z.object({ phone: text(40).min(1) }).parse(raw);
+  const phone = normalizePhone(input.phone);
+  await rateLimit(db, `operator-member-lookup:${actor.id}`, 60, 3600);
+  const [member] = await db.query<{
+    id: string;
+    reference: string;
+    phone_hint: string;
+    state: string;
+    verified_at: string | null;
+    created_at: string;
+    home_zip: string;
+    work_zip: string | null;
+    market: string | null;
+    source: string | null;
+    channel: string | null;
+    partner: string | null;
+  }>(
+    `select m.id,upper(right(m.id,6)) reference,right(c.phone,4) phone_hint,m.state,m.verified_at,m.created_at,m.home_zip,m.work_zip,k.name market,s.name source,s.channel,p.name partner from uptick_members m join customers c on c.id=m.customer_id left join market_cells k on k.id=m.market_id left join acquisition_sources s on s.id=m.source_id left join acquisition_partners p on p.id=s.partner_id where c.phone=$1`,
+    [phone],
+  );
+  await audit(
+    db,
+    actor.id,
+    null,
+    "membership.support_lookup",
+    member?.id || hash(phone),
+    { found: !!member, purpose: "individual_member_support" },
+  );
+  if (!member) return null;
+  const [consents, allocations, claims, events, messages, suppressions] =
+    await Promise.all([
+      db.query<{
+        accepted: boolean;
+        disclosure_version: string;
+        disclosure: string;
+        source_ui: string;
+        created_at: string;
+      }>(
+        "select accepted,disclosure_version,disclosure,source_ui,created_at from member_consents where member_id=$1 order by sequence desc limit 5",
+        [member.id],
+      ),
+      db.query<{
+        week_key: string;
+        created_at: string;
+        algorithm_version: string;
+        options: {
+          rank: number;
+          title: string;
+          merchant: string;
+          state: string;
+        }[];
+      }>(
+        `select a.week_key,a.created_at,a.algorithm_version,coalesce(jsonb_agg(jsonb_build_object('rank',x.rank,'title',o.title,'merchant',g.name,'state',s.state) order by x.rank) filter(where x.supply_id is not null),'[]'::jsonb) options from member_allocations a left join allocation_options x on x.allocation_id=a.id left join network_drop_supplies s on s.id=x.supply_id left join offers o on o.id=s.offer_id left join organizations g on g.id=s.organization_id where a.member_id=$1 group by a.id order by a.week_key desc,a.created_at desc limit 3`,
+        [member.id],
+      ),
+      db.query<{
+        reference: string;
+        merchant: string;
+        reward: string;
+        state: string;
+        created_at: string;
+        redeemed_at: string | null;
+        verification_method: string | null;
+        staff_gated: boolean | null;
+        transaction_verified: boolean | null;
+      }>(
+        `select upper(right(c.id,6)) reference,c.snapshot->>'merchant' merchant,c.snapshot->>'reward' reward,c.state,c.created_at,c.redeemed_at,e.method verification_method,e.staff_gated,e.transaction_verified from member_claims mc join claims c on c.id=mc.claim_id left join redemption_evidence e on e.claim_id=c.id where mc.member_id=$1 order by c.created_at desc limit 10`,
+        [member.id],
+      ),
+      db.query<{ kind: string; evidence_class: string; created_at: string }>(
+        "select kind,evidence_class,created_at from demand_events where member_id=$1 order by created_at desc,id desc limit 20",
+        [member.id],
+      ),
+      db.query<{
+        purpose: string;
+        state: string;
+        created_at: string;
+        error_code: string | null;
+        suppression_reason: string | null;
+      }>(
+        "select purpose,state,created_at,error_code,suppression_reason from member_messages where member_id=$1 order by created_at desc,id desc limit 8",
+        [member.id],
+      ),
+      db.query<{
+        suppressed: boolean;
+        active_sender: boolean;
+        updated_at: string;
+      }>(
+        "select s.suppressed,ms.active active_sender,s.updated_at from member_suppressions s join member_senders ms on ms.id=s.sender_id where s.phone=$1 order by s.updated_at desc limit 5",
+        [phone],
+      ),
+    ]);
+  return {
+    member,
+    consents,
+    allocations,
+    claims,
+    events,
+    messages,
+    suppressions,
+  };
+}
+export type NetworkMemberSupport = NonNullable<
+  Awaited<ReturnType<typeof lookupNetworkMember>>
+>;

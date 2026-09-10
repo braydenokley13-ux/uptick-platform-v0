@@ -14,7 +14,13 @@ import {
   resumeSupply,
   allocateMarket,
   networkOperations,
+  saveMembershipSender,
+  prepareMembershipMessages,
+  dispatchMembershipMessages,
+  membershipMessagingOperations,
+  lookupNetworkMember,
 } from "../src/lib/network-operations";
+import { createRedemptionPoint } from "../src/lib/tap";
 import {
   requestMemberAccess,
   confirmMemberAccess,
@@ -95,6 +101,18 @@ beforeEach(async () => {
   await db.query(
     "insert into offer_versions(offer_id,version,qualification,reward,terms,starts_at,expires_at) values('drop',1,'Visit the store','Free large coffee','One per Uptick member',now()-interval '1 day',now()+interval '30 days')",
   );
+  await createRedemptionPoint(db, operator, {
+    organizationId: "merchant",
+    locationId: "location",
+    name: "Staff counter",
+    exposure: "staff",
+  });
+  await createRedemptionPoint(db, operator, {
+    organizationId: "merchant",
+    locationId: "location",
+    name: "Public counter",
+    exposure: "public",
+  });
 });
 
 test("network operations refuse merchant access before reading or mutating network records", async () => {
@@ -377,4 +395,134 @@ test("inventory adjustments cannot erase reservations and aggregate views expose
   assert.equal(JSON.stringify(data).includes("+12125550121"), false);
   assert.equal(JSON.stringify(data).includes(joined.credential), false);
   assert.equal(data.coverage.length, 5);
+});
+
+test("operator approval catches a revised offer and an unavailable verification point", async () => {
+  const supplyId = await saveSupply(db, operator, supplyInput());
+  await db.query(
+    "insert into offer_versions(offer_id,version,qualification,reward,terms,starts_at,expires_at) select offer_id,2,qualification,'Free small coffee',terms,starts_at,expires_at from offer_versions where offer_id='drop' and version=1",
+  );
+  await db.query("update offers set current_version=2 where id='drop'");
+  await assert.rejects(
+    () => approveSupply(db, operator, supplyId),
+    /changed after/,
+  );
+  await saveSupply(db, operator, { ...supplyInput(), id: supplyId });
+  await db.query(
+    "update redemption_credentials set state='revoked' where point_id in (select id from redemption_points where exposure='staff')",
+  );
+  await assert.rejects(
+    () => approveSupply(db, operator, supplyId),
+    /staff-controlled/,
+  );
+  await createRedemptionPoint(db, operator, {
+    organizationId: "merchant",
+    locationId: "location",
+    name: "Replacement staff counter",
+    exposure: "staff",
+  });
+  await approveSupply(db, operator, supplyId);
+  const data = await networkOperations(db, operator, marketId);
+  assert.equal(data.supplies[0].offer_version, 2);
+  assert.equal(data.supplies[0].staff_tap_count, 1);
+});
+
+test("membership message operations require operator access and return a masked ledger", async () => {
+  await assert.rejects(
+    () => membershipMessagingOperations(db, merchant),
+    /access/,
+  );
+  await assert.rejects(() => prepareMembershipMessages(db, merchant), /access/);
+  await assert.rejects(
+    () => dispatchMembershipMessages(db, merchant, { reviewed: true }),
+    /access/,
+  );
+  await assert.rejects(() => saveMembershipSender(db, merchant, {}), /access/);
+  await assert.rejects(
+    () => dispatchMembershipMessages(db, operator, {}),
+    /Review/,
+  );
+  const sender = {
+    serviceSid: `MG${"e".repeat(32)}`,
+    phone: "+12125550199",
+    approved: false,
+  };
+  await saveMembershipSender(db, operator, sender);
+  const supplyId = await saveSupply(db, operator, supplyInput());
+  await approveSupply(db, operator, supplyId);
+  const joined = await requestMemberAccess(db, {
+    phone: "+12125550131",
+    homeZip: "10583",
+    consentRequested: true,
+  });
+  await confirmMemberAccess(db, joined.credential, true);
+  assert.equal(await prepareMembershipMessages(db, operator), 1);
+  assert.equal(await prepareMembershipMessages(db, operator), 0);
+  let data = await membershipMessagingOperations(db, operator);
+  assert.equal(data.readiness.simulated, true);
+  assert.equal(
+    data.messages.find((message) => message.purpose === "drop")?.phone_hint,
+    "0131",
+  );
+  assert.equal(JSON.stringify(data).includes("+12125550131"), false);
+  assert.equal(JSON.stringify(data).includes(joined.credential), false);
+  await dispatchMembershipMessages(db, operator, { reviewed: true });
+  data = await membershipMessagingOperations(db, operator);
+  assert.equal(
+    data.messages.some((message) => message.state === "delivered"),
+    false,
+  );
+  assert.equal(
+    data.messages.every((message) =>
+      ["development", "queued", "suppressed"].includes(message.state),
+    ),
+    true,
+  );
+});
+
+test("protected member support resolves normalized phones before a claim without exposing private credentials", async () => {
+  const phone = "+12125550141";
+  const joined = await requestMemberAccess(db, {
+    phone,
+    homeZip: "10583",
+    consentRequested: true,
+  });
+  await assert.rejects(
+    () => lookupNetworkMember(db, merchant, { phone }),
+    /access/,
+  );
+  const pending = await lookupNetworkMember(db, operator, {
+    phone: "(212) 555-0141",
+  });
+  assert.equal(pending?.member.state, "pending");
+  assert.equal(pending?.member.verified_at, null);
+  assert.equal(pending?.claims.length, 0);
+  assert.equal(pending?.consents.length, 0);
+  assert.equal(
+    pending?.events.some((event) => event.kind === "membership_requested"),
+    true,
+  );
+  const supplyId = await saveSupply(db, operator, supplyInput());
+  await approveSupply(db, operator, supplyId);
+  await confirmMemberAccess(db, joined.credential, true);
+  await allocateMarket(db, operator, marketId);
+  await claimMemberDrop(db, joined.credential, supplyId);
+  const result = await lookupNetworkMember(db, operator, { phone });
+  assert.equal(result?.member.phone_hint, "0141");
+  assert.equal(result?.consents[0].accepted, true);
+  assert.equal(result?.claims.length, 1);
+  assert.equal(result?.claims[0].merchant, "River Fuel");
+  assert.equal(result?.claims[0].redeemed_at, null);
+  assert.equal(result?.allocations[0].options[0].title, "Morning coffee");
+  assert.equal(JSON.stringify(result).includes(phone), false);
+  assert.equal(JSON.stringify(result).includes(joined.credential), false);
+  const audits = await db.query(
+    "select detail from audit_events where action='membership.support_lookup'",
+  );
+  assert.equal(audits.length, 2);
+  assert.equal(JSON.stringify(audits).includes(phone), false);
+  assert.equal(
+    await lookupNetworkMember(db, operator, { phone: "+12125550142" }),
+    null,
+  );
 });

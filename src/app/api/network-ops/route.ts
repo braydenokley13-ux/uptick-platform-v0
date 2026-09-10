@@ -17,6 +17,10 @@ import {
   pauseSupply,
   resumeSupply,
   allocateMarket,
+  saveMembershipSender,
+  prepareMembershipMessages,
+  dispatchMembershipMessages,
+  lookupNetworkMember,
 } from "@/lib/network-operations";
 import { z } from "zod";
 export const runtime = "nodejs";
@@ -32,7 +36,14 @@ export async function POST(request: Request) {
     const action = z.string().max(60).parse(body.action);
     let message = "Saved. The network workspace now reflects this change.";
     let redirect: string | undefined;
-    if (action === "market-save") {
+    let memberSupport:
+      Awaited<ReturnType<typeof lookupNetworkMember>> | undefined;
+    if (action === "member-lookup") {
+      memberSupport = await lookupNetworkMember(db, actor, body);
+      message = memberSupport
+        ? "Matching member found. This support lookup is recorded in the audit history."
+        : "No Uptick membership matches that phone number.";
+    } else if (action === "market-save") {
       const marketId = await saveMarket(db, actor, body);
       redirect = `/operator/network/markets?market=${marketId}`;
       message =
@@ -67,9 +78,23 @@ export async function POST(request: Request) {
         z.string().min(1).max(100).parse(body.marketId),
       );
       message = `${result.checked} permissioned members checked. ${result.allocated} have saved options; ${result.withoutOptions} have no current option. No messages were sent.`;
+    } else if (action === "membership-sender-save") {
+      await saveMembershipSender(db, actor, body);
+      message =
+        "Uptick membership sender saved. Provider approval remains an operator attestation; delivery still checks every platform gate.";
+    } else if (action === "membership-prepare") {
+      const queued = await prepareMembershipMessages(db, actor);
+      message = `${queued} current-week membership messages prepared. No messages were sent. Review the ledger before dispatching.`;
+    } else if (action === "membership-dispatch") {
+      const result = await dispatchMembershipMessages(db, actor, body);
+      message = `${result.processed} queued membership messages processed. ${result.simulated ? "Development transport: no SMS was sent." : "The ledger records accepted, suppressed or uncertain outcomes. Provider acceptance is not delivery."}`;
     } else throw new RequestError("Unknown network action.");
     return Response.json(
-      { message, ...(redirect ? { redirect } : {}) },
+      {
+        message,
+        ...(redirect ? { redirect } : {}),
+        ...(memberSupport !== undefined ? { memberSupport } : {}),
+      },
       { headers: { "Cache-Control": "private, no-store" } },
     );
   } catch (error) {

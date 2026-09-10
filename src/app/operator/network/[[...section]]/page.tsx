@@ -12,8 +12,11 @@ import {
 import { requireActor } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { appUrl } from "@/lib/config";
+import { operatorDriveEstimate } from "@/lib/location-intelligence";
 import {
   networkOperations,
+  membershipMessagingOperations,
+  type MembershipMessagingOperations,
   type NetworkOperations,
   type MarketRow,
   type PartnerRow,
@@ -21,10 +24,12 @@ import {
   type SourceRow,
 } from "@/lib/network-operations";
 import { Shell } from "@/components/shell";
+import { memberMessageText } from "@/lib/member-messaging";
 import { Badge, ButtonLink, Empty, Metric, PageHeading } from "@/components/ui";
 import {
   LocalCoordinateMap,
   NetworkForm,
+  NetworkMemberLookup,
   type GeographicNode,
 } from "@/components/network-operations";
 import "@/components/network-operations.css";
@@ -36,6 +41,7 @@ const tabs = [
   ["acquisition", "Acquisition"],
   ["members", "Members & cohorts"],
   ["allocation", "Allocation"],
+  ["messaging", "Member messaging"],
   ["map", "Local map"],
 ] as const;
 const money = (value: number | null) =>
@@ -185,7 +191,7 @@ function MarketForm({ market }: { market?: MarketRow }) {
           defaultValue={market?.timezone || "America/New_York"}
         />
         <small>
-          Dates and the weekly promise follow this market's local time.
+          Dates and the weekly promise follow this market’s local time.
         </small>
       </label>
       <label>
@@ -226,9 +232,11 @@ function WeeklyCoverage({ data }: { data: NetworkOperations }) {
         <p className="eyebrow">THIS WEEK + THE NEXT FOUR</p>
         <h2>Can we keep the promise?</h2>
         <p>
-          Each full market-local week is matched against today’s active,
-          permissioned membership without counting the same person twice. An
-          ample Drop is shown separately from a counted inventory ceiling.
+          Covered means already served, holding a valid reservation, or matched
+          to remaining supply for that market-local week. Each active,
+          permissioned member counts once. Future weeks use today’s membership
+          and saved supply; those projections do not reserve inventory across
+          weeks.
         </p>
       </div>
       <div className="network-table-wrap">
@@ -238,7 +246,7 @@ function WeeklyCoverage({ data }: { data: NetworkOperations }) {
               <th>MARKET WEEK</th>
               <th>PERMISSIONED</th>
               <th>MEMBERS COVERED</th>
-              <th>CAPACITY</th>
+              <th>REMAINING UNITS</th>
               <th>GAP</th>
             </tr>
           </thead>
@@ -262,7 +270,7 @@ function WeeklyCoverage({ data }: { data: NetworkOperations }) {
                   </strong>
                   <small>
                     {week.activeMembers
-                      ? `${week.coveragePercent ?? 0}% matched coverage`
+                      ? `${week.coveragePercent ?? 0}% weekly coverage`
                       : "No active permissioned members"}
                   </small>
                 </td>
@@ -283,7 +291,7 @@ function WeeklyCoverage({ data }: { data: NetworkOperations }) {
                   ) : (
                     <span className="fine">
                       {week.activeMembers
-                        ? "No matching gap"
+                        ? "No gap in current plan"
                         : "No promise measured yet"}
                     </span>
                   )}
@@ -378,18 +386,18 @@ function Today({ data }: { data: NetworkOperations }) {
             protect the evidence, and build a market people can rely on.
           </p>
           <ButtonLink href={href("supply", market.id)}>
-            Manage this week's supply
+            Manage this week’s supply
           </ButtonLink>
         </div>
         <div className="network-coverage">
-          <p className="eyebrow">THIS WEEK · MATCHED MEMBER COVERAGE</p>
+          <p className="eyebrow">THIS WEEK · MEMBER COVERAGE</p>
           <div className="network-coverage-value">
             {current?.activeMembers ? (current.coveragePercent ?? 0) : "—"}
             <span>{current?.activeMembers ? "%" : ""}</span>
           </div>
           <p>
             {current?.activeMembers
-              ? `${current.coveredMembers} of ${current.activeMembers} active, permissioned members have a capacity-matched option.`
+              ? `${current.coveredMembers} of ${current.activeMembers} active, permissioned members are already served, reserved, or matched to remaining supply this week.`
               : "Coverage begins when the market has active, permissioned members."}
           </p>
           <div className="network-coverage-bar">
@@ -402,8 +410,9 @@ function Today({ data }: { data: NetworkOperations }) {
           <p>
             {current?.capacity === null
               ? "At least one approved Drop uses an ample inventory policy."
-              : `${current?.capacity || 0} units of approved finite capacity.`}{" "}
-            Capacity is a supply ceiling; matched coverage accounts for overlap.
+              : `${current?.capacity || 0} finite units remain after redemptions and active reservations.`}{" "}
+            Covered members are counted once. Coverage does not mean another
+            claim is available to someone already served.
           </p>
         </div>
       </div>
@@ -1245,7 +1254,7 @@ function Supply({ data }: { data: NetworkOperations }) {
                 <strong>Timed reservation</strong>
                 <p>
                   A claim holds one item for the configured duration, capped by
-                  the offer's end.
+                  the offer’s end.
                 </p>
               </div>
             </li>
@@ -1335,6 +1344,19 @@ function Supply({ data }: { data: NetworkOperations }) {
                 <strong>Fallback:</strong> {supply.fallback_plan}
               </p>
             )}
+            <Evidence>
+              {supply.verification_mode === "self_confirm"
+                ? "Self-confirmation records the member’s statement; it does not verify an in-store interaction."
+                : `${supply.staff_tap_count} active staff Tap point${supply.staff_tap_count === 1 ? "" : "s"} · ${supply.public_tap_count} active public Tap point${supply.public_tap_count === 1 ? "" : "s"}. Configuration does not prove that signs are installed or staff are trained.`}
+            </Evidence>
+            {["draft", "review"].includes(supply.state) &&
+              supply.offer_version !== supply.current_offer_version && (
+                <p className="error">
+                  The merchant revised this offer to V
+                  {supply.current_offer_version}. Save the supply policy again
+                  to review the current version before approval.
+                </p>
+              )}
             {supply.state === "review" && (
               <NetworkForm
                 action="supply-approve"
@@ -1553,7 +1575,9 @@ function Members({ data }: { data: NetworkOperations }) {
           <strong>Derived</strong>
           <p>
             Coverage, cohort return counts, acquisition cost and repeat merchant
-            redemptions are calculated from saved records.
+            redemptions are calculated from saved records. Weekly coverage
+            includes members already served, reserved, or matched to remaining
+            supply; it is not a count of new claims available now.
           </p>
         </div>
         <div>
@@ -1584,7 +1608,7 @@ function Allocation({ data }: { data: NetworkOperations }) {
           <h2>Prepare useful choices.</h2>
           <p>
             Choose from approved supply using explicit market, ZIP, inventory
-            and frequency rules. Each member's weekly options and their reasons
+            and frequency rules. Each member’s weekly options and their reasons
             are preserved.
           </p>
           <NetworkForm
@@ -1594,7 +1618,7 @@ function Allocation({ data }: { data: NetworkOperations }) {
           >
             <label className="network-check">
               <input type="checkbox" required />
-              Prepare the current week's choices for up to 250 active,
+              Prepare the current week’s choices for up to 250 active,
               permissioned members. Existing weekly choices stay fixed. This
               does not send messages.
             </label>
@@ -1741,7 +1765,7 @@ function Map({ data }: { data: NetworkOperations }) {
         latitude: Number(location.latitude),
         longitude: Number(location.longitude),
         address: location.address,
-        detail: `${data.supplies.filter((supply) => supply.location_id === location.id && supply.state === "approved").length} approved Drops. ${location.drive_minutes ? `${location.drive_minutes} minutes: manually estimated local drive.` : "No local drive estimate recorded."}`,
+        detail: `${data.supplies.filter((supply) => supply.location_id === location.id && supply.state === "approved").length} approved Drops. ${operatorDriveEstimate(location.drive_minutes).label}`,
         sample: location.is_demo,
       })),
     ...data.partners
@@ -1797,6 +1821,277 @@ function Map({ data }: { data: NetworkOperations }) {
     </>
   );
 }
+function MembershipMessaging({
+  data,
+}: {
+  data: MembershipMessagingOperations;
+}) {
+  const { readiness } = data;
+  const count = (state: string) =>
+    data.counts.find((item) => item.state === state)?.count || 0;
+  return (
+    <>
+      <div className="network-status-row">
+        <Badge
+          tone={
+            readiness.simulated ? "amber" : readiness.ready ? "mint" : "neutral"
+          }
+        >
+          {readiness.simulated
+            ? "Simulated · no SMS"
+            : readiness.ready
+              ? "Delivery configured"
+              : "Delivery blocked"}
+        </Badge>
+        <p>
+          All Market Cells ·{" "}
+          {readiness.environment || "Environment not configured"}. This
+          workspace controls Uptick membership messages, separate from merchant
+          programs.
+        </p>
+      </div>
+      <div className="network-metrics">
+        <Metric
+          label="QUEUED"
+          value={count("queued")}
+          note="Awaiting an eligible dispatch"
+        />
+        <Metric
+          label="DELIVERED"
+          value={count("delivered")}
+          note="Confirmed by provider callback"
+        />
+        <Metric
+          label="UNKNOWN"
+          value={count("unknown")}
+          note="No automatic retry"
+        />
+        <Metric
+          label="SUPPRESSED"
+          value={count("suppressed")}
+          note="Held by a current delivery rule"
+        />
+      </div>
+      <div className="network-grid equal">
+        <section className="panel network-panel">
+          <p className="eyebrow">01 / THE UPTICK MEMBERSHIP SENDER</p>
+          <h2>One clear identity.</h2>
+          <p>
+            Use Uptick’s dedicated, approved Messaging Service and US sender.
+            Saving these values records configuration; it does not register or
+            approve a provider campaign.
+          </p>
+          <NetworkForm
+            action="membership-sender-save"
+            button="Save membership sender"
+          >
+            <label>
+              Messaging Service SID
+              <input
+                name="serviceSid"
+                required
+                pattern="MG[0-9a-fA-F]{32}"
+                maxLength={34}
+                defaultValue={readiness.sender?.serviceSid || ""}
+                placeholder="MG…"
+                autoComplete="off"
+              />
+            </label>
+            <label>
+              US sender number
+              <input
+                name="phone"
+                required
+                type="tel"
+                pattern="\+1[0-9]{10}"
+                defaultValue={readiness.sender?.phone || ""}
+                placeholder="+12125550100"
+                autoComplete="off"
+              />
+            </label>
+            <label className="network-check">
+              <input
+                name="approved"
+                type="checkbox"
+                defaultChecked={readiness.sender?.approved || false}
+              />
+              I verified that the provider approved this sender and campaign for
+              the Uptick membership program.
+            </label>
+          </NetworkForm>
+          <Evidence>
+            Replacing the active sender does not transfer old consents or
+            rewrite queued message context. Reconcile outstanding messages and
+            carrier opt-outs before a sender migration.
+          </Evidence>
+        </section>
+        <section className="panel network-panel">
+          <p className="eyebrow">02 / PREPARE, INSPECT, THEN DISPATCH</p>
+          <h2>The week has a delivery record.</h2>
+          <p>
+            Prepare up to 100 eligible members across active markets. A member
+            needs current verified permission and available approved supply. A
+            saved weekly message is never duplicated.
+          </p>
+          <NetworkForm
+            action="membership-prepare"
+            button="Prepare current-week queue"
+          />
+          <Evidence>
+            {data.preparations.length
+              ? data.preparations
+                  .map(
+                    (item) =>
+                      `${item.count} ${item.state.replaceAll("_", " ")}`,
+                  )
+                  .join(" · ")
+              : "No current-week preparation attempts yet."}{" "}
+            Members waiting for supply are checked again after a delay.
+          </Evidence>
+          <NetworkForm
+            action="membership-dispatch"
+            button={
+              readiness.simulated
+                ? "Process queue · no SMS"
+                : "Dispatch eligible messages"
+            }
+          >
+            <label className="network-check">
+              <input name="reviewed" type="checkbox" required />I reviewed the
+              message text, active sender, environment and queue below. Process
+              up to 20 queued messages across all markets.
+            </label>
+          </NetworkForm>
+          <Evidence>
+            Dispatch rechecks permission, suppression, local quiet hours,
+            current supply, expiry and environment. Uncertain provider outcomes
+            remain unknown. This control never retries them.
+          </Evidence>
+        </section>
+      </div>
+      <div className="network-grid equal">
+        <section className="panel network-panel">
+          <p className="eyebrow">MESSAGE COPY · PRIVATE LINK REDACTED</p>
+          <h2>What members receive.</h2>
+          <p>
+            <strong>Requested access</strong>
+            <br />
+            {memberMessageText("access", "[secure member link]")}
+          </p>
+          <p>
+            <strong>Weekly Uptick</strong>
+            <br />
+            {memberMessageText("drop", "[secure member link]")}
+          </p>
+          <Evidence>
+            A secure link identifies its own member and saved weekly choices.
+            Private credentials are excluded from this ledger.
+          </Evidence>
+        </section>
+        <section className="panel network-panel">
+          <p className="eyebrow">LIVE DELIVERY REQUIREMENTS</p>
+          <h2>Every gate, in view.</h2>
+          {readiness.checks.map((check) => (
+            <div className="network-status-row" key={check.key}>
+              <Badge tone={check.ready ? "mint" : "neutral"}>
+                {check.ready ? "Configured" : "Missing"}
+              </Badge>
+              <p>{check.label}</p>
+            </div>
+          ))}
+          <div className="network-status-row">
+            <Badge tone={readiness.sender?.approved ? "mint" : "neutral"}>
+              {readiness.sender?.approved ? "Attested" : "Missing"}
+            </Badge>
+            <p>Dedicated membership sender approval</p>
+          </div>
+          <Evidence>
+            Development transport records a simulation and sends nothing.
+            Staging with Twilio sends only to allowlisted internal numbers.
+            Production also requires its explicit delivery switch.
+          </Evidence>
+        </section>
+      </div>
+      <section className="panel">
+        <div className="network-panel">
+          <p className="eyebrow">LATEST 80 MEMBERSHIP MESSAGES · ALL MARKETS</p>
+          <h2>Prepared is different from delivered.</h2>
+          <p>
+            Provider accepted means Twilio accepted the request. Delivered
+            requires a delivery callback. Development means no SMS. Masked
+            references support troubleshooting without exposing private access
+            links.
+          </p>
+        </div>
+        {data.messages.length ? (
+          <div className="network-table-wrap">
+            <table className="network-table">
+              <thead>
+                <tr>
+                  <th>MEMBER / MARKET</th>
+                  <th>MESSAGE</th>
+                  <th>OUTCOME</th>
+                  <th>WINDOW</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.messages.map((message) => (
+                  <tr key={message.id}>
+                    <td>
+                      <strong>UL-{message.member_ref}</strong>
+                      <small>
+                        Phone ending {message.phone_hint} ·{" "}
+                        {message.market || "No market yet"}
+                      </small>
+                    </td>
+                    <td>
+                      <strong>
+                        {message.purpose === "drop"
+                          ? "Weekly Uptick"
+                          : "Requested access"}
+                      </strong>
+                      <small>
+                        {message.week_key
+                          ? `Week of ${message.week_key}`
+                          : "One requested access link"}{" "}
+                        · {message.environment}
+                      </small>
+                    </td>
+                    <td>
+                      <State state={message.state} />
+                      <small>
+                        {message.suppression_reason ||
+                          (message.error_code
+                            ? `Provider code: ${message.error_code}`
+                            : "")}
+                      </small>
+                      {message.provider_sid && (
+                        <small>Provider reference {message.provider_sid}</small>
+                      )}
+                    </td>
+                    <td>
+                      <small>
+                        Scheduled {date(message.scheduled_at)}
+                        <br />
+                        Expires {date(message.expires_at)}
+                      </small>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <Empty title="No membership messages yet.">
+            An explicit member access request creates its first delivery record.
+            Weekly preparation requires current permission and approved supply.
+          </Empty>
+        )}
+      </section>
+    </>
+  );
+}
+
 export default async function NetworkPage({
   params,
   searchParams,
@@ -1809,7 +2104,12 @@ export default async function NetworkPage({
     { market: selectedMarket } = await searchParams;
   const active = section.join("/");
   if (!tabs.some(([key]) => key === active)) notFound();
-  const data = await networkOperations(await getDb(), actor, selectedMarket);
+  const db = await getDb();
+  const data = await networkOperations(db, actor, selectedMarket);
+  const messaging =
+    active === "messaging"
+      ? await membershipMessagingOperations(db, actor)
+      : null;
   const titles: Record<
     string,
     { eyebrow: string; title: string; description: string }
@@ -1856,6 +2156,12 @@ export default async function NetworkPage({
       description:
         "Explore the actual locations, partner channels and supply that make this market useful.",
     },
+    messaging: {
+      eyebrow: "UPTICK MEMBERSHIP · DELIVERY OPERATIONS",
+      title: "A useful message. A truthful record.",
+      description:
+        "Configure the Uptick sender, prepare permissioned weekly messages and inspect each delivery outcome.",
+    },
   };
   const title = titles[active];
   return (
@@ -1885,8 +2191,14 @@ export default async function NetworkPage({
             </Link>
           ))}
         </nav>
-        <MarketSelect data={data} section={active} />
-        {!data.market ? (
+        {active !== "messaging" && (
+          <MarketSelect data={data} section={active} />
+        )}
+        {messaging ? (
+          <MembershipMessaging data={messaging} />
+        ) : active === "members" && !data.market ? (
+          <NetworkMemberLookup />
+        ) : !data.market ? (
           <div className="network-grid equal">
             <section className="panel network-panel">
               <p className="eyebrow">01 / THE FIRST MARKET CELL</p>
@@ -1941,7 +2253,10 @@ export default async function NetworkPage({
         ) : active === "acquisition" ? (
           <Acquisition data={data} />
         ) : active === "members" ? (
-          <Members data={data} />
+          <>
+            <Members data={data} />
+            <NetworkMemberLookup />
+          </>
         ) : active === "allocation" ? (
           <Allocation data={data} />
         ) : active === "map" ? (

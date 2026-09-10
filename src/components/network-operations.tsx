@@ -2,6 +2,11 @@
 
 import { useId, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import type { NetworkMemberSupport } from "@/lib/network-operations";
+import {
+  recordedCoordinates,
+  recordedLocationUrl,
+} from "@/lib/location-intelligence";
 import {
   ArrowUpRight,
   Check,
@@ -100,6 +105,298 @@ export function NetworkForm({
   );
 }
 
+export function NetworkMemberLookup() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [status, setStatus] = useState("");
+  const [result, setResult] = useState<NetworkMemberSupport | null>(null);
+  const at = (value: string) =>
+    new Date(value).toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZoneName: "short",
+    });
+  return (
+    <section className="panel network-panel" style={{ marginTop: 24 }}>
+      <p className="eyebrow">PROTECTED MEMBER SUPPORT · ALL MARKETS</p>
+      <h2>Find the person behind a question.</h2>
+      <p>
+        Enter the member’s exact US phone number to inspect their recorded
+        journey, including a signup with no claim yet. Every lookup is audited.
+        Private links and complete phone numbers are excluded from results.
+      </p>
+      <form
+        className="network-form"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          const phone = new FormData(event.currentTarget).get("phone");
+          setBusy(true);
+          setError("");
+          setStatus("");
+          setResult(null);
+          try {
+            const data = await networkCommand({
+              action: "member-lookup",
+              phone,
+            });
+            setResult(data.memberSupport);
+            setStatus(data.message);
+          } catch (err) {
+            setError((err as Error).message);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <fieldset disabled={busy}>
+          <label>
+            Member phone number
+            <input
+              name="phone"
+              type="tel"
+              required
+              autoComplete="off"
+              placeholder="(201) 555-0123"
+              onChange={() => {
+                setResult(null);
+                setStatus("");
+                setError("");
+              }}
+            />
+          </label>
+        </fieldset>
+        <button className="button secondary" disabled={busy}>
+          {busy ? (
+            <LoaderCircle size={16} className="spin" />
+          ) : (
+            <Users size={16} />
+          )}
+          {busy ? "Finding member…" : "Find member"}
+        </button>
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
+        {status && (
+          <p className="success-text" role="status">
+            {status}
+          </p>
+        )}
+      </form>
+      {result && (
+        <div style={{ marginTop: 28 }}>
+          <div className="network-status-row">
+            <strong>
+              UL-{result.member.reference} · phone ending{" "}
+              {result.member.phone_hint}
+            </strong>
+            <span className="badge neutral">{result.member.state}</span>
+          </div>
+          <dl className="network-supply-details">
+            <div>
+              <dt>Joined / phone possession</dt>
+              <dd>
+                {at(result.member.created_at)}
+                <br />
+                {result.member.verified_at
+                  ? `Confirmed ${at(result.member.verified_at)}`
+                  : "Phone not confirmed"}
+              </dd>
+            </div>
+            <div>
+              <dt>Market and explicit ZIPs</dt>
+              <dd>
+                {result.member.market || "No active market match"}
+                <br />
+                Home {result.member.home_zip}
+                {result.member.work_zip
+                  ? ` · Work ${result.member.work_zip}`
+                  : ""}
+              </dd>
+            </div>
+            <div>
+              <dt>Acquisition record</dt>
+              <dd>
+                {result.member.source || "Direct / source not recorded"}
+                {result.member.channel ? ` · ${result.member.channel}` : ""}
+                <br />
+                {result.member.partner || "No acquisition partner"}
+              </dd>
+            </div>
+            <div>
+              <dt>Current membership consent</dt>
+              <dd>
+                {result.consents[0]?.accepted
+                  ? "Accepted"
+                  : result.consents.length
+                    ? "Not subscribed"
+                    : "No decision recorded"}
+                <br />
+                {result.suppressions.some(
+                  (entry) => entry.active_sender && entry.suppressed,
+                )
+                  ? "Active Uptick sender is opted out"
+                  : "No active-sender opt-out recorded"}
+              </dd>
+            </div>
+          </dl>
+          <div className="network-grid equal">
+            <div>
+              <h3>Saved weekly choices</h3>
+              {result.allocations.length ? (
+                result.allocations.map((allocation) => (
+                  <div key={allocation.week_key} className="network-issue">
+                    <div>
+                      <strong>Week of {allocation.week_key}</strong>
+                      {allocation.options.map((option) => (
+                        <p key={option.rank}>
+                          {option.rank === 1
+                            ? "Featured"
+                            : `Alternative ${option.rank - 1}`}{" "}
+                          · {option.title} at {option.merchant} · {option.state}
+                        </p>
+                      ))}
+                      <p>
+                        Saved {at(allocation.created_at)} ·{" "}
+                        {allocation.algorithm_version}. An allocation does not
+                        reserve inventory.
+                      </p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="network-evidence">
+                  No saved allocation. Check phone confirmation, current
+                  permission, the market state and available approved supply.
+                </p>
+              )}
+            </div>
+            <div>
+              <h3>Claims and recorded redemption</h3>
+              {result.claims.length ? (
+                result.claims.map((claim) => (
+                  <div key={claim.reference} className="network-issue">
+                    <div>
+                      <strong>
+                        UP-{claim.reference} · {claim.merchant}
+                      </strong>
+                      <p>
+                        {claim.reward}
+                        <br />
+                        Claimed {at(claim.created_at)}
+                        {claim.redeemed_at
+                          ? ` · Redeemed ${at(claim.redeemed_at)}`
+                          : " · No redemption recorded"}
+                      </p>
+                      {claim.verification_method && (
+                        <p>
+                          {claim.verification_method.replaceAll("_", " ")} ·{" "}
+                          {claim.staff_gated
+                            ? "staff-controlled point"
+                            : "not staff-controlled"}{" "}
+                          ·{" "}
+                          {claim.transaction_verified
+                            ? "transaction verified"
+                            : "purchase not verified"}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="network-evidence">
+                  No claims yet. Membership signup and phone confirmation do not
+                  imply a claim or visit.
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="network-grid equal">
+            <div>
+              <h3>Latest delivery outcomes</h3>
+              {result.messages.length ? (
+                result.messages.map((message, index) => (
+                  <div className="network-issue" key={index}>
+                    <div>
+                      <strong>
+                        {message.purpose === "drop"
+                          ? "Weekly Uptick"
+                          : "Requested access"}{" "}
+                        · {message.state.replaceAll("_", " ")}
+                      </strong>
+                      <p>
+                        {at(message.created_at)}
+                        {message.suppression_reason
+                          ? ` · ${message.suppression_reason}`
+                          : ""}
+                        {message.error_code
+                          ? ` · Provider code ${message.error_code}`
+                          : ""}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="network-evidence">
+                  No membership delivery record.
+                </p>
+              )}
+            </div>
+            <div>
+              <h3>Consent evidence</h3>
+              {result.consents.length ? (
+                result.consents.map((consent, index) => (
+                  <details key={index} style={{ marginTop: 16 }}>
+                    <summary>
+                      {consent.accepted ? "Accepted" : "Declined / withdrawn"} ·{" "}
+                      {at(consent.created_at)}
+                    </summary>
+                    <p className="network-evidence">{consent.disclosure}</p>
+                    <p className="fine">
+                      {consent.disclosure_version} · {consent.source_ui}
+                    </p>
+                  </details>
+                ))
+              ) : (
+                <p className="network-evidence">
+                  No membership consent event. An access request can exist
+                  before a confirmed choice.
+                </p>
+              )}
+            </div>
+          </div>
+          <details>
+            <summary>Latest 20 observed / derived events</summary>
+            <div className="network-table-wrap">
+              <table className="network-table">
+                <thead>
+                  <tr>
+                    <th>EVENT</th>
+                    <th>EVIDENCE</th>
+                    <th>TIME</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.events.map((event, index) => (
+                    <tr key={index}>
+                      <td>{event.kind.replaceAll("_", " ")}</td>
+                      <td>{event.evidence_class}</td>
+                      <td>{at(event.created_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export type GeographicNode = {
   id: string;
   name: string;
@@ -115,9 +412,7 @@ export type GeographicNode = {
 // inferred member positions, travel-time claims, or live-location requests.
 export function LocalCoordinateMap({ nodes }: { nodes: GeographicNode[] }) {
   const [selected, setSelected] = useState(nodes[0]?.id || "");
-  const valid = nodes.filter(
-    (node) => Number.isFinite(node.latitude) && Number.isFinite(node.longitude),
-  );
+  const valid = nodes.filter((node) => recordedCoordinates(node) !== null);
   const active = valid.find((node) => node.id === selected) || valid[0];
   if (!active)
     return (
@@ -196,7 +491,7 @@ export function LocalCoordinateMap({ nodes }: { nodes: GeographicNode[] }) {
         )}
         <a
           className="text-link"
-          href={`https://www.google.com/maps/search/?api=1&query=${active.latitude},${active.longitude}`}
+          href={recordedLocationUrl(active) || undefined}
           target="_blank"
           rel="noopener noreferrer"
         >
