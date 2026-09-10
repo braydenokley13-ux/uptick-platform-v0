@@ -1,7 +1,8 @@
 import twilio from "twilio";
+import { simulatedTransport, smsEnvironmentBlock } from "./environment";
 import type { DB } from "./db";
 import { id, decrypt } from "./security";
-import { appUrl, localMode, messagingReady } from "./config";
+import { appUrl, messagingReady } from "./config";
 import {
   offerSelect,
   createEntitlement,
@@ -147,6 +148,8 @@ export async function eligibility(db: DB, m: Message, now = new Date()) {
     return "Pass does not match this customer and business";
   if (claim.snapshot.is_demo && process.env.SMS_TRANSPORT === "twilio")
     return "Sample passes cannot be sent through a live provider";
+  const environmentBlock = smsEnvironmentBlock(c.phone);
+  if (environmentBlock) return environmentBlock;
   if (m.purpose === "fulfillment") {
     const requested = await db.query(
       "select id from consent_events where customer_id=$1 and organization_id=$2 and purpose='fulfillment' and accepted=true limit 1",
@@ -232,7 +235,7 @@ export async function dispatch(db: DB, limit = 20) {
         approved: boolean;
       }>("select * from senders where id=$1", [m.sender_id]);
       if (
-        (!localMode() || process.env.SMS_TRANSPORT === "twilio") &&
+        !simulatedTransport() &&
         (!messagingReady() || !sender?.approved || !sender.service_sid)
       )
         return { deferred: true, m };
@@ -260,7 +263,7 @@ export async function dispatch(db: DB, limit = 20) {
       continue;
     }
     const { m, c, claim, sender } = job;
-    if (localMode() && process.env.SMS_TRANSPORT !== "twilio") {
+    if (simulatedTransport()) {
       await db.query(
         "update messages set state='development',updated_at=now() where id=$1",
         [m.id],

@@ -1,7 +1,9 @@
+import { uptickEnvironment, configuredSmsEnvironment } from "./environment";
 export function localMode() {
   const url = process.env.APP_URL || "http://localhost:3000";
   try {
     return (
+      uptickEnvironment() === "development" &&
       process.env.UPTICK_LOCAL_MODE === "true" &&
       !process.env.VERCEL &&
       ["localhost", "127.0.0.1"].includes(new URL(url).hostname)
@@ -22,7 +24,7 @@ export function key(name: string) {
 }
 export function messagingReady() {
   return (
-    process.env.SMS_TRANSPORT === "twilio" &&
+    configuredSmsEnvironment() &&
     process.env.MESSAGING_APPROVED === "true" &&
     process.env.LEGAL_APPROVED === "true" &&
     !!process.env.TWILIO_ACCOUNT_SID &&
