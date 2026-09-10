@@ -12,7 +12,9 @@
 
 The pre-refoundation application is clean and pushed at `11d62ae`. Its 57 domain/database tests, four HTTP tests, real PostgreSQL concurrency harness, lint, TypeScript, build and browser flows passed. These are the baseline, not evidence that the refoundation is done.
 
-Refoundation is **in progress**. The new product is Uptick membership → Market Cell → eligible Drop supply → one featured Drop plus up to two alternatives → one chosen claim → destination credential → recorded outcome. The old merchant-specific consent is separate and must never be silently converted into membership consent.
+Refoundation is **in progress**. Migration 009 and `src/lib/network.ts` now implement membership/access/consent, ZIP-to-market relevance, acquisition attribution, immutable weekly allocation, one chosen claim, configurable reservation policies, and capacity-constrained market coverage. Eleven focused network tests pass. New domain claims cannot use the old direct redemption action. No old subscriber is enrolled automatically.
+
+The parallel messaging/Tap foundations have focused tests passing and are being committed separately. Consumer and operator UI integration remains in progress; do not treat the presence of these modules as product completion. Before browser testing, seed a deliberate network pilot fixture and restart the app to apply forward migrations.
 
 ## Work ownership during this session
 

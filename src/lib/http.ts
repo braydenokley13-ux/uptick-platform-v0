@@ -101,6 +101,8 @@ export function requestRatePolicy(request: Request, action: string) {
 }
 
 const publicMessages = new Set([
+  "Join Uptick to see your local Drop choices.",
+  "Use the Uptick Tap at the participating store to redeem this pass.",
   "You do not have access to this business.",
   "This offer link is no longer available.",
   "Too many attempts. Please wait a few minutes before trying again.",

@@ -299,6 +299,15 @@ export async function acceptClaim(
     const { offer } = await sourceOffer(tx, input.sourceToken);
     if (!offerAvailable(offer))
       throw Error("This offer is not accepting new claims right now.");
+    if (
+      (
+        await tx.query(
+          "select id from network_drop_supplies where offer_id=$1",
+          [offer.id],
+        )
+      ).length
+    )
+      throw Error("Join Uptick to see your local Drop choices.");
     await assertClaimReady(tx, offer.organization_id);
     const [customer] = await tx.query<{ id: string }>(
       "insert into customers(id,phone) values($1,$2) on conflict(phone) do update set phone=excluded.phone returning id",
@@ -434,6 +443,16 @@ export async function confirmPassChoices(
 export async function redeem(db: DB, credential: string) {
   return db.transaction(async (tx) => {
     const initial = await getPass(tx, credential);
+    if (
+      (
+        await tx.query("select claim_id from member_claims where claim_id=$1", [
+          initial.id,
+        ])
+      ).length
+    )
+      throw Error(
+        "Use the Uptick Tap at the participating store to redeem this pass.",
+      );
     await tx.query("select id from offers where id=$1 for update", [
       initial.offer_id,
     ]);
