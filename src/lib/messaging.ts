@@ -57,6 +57,26 @@ export async function expandDueBroadcasts(db: DB, now = new Date()) {
         [candidate.id],
       );
       if (!b) continue;
+      if (
+        (
+          await tx.query(
+            "select id from network_drop_supplies where offer_id=$1",
+            [b.offer_id],
+          )
+        ).length
+      ) {
+        await tx.query("update broadcasts set state='paused' where id=$1", [
+          b.id,
+        ]);
+        await audit(
+          tx,
+          "system",
+          b.organization_id,
+          "broadcast.network_boundary_blocked",
+          b.id,
+        );
+        continue;
+      }
       const [o] = await tx.query<Offer>(`${offerSelect} where o.id=$1`, [
         b.offer_id,
       ]);
@@ -146,6 +166,14 @@ export async function eligibility(db: DB, m: Message, now = new Date()) {
     claim.organization_id !== m.organization_id
   )
     return "Pass does not match this customer and business";
+  if (
+    (
+      await db.query("select id from network_drop_supplies where offer_id=$1", [
+        claim.offer_id,
+      ])
+    ).length
+  )
+    return "Network Drop requires Uptick membership messaging";
   if (claim.snapshot.is_demo && process.env.SMS_TRANSPORT === "twilio")
     return "Sample passes cannot be sent through a live provider";
   const environmentBlock = smsEnvironmentBlock(c.phone);

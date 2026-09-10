@@ -67,6 +67,7 @@ export function Builder({
   offer,
   metadata,
   operator = false,
+  networkGrowth = false,
   timezone = "America/New_York",
 }: {
   organizationId: string;
@@ -74,6 +75,7 @@ export function Builder({
   offer?: Offer;
   metadata?: OfferMetadata;
   operator?: boolean;
+  networkGrowth?: boolean;
   timezone?: string;
 }) {
   const meta = metadata || defaultMetadata;
@@ -178,7 +180,7 @@ export function Builder({
           expiresAt: isoValue(end, timezone),
           limitMode: limit,
           quantity: limit === "unlimited" ? null : quantity,
-          submit,
+          submit: networkGrowth ? false : submit,
           kind,
           productMetadata: {
             goal,
@@ -602,12 +604,20 @@ export function Builder({
             </div>
             <div className="sms-preview">
               <span className="preview-surface">
-                <MessageSquare size={14} /> FINAL SMS COPY
+                <MessageSquare size={14} />{" "}
+                {networkGrowth
+                  ? "MEMBERSHIP MESSAGE EXAMPLE"
+                  : "FINAL SMS COPY"}
               </span>
-              <p>{offerSmsPreview(merchant, buy, get, kind)}</p>
+              <p>
+                {networkGrowth
+                  ? `Uptick: Your local perk is ready. ${get} at ${merchant}. ${buy}. Open Your Uptick: [private link]. Reply STOP to opt out, HELP for help.`
+                  : offerSmsPreview(merchant, buy, get, kind)}
+              </p>
               <small>
-                Your actual private pass URL replaces the bracketed link. No
-                message is sent when you save or submit.
+                {networkGrowth
+                  ? "Illustrative wording. Uptick prepares the approved membership message and member-specific choices; saving this offer sends nothing."
+                  : "Your actual private pass URL replaces the bracketed link. No message is sent when you save or submit."}
               </small>
             </div>
           </aside>
@@ -650,7 +660,9 @@ export function Builder({
         <div>
           <strong>Your idea. Uptick’s second pair of eyes.</strong>
           <p>
-            We review the offer, timing, and audience before anything goes out.
+            {networkGrowth
+              ? "Next, choose inventory, budget and verification. Uptick reviews the complete operating commitment."
+              : "We review the offer, timing, and audience before anything goes out."}
           </p>
         </div>
         <div className="button-row">
@@ -668,7 +680,7 @@ export function Builder({
             disabled={busy}
             onClick={() => save(true)}
           >
-            Submit to Uptick
+            {networkGrowth ? "Continue to your commitment" : "Submit to Uptick"}
             <ArrowRight size={17} />
           </button>
         </div>

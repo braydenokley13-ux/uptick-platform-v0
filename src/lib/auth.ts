@@ -143,7 +143,7 @@ export async function switchPilotWorkspace(organizationId: string | null) {
     ...session,
     pilotOrganizationId: organizationId || undefined,
   });
-  return organizationId ? "/merchant" : "/operator";
+  return organizationId ? "/merchant" : "/operator/network";
 }
 export async function requireActor(operator = false) {
   const actor = await getActor();

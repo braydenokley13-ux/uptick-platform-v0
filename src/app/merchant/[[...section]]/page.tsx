@@ -1,30 +1,16 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowUpRight, History, ShieldCheck } from "lucide-react";
+import { ArrowUpRight, ShieldCheck } from "lucide-react";
 import { requireActor } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { overview, merchantSourceContext } from "@/lib/read-model";
 import { loadOfferMetadata } from "@/lib/product";
+import { merchantGrowth } from "@/lib/merchant-growth";
+import { MerchantGrowthView } from "@/components/merchant-growth";
+import "@/components/merchant-growth.css";
 import { Shell } from "@/components/shell";
 import { PageHeading, ButtonLink, Location } from "@/components/ui";
-import {
-  Metrics,
-  CommandStatus,
-  AnchorCard,
-  DropCard,
-  SourcesTable,
-  Loop,
-  RecommendationCard,
-  AudienceCard,
-  NetworkMap,
-  SourceDetail,
-  GrowthPlan,
-  AudienceView,
-  ReturnEvidence,
-  DropHistoryView,
-  NextThirtyDays,
-  MerchantActivity,
-} from "@/components/dashboard";
+import { AnchorCard, SourcesTable, SourceDetail } from "@/components/dashboard";
 import { Builder } from "@/components/builder";
 import "@/components/merchant.css";
 
@@ -35,7 +21,7 @@ export default async function Merchant({
   searchParams,
 }: {
   params: Promise<{ section?: string[] }>;
-  searchParams: Promise<{ id?: string }>;
+  searchParams: Promise<{ id?: string; saved?: string }>;
 }) {
   const [actor, route, query] = await Promise.all([
     requireActor(),
@@ -61,6 +47,26 @@ export default async function Merchant({
   )
     notFound();
   const db = await getDb();
+  if (
+    section !== "create" &&
+    section !== "anchor" &&
+    !(section === "network" && query.id)
+  ) {
+    const growth = await merchantGrowth(db, actor);
+    return (
+      <Shell
+        actor={{ ...actor, role: "merchant" }}
+        active={section}
+        name={growth.organization.name}
+      >
+        <MerchantGrowthView
+          data={growth}
+          section={section || "home"}
+          selectedOfferId={query.saved}
+        />
+      </Shell>
+    );
+  }
   const data = await overview(db, actor);
   const anchor =
     data.offers.find(
@@ -103,45 +109,6 @@ export default async function Merchant({
       name={data.organization.name}
     >
       <div className="merchant-workspace">
-        {section === "" && (
-          <>
-            <PageHeading
-              eyebrow="YOUR NEIGHBORHOOD GROWTH, IN MOTION"
-              title={
-                <>
-                  Good things <em>come around.</em>
-                </>
-              }
-              description={`A reason to visit ${data.organization.name}. A reason to return.`}
-              action={
-                <ButtonLink href="/merchant/create">
-                  Plan your next Drop
-                </ButtonLink>
-              }
-            />
-            <CommandStatus data={data} />
-            <div className="feature-grid">
-              <AnchorCard data={data} />
-              <DropCard data={data} />
-            </div>
-            <RecommendationCard data={data} />
-            <div className="command-secondary-grid">
-              <AudienceCard data={data} />
-              <NextThirtyDays data={data} compact />
-            </div>
-            <Loop data={data} />
-            <div className="merchant-bottom-links">
-              <span>
-                <ShieldCheck size={14} />
-                Managed by Uptick. Built around your store.
-              </span>
-              <Link href="/merchant/activity">
-                View program activity
-                <History size={14} />
-              </Link>
-            </div>
-          </>
-        )}
         {section === "anchor" && (
           <>
             <PageHeading
@@ -198,66 +165,20 @@ export default async function Merchant({
             <SourcesTable data={data} />
           </>
         )}
-        {section === "drops" && (
-          <>
-            <PageHeading
-              eyebrow="YOUR WEEKLY DROPS"
-              title={
-                <>
-                  Keep a good thing <em>going.</em>
-                </>
-              }
-              description="One simple offer a week. A fresh reason to come back."
-              action={
-                <ButtonLink href="/merchant/create">
-                  Create a Weekly Drop
-                </ButtonLink>
-              }
-            />
-            <div className="drop-workflow">
-              <span className="eyebrow">WORKING TOGETHER</span>
-              <span>
-                <b>01</b>You draft
-              </span>
-              <span>→</span>
-              <span>
-                <b>02</b>Uptick reviews
-              </span>
-              <span>→</span>
-              <span>
-                <b>03</b>We schedule
-              </span>
-              <span>→</span>
-              <span>
-                <b>04</b>Your audience receives it
-              </span>
-            </div>
-            <DropHistoryView data={data} />
-            <div className="merchant-bottom-links">
-              <span>
-                Every Drop keeps its offer details and recorded response.
-              </span>
-              <Link href="/merchant/calendar">
-                See the next 30 days
-                <ArrowUpRight size={14} />
-              </Link>
-            </div>
-          </>
-        )}
         {section === "create" && (
           <>
             <PageHeading
               eyebrow={
                 editing
                   ? "OFFER STUDIO · YOUR SAVED DRAFT"
-                  : "OFFER STUDIO · CREATE A WEEKLY DROP"
+                  : "OFFER STUDIO · CREATE A DROP"
               }
               title={
                 <>
                   Their next visit starts <em>here.</em>
                 </>
               }
-              description="A useful goal. One free extra. A reason to come back."
+              description="Start with a useful free perk. Next, choose the operating commitment for Uptick’s review."
               action={
                 <ButtonLink href="/merchant/drops" quiet>
                   Back to your Drops
@@ -283,27 +204,13 @@ export default async function Merchant({
                   ? `${editing.id}-${editing.current_version}`
                   : "new-drop"
               }
+              networkGrowth
               organizationId={data.organization.id}
               merchant={data.organization.name}
               offer={editing}
               metadata={metadata}
               timezone={data.organization.timezone}
             />
-          </>
-        )}
-        {section === "plan" && (
-          <>
-            <PageHeading
-              eyebrow="YOUR GROWTH PLAN"
-              title={
-                <>
-                  A system around <em>your store.</em>
-                </>
-              }
-              description="One connected plan for finding nearby customers and giving them reasons to return."
-            />
-            <GrowthPlan data={data} />
-            <RecommendationCard data={data} all />
           </>
         )}
         {section === "network" && (
@@ -324,14 +231,12 @@ export default async function Merchant({
                 ) : undefined
               }
             />
-            {source ? (
+            {source && (
               <SourceDetail
                 source={source}
                 timezone={data.organization.timezone}
                 context={sourceContext}
               />
-            ) : (
-              <NetworkMap data={data} />
             )}
             <SourcesTable data={data} />
             <section className="managed-network-note">
@@ -347,134 +252,6 @@ export default async function Merchant({
               <Link className="text-link" href="/merchant/plan">
                 Your Growth Plan
                 <ArrowUpRight size={14} />
-              </Link>
-            </section>
-          </>
-        )}
-        {section === "audience" && (
-          <>
-            <PageHeading
-              eyebrow="YOUR WEEKLY DROP AUDIENCE"
-              title={
-                <>
-                  Your next invitation. <em>Already welcome.</em>
-                </>
-              }
-              description={`People who chose to hear from ${data.organization.name}. One merchant relationship at a time.`}
-              action={
-                <ButtonLink href="/merchant/create">
-                  Plan their next Drop
-                </ButtonLink>
-              }
-            />
-            <AudienceView data={data} />
-            {actor.canExport && (
-              <section className="merchant-export-note">
-                <ShieldCheck size={17} />
-                <p>
-                  Your export includes consent evidence. Handle customer details
-                  with care.
-                </p>
-                <Link className="text-link" href="/api/export">
-                  Export consented contacts
-                  <ArrowUpRight size={14} />
-                </Link>
-              </section>
-            )}
-          </>
-        )}
-        {section === "calendar" && (
-          <>
-            <PageHeading
-              eyebrow="THE NEXT 30 DAYS"
-              title={
-                <>
-                  Good growth has <em>a rhythm.</em>
-                </>
-              }
-              description="Your current Anchor, proposed Drops, confirmed schedules, and the next useful review."
-              action={
-                <ButtonLink href="/merchant/create">
-                  Plan a Weekly Drop
-                </ButtonLink>
-              }
-            />
-            <NextThirtyDays data={data} />
-            <RecommendationCard data={data} />
-          </>
-        )}
-        {section === "activity" && (
-          <>
-            <PageHeading
-              eyebrow="YOUR PROGRAM ACTIVITY"
-              title={
-                <>
-                  Every step. <em>In the open.</em>
-                </>
-              }
-              description="Offer drafts, Uptick reviews, placements, and message preparation, as they happen."
-              action={
-                <ButtonLink href="/merchant/plan" quiet>
-                  Your Growth Plan
-                </ButtonLink>
-              }
-            />
-            <MerchantActivity data={data} />
-          </>
-        )}
-        {section === "loop" && (
-          <>
-            <PageHeading
-              eyebrow="THE UPTICK LOOP"
-              title={
-                <>
-                  First a visit. <em>Then a habit.</em>
-                </>
-              }
-              description="Find them nearby. Bring them in. Welcome them to the Drop. Give them reasons to return."
-            />
-            <Loop data={data} expanded />
-            <ReturnEvidence data={data} />
-            <RecommendationCard data={data} all />
-          </>
-        )}
-        {section === "results" && (
-          <>
-            <PageHeading
-              eyebrow="OBSERVABLE RESULTS"
-              title={
-                <>
-                  What happened. <em>Clearly.</em>
-                </>
-              }
-              description="Recorded activity across your acquisition and return loop."
-            />
-            <div className="period-line">
-              <span>ALL RECORDED ACTIVITY</span>
-              <span>
-                Current subscribers · historical claims and redemptions
-              </span>
-            </div>
-            <Metrics data={data} />
-            <ReturnEvidence data={data} />
-            <DropHistoryView data={data} comparison />
-            <SourcesTable data={data} />
-            <section className="panel detail-panel merchant-definitions">
-              <p className="eyebrow">A LITTLE CLARITY GOES A LONG WAY</p>
-              <h2>What these numbers mean.</h2>
-              <p>
-                A claim is a saved entitlement. A redemption is a completed
-                counter record. Delivered means the carrier reported delivery;
-                it does not mean the message was read.
-              </p>
-              <p>
-                A recorded return is a later Weekly Drop redemption after an
-                initial Anchor redemption. These results do not establish new
-                customers, screen impressions, incremental sales, or revenue.
-              </p>
-              <Link className="text-link" href="/merchant/loop">
-                Follow the whole Uptick Loop
-                <ArrowUpRight size={15} />
               </Link>
             </section>
           </>

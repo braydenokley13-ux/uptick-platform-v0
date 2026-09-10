@@ -1,6 +1,7 @@
 import type { DB } from "./db";
 import {
   audit,
+  assertLegacyOffer,
   authorize,
   offerSelect,
   type Actor,
@@ -56,10 +57,10 @@ export const placementSelect = `select s.id,s.token,s.offer_id,o.organization_id
 export async function operatorOverview(db: DB, actor: Actor) {
   operatorOnly(actor);
   const businesses = await db.query<Business>(
-    `select g.id,g.name,g.capabilities,g.timezone,g.is_demo,coalesce(p.category,'') category,coalesce(p.growth_goal,'') growth_goal,(select count(*)::int from locations where organization_id=g.id) locations,(select count(*)::int from offers where organization_id=g.id and state in ('live','scheduled')) offers,(select count(*)::int from subscriptions where organization_id=g.id and state='subscribed') subscribers,coalesce(s.approved,false) sender_approved from organizations g left join business_profiles p on p.organization_id=g.id left join senders s on s.organization_id=g.id order by g.name`,
+    `select g.id,g.name,g.capabilities,g.timezone,g.is_demo,coalesce(p.category,'') category,coalesce(p.growth_goal,'') growth_goal,(select count(*)::int from locations where organization_id=g.id) locations,(select count(*)::int from offers lo where lo.organization_id=g.id and lo.state in ('live','scheduled') and not exists(select 1 from network_drop_supplies ns where ns.offer_id=lo.id)) offers,(select count(*)::int from subscriptions where organization_id=g.id and state='subscribed') subscribers,coalesce(s.approved,false) sender_approved from organizations g left join business_profiles p on p.organization_id=g.id left join senders s on s.organization_id=g.id order by g.name`,
   );
   const offers = await db.query<Offer>(
-    `${offerSelect} order by o.created_at desc`,
+    `${offerSelect} where not exists(select 1 from network_drop_supplies ns where ns.offer_id=o.id) order by o.created_at desc`,
   );
   const sources = await db.query<PlacementSource>(
     `${placementSelect} order by s.created_at desc`,
@@ -75,7 +76,7 @@ export async function operatorOverview(db: DB, actor: Actor) {
     scheduled_at: string;
     state: string;
   }>(
-    `select b.id,b.offer_id,g.name merchant,o.title,b.scheduled_at,b.state from broadcasts b join offers o on o.id=b.offer_id join organizations g on g.id=b.organization_id order by b.scheduled_at desc limit 30`,
+    `select b.id,b.offer_id,g.name merchant,o.title,b.scheduled_at,b.state from broadcasts b join offers o on o.id=b.offer_id join organizations g on g.id=b.organization_id where not exists(select 1 from network_drop_supplies ns where ns.offer_id=b.offer_id) order by b.scheduled_at desc limit 30`,
   );
   const locations = await db.query<{
     id: string;
@@ -268,6 +269,7 @@ export async function reviewDecision(
     );
     if (!o || o.state !== "review")
       throw Error("Only an offer awaiting review can be returned or rejected.");
+    await assertLegacyOffer(tx, o.id);
     if (!input.note.trim()) throw Error("Add a clear note for the merchant.");
     await tx.query(
       "insert into offer_reviews(id,offer_id,offer_version,decision,note,actor) values($1,$2,$3,$4,$5,$6)",
