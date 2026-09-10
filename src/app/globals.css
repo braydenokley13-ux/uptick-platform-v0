@@ -2468,3 +2468,22 @@ td strong {
 .private-choices .check-row {
   margin-top: 18px;
 }
+
+.topbar .local-workspace-label .badge {
+  display: inline-flex;
+  font-size: 10px;
+  white-space: nowrap;
+}
+@media (max-width: 700px) {
+  .topbar > div:first-child {
+    min-width: 0;
+  }
+  .topbar strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .topbar .local-workspace-label .badge {
+    padding: 5px 7px;
+  }
+}

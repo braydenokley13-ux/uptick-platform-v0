@@ -105,7 +105,16 @@ export function Shell({
             <ArrowUpRight size={14} />
           </Link>
           <div className="identity">
-            <span className="avatar">{operator ? "UL" : name.split(/\s+/).map(part=>part[0]).slice(0,2).join("").toUpperCase()}</span>
+            <span className="avatar">
+              {operator
+                ? "UL"
+                : name
+                    .split(/\s+/)
+                    .map((part) => part[0])
+                    .slice(0, 2)
+                    .join("")
+                    .toUpperCase()}
+            </span>
             <div>
               <strong>{operator ? "Uptick Local" : name}</strong>
               <small>
@@ -124,7 +133,9 @@ export function Shell({
           </div>
           <div>
             {localMode() ? (
-              <Badge>Local pilot · sample businesses</Badge>
+              <div className="local-workspace-label">
+                <Badge>Local sample</Badge>
+              </div>
             ) : (
               <Badge tone="mint">
                 <ShieldCheck size={12} />

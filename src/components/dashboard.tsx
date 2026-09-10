@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { weekKey } from "@/lib/domain";
 import {
   ArrowUpRight,
   ArrowRight,
@@ -292,7 +293,11 @@ export function AudienceCard({ data }: { data: Data }) {
             <br />
             to hear from you again.
           </h3>
-          <p>{data.audience.joined7} new subscribers in the past 7 days</p>
+          <p>
+            {data.audience.joined7} new{" "}
+            {data.audience.joined7 === 1 ? "subscriber" : "subscribers"} in the
+            past 7 days
+          </p>
         </div>
       </div>
       <div className="anchor-bottom">
@@ -386,7 +391,7 @@ export function Loop({
       title: "BROUGHT IN",
       n: data.sourceClaims,
       label: "Source-linked claims",
-      detail: `${data.audience.initial_redeemers} people redeemed an Anchor`,
+      detail: `${data.audience.initial_redeemers} ${data.audience.initial_redeemers === 1 ? "person" : "people"} redeemed an Anchor`,
       icon: Store,
       href: "/merchant/results",
     },
@@ -637,7 +642,7 @@ export function GrowthPlan({ data }: { data: Data }) {
     {
       icon: MapPin,
       kicker: "01 / FIND THEM",
-      title: "Reach people already nearby.",
+      title: data.organization.growth_goal || "Reach people already nearby.",
       copy: `Uptick brings your acquisition offer to ${p.length ? p.map((s) => s.host).join(", ") : "compatible nearby host businesses as placements are configured"}.`,
       href: "/merchant/network",
       action: "See your Local Network",
@@ -1038,6 +1043,14 @@ export function NextThirtyDays({
           new Date(a.scheduled_at || a.starts_at).getTime() -
           new Date(b.scheduled_at || b.starts_at).getTime(),
       );
+  const nextWeekKey = new Date(
+    Date.parse(
+      `${weekKey(new Date(now), data.organization.timezone)}T12:00:00Z`,
+    ) +
+      7 * 86400000,
+  )
+    .toISOString()
+    .slice(0, 10);
   const anchorReview = anchor
     ? Math.max(now, new Date(anchor.starts_at).getTime() + 30 * 86400000)
     : null;
@@ -1064,8 +1077,10 @@ export function NextThirtyDays({
     })),
     ...(!upcoming.some(
       (d) =>
-        new Date(d.starts_at).getTime() >= now + 7 * 86400000 &&
-        new Date(d.starts_at).getTime() < now + 14 * 86400000,
+        weekKey(
+          new Date(d.scheduled_at || d.starts_at),
+          data.organization.timezone,
+        ) === nextWeekKey,
     )
       ? [
           {

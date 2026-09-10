@@ -26,8 +26,14 @@ const request = (body: string, headers: Record<string, string> = {}) =>
 test("canonical origins with a trailing slash produce the same pass and callback URLs", () => {
   process.env.APP_URL = "https://uptick.example/";
   assert.equal(appUrl(), "https://uptick.example");
-  assert.equal(`${appUrl()}/p/private-credential`, "https://uptick.example/p/private-credential");
-  assert.equal(`${appUrl()}/api/twilio/status?message=test`, "https://uptick.example/api/twilio/status?message=test");
+  assert.equal(
+    `${appUrl()}/p/private-credential`,
+    "https://uptick.example/p/private-credential",
+  );
+  assert.equal(
+    `${appUrl()}/api/twilio/status?message=test`,
+    "https://uptick.example/api/twilio/status?message=test",
+  );
   process.env.APP_URL = "http://localhost:3000/";
   assert.equal(appUrl(), "http://localhost:3000");
 });

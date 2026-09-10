@@ -106,7 +106,11 @@ export async function overview(
       timezone: string;
       is_demo: boolean;
       created_at: string;
-    }>("select * from organizations where id=$1", [organizationId]),
+      growth_goal: string;
+    }>(
+      "select o.*,coalesce(p.growth_goal,'') growth_goal from organizations o left join business_profiles p on p.organization_id=o.id where o.id=$1",
+      [organizationId],
+    ),
     db.query<Offer>(
       `${offerSelect} where o.organization_id=$1 order by o.created_at desc`,
       [organizationId],

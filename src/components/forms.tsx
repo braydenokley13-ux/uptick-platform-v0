@@ -389,11 +389,7 @@ export function PassActions({
             Get {merchant}’s next Weekly Drop. One simple offer, at most once a
             week.
           </p>
-          <DropJoin
-            token={token}
-            merchant={merchant}
-            subscribed={subscribed}
-          />
+          <DropJoin token={token} merchant={merchant} subscribed={subscribed} />
         </div>
       )}
     </>

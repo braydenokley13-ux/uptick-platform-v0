@@ -28,7 +28,11 @@ import {
   sourceDetail,
   type PlacementSource,
 } from "@/lib/operator";
-import { loadOfferMetadata, offerSmsPreview, qualityReview } from "@/lib/product";
+import {
+  loadOfferMetadata,
+  offerSmsPreview,
+  qualityReview,
+} from "@/lib/product";
 import { Shell } from "@/components/shell";
 import { Badge, ButtonLink, Empty, PageHeading, Metric } from "@/components/ui";
 import { ActionButton, ReviewActions, SimpleForm } from "@/components/forms";
@@ -257,17 +261,15 @@ function Today({ data }: { data: Overview }) {
       action: "Check placement",
       icon: Radio,
     })),
-    ...failed
-      .slice(0, 5)
-      .map((m) => ({
-        key: m.id,
-        kind: "MESSAGE NEEDS ATTENTION",
-        title: `${m.merchant} · ••• ${m.phone_suffix}`,
-        detail: `${m.state}${m.error_code ? ` · Provider code ${m.error_code}` : ""}`,
-        href: `/operator/messages?message=${m.id}`,
-        action: "Troubleshoot",
-        icon: Mail,
-      })),
+    ...failed.slice(0, 5).map((m) => ({
+      key: m.id,
+      kind: "MESSAGE NEEDS ATTENTION",
+      title: `${m.merchant} · ••• ${m.phone_suffix}`,
+      detail: `${m.state}${m.error_code ? ` · Provider code ${m.error_code}` : ""}`,
+      href: `/operator/messages?message=${m.id}`,
+      action: "Troubleshoot",
+      icon: Mail,
+    })),
     ...expiring.map((o) => ({
       key: `expire-${o.id}`,
       kind: "ANCHOR ENDING SOON",
@@ -354,7 +356,7 @@ function Today({ data }: { data: Overview }) {
             eyebrow="TODAY’S INBOX"
             title={
               inbox.length
-                ? `${inbox.length} things to move forward`
+                ? `${inbox.length} ${inbox.length === 1 ? "thing" : "things"} to move forward`
                 : "The handoffs are up to date"
             }
           >
@@ -1905,8 +1907,18 @@ async function OfferDetail({
             </div>
             <div className="op-staff-note">
               <p className="eyebrow">FINAL SMS COPY · SAVED OFFER</p>
-              <p>{offerSmsPreview(offer.merchant, offer.qualification, offer.reward, offer.kind)}</p>
-              <p className="fine">Each recipient’s private pass link replaces the bracketed link when this message is prepared.</p>
+              <p>
+                {offerSmsPreview(
+                  offer.merchant,
+                  offer.qualification,
+                  offer.reward,
+                  offer.kind,
+                )}
+              </p>
+              <p className="fine">
+                Each recipient’s private pass link replaces the bracketed link
+                when this message is prepared.
+              </p>
             </div>
             <ReviewActions offer={offer} />
           </div>
