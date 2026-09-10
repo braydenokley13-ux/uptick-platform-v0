@@ -9,7 +9,7 @@ export interface DB {
   transaction<T>(fn: (tx: DB) => Promise<T>): Promise<T>;
   close?(): Promise<void>;
 }
-function pgAdapter(client: ReturnType<typeof postgres>): DB {
+export function pgAdapter(client: ReturnType<typeof postgres>): DB {
   return {
     query: async <T>(sql: string, params: unknown[] = []) =>
       (await client.unsafe(sql, params as never[])) as unknown as T[],

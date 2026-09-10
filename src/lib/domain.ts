@@ -75,7 +75,7 @@ export async function audit(
 ) {
   await db.query(
     "insert into audit_events(id,organization_id,actor,action,entity_id,detail) values($1,$2,$3,$4,$5,$6)",
-    [id(), org, actor, action, entity, JSON.stringify(detail)],
+    [id(), org, actor, action, entity, detail],
   );
 }
 export async function sourceOffer(db: DB, sourceToken: string) {
@@ -234,7 +234,7 @@ export async function createEntitlement(
       broadcastId,
       hash(pass),
       encrypt(pass),
-      JSON.stringify(snapshot(offer, origin)),
+      snapshot(offer, origin),
     ],
   );
   await db.query(
@@ -472,7 +472,9 @@ export async function joinMerchantDrop(db: DB, credential: string) {
   return db.transaction(async (tx) => {
     const claim = await getPass(tx, credential);
     if (claim.state !== "redeemed")
-      throw Error("Redeem this pass before joining from the redemption screen.");
+      throw Error(
+        "Redeem this pass before joining from the redemption screen.",
+      );
     await confirmPossession(tx, claim);
     const [customer] = await tx.query<{ phone: string }>(
       "select phone from customers where id=$1",

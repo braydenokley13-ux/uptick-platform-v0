@@ -270,6 +270,35 @@ test("private credentials use authenticated encryption and strict bearer lookup"
   );
 });
 
+test("pass snapshots and audit context remain JSON objects with enforceable policy fields", async () => {
+  await addOffer("json-limited", "a", { mode: "redemption", quantity: 1 });
+  const accepted = await claim("json-limited");
+  const [stored] = await db.query<{
+    shape: string;
+    mode: string;
+    quantity: number;
+  }>(
+    "select jsonb_typeof(snapshot) shape,snapshot->>'limit_mode' mode,(snapshot->>'quantity')::int quantity from claims where id=$1",
+    [accepted.id],
+  );
+  assert.deepEqual(stored, {
+    shape: "object",
+    mode: "redemption",
+    quantity: 1,
+  });
+  const [audit] = await db.query<{ shape: string; offer: string }>(
+    "select jsonb_typeof(detail) shape,detail->>'offerId' offer from audit_events where entity_id=$1 and action='claim.accepted'",
+    [accepted.id],
+  );
+  assert.deepEqual(audit, { shape: "object", offer: "json-limited" });
+  await assert.rejects(
+    db.query(
+      `insert into audit_events(id,actor,action,entity_id,detail) values('string-json','test','test','test','"double encoded"'::jsonb)`,
+    ),
+    /audit_detail_is_object/,
+  );
+});
+
 test("duplicate concurrent claims issue one durable pass, one relationship, and one delivery job", async () => {
   const accepted = await Promise.all([claim(), claim()]);
   assert.equal(accepted[0].id, accepted[1].id);
@@ -990,21 +1019,79 @@ test("rate limits count rejected requests and local access cannot be enabled on 
 });
 
 test("the post-redemption merchant join records only its displayed scope and never changes network consent", async () => {
-  for (const [phone,networkState] of [[phoneA,"absent"],[phoneB,"pending"],[phoneC,"subscribed"],["+12125550104","unsubscribed"]] as const) {
-    const accepted=await claim("anchor-a",phone,false,networkState==="pending");
-    const credential=decrypt(accepted.token_encrypted);
-    if(networkState==="subscribed"||networkState==="unsubscribed")await preferences(db,credential,false,true);
-    if(networkState==="unsubscribed")await preferences(db,credential,false,false);
-    const networkBefore=await rows("subscriptions","where customer_id=$1 and scope='network'",[accepted.customer_id]);
-    const evidenceBefore=await rows("consent_events","where customer_id=$1 and purpose='network' order by created_at,id",[accepted.customer_id]);
-    await assert.rejects(joinMerchantDrop(db,credential),/Redeem this pass/);
-    assert.equal(await count("consent_events","where customer_id=$1 and source_ui='post-redemption'",[accepted.customer_id]),0);
-    await redeem(db,credential);
-    await joinMerchantDrop(db,credential);
-    assert.equal((await rows<{state:string}>("subscriptions","where customer_id=$1 and scope='a'",[accepted.customer_id]))[0].state,"subscribed");
-    assert.deepEqual(await rows("subscriptions","where customer_id=$1 and scope='network'",[accepted.customer_id]),networkBefore);
-    assert.deepEqual(await rows("consent_events","where customer_id=$1 and purpose='network' order by created_at,id",[accepted.customer_id]),evidenceBefore);
-    const joined=await rows<{purpose:string;accepted:boolean;source_ui:string}>("consent_events","where customer_id=$1 and source_ui='post-redemption'",[accepted.customer_id]);
-    assert.equal(joined.length,1);assert.equal(joined[0].purpose,"merchant");assert.equal(joined[0].accepted,true);
+  for (const [phone, networkState] of [
+    [phoneA, "absent"],
+    [phoneB, "pending"],
+    [phoneC, "subscribed"],
+    ["+12125550104", "unsubscribed"],
+  ] as const) {
+    const accepted = await claim(
+      "anchor-a",
+      phone,
+      false,
+      networkState === "pending",
+    );
+    const credential = decrypt(accepted.token_encrypted);
+    if (networkState === "subscribed" || networkState === "unsubscribed")
+      await preferences(db, credential, false, true);
+    if (networkState === "unsubscribed")
+      await preferences(db, credential, false, false);
+    const networkBefore = await rows(
+      "subscriptions",
+      "where customer_id=$1 and scope='network'",
+      [accepted.customer_id],
+    );
+    const evidenceBefore = await rows(
+      "consent_events",
+      "where customer_id=$1 and purpose='network' order by created_at,id",
+      [accepted.customer_id],
+    );
+    await assert.rejects(joinMerchantDrop(db, credential), /Redeem this pass/);
+    assert.equal(
+      await count(
+        "consent_events",
+        "where customer_id=$1 and source_ui='post-redemption'",
+        [accepted.customer_id],
+      ),
+      0,
+    );
+    await redeem(db, credential);
+    await joinMerchantDrop(db, credential);
+    assert.equal(
+      (
+        await rows<{ state: string }>(
+          "subscriptions",
+          "where customer_id=$1 and scope='a'",
+          [accepted.customer_id],
+        )
+      )[0].state,
+      "subscribed",
+    );
+    assert.deepEqual(
+      await rows("subscriptions", "where customer_id=$1 and scope='network'", [
+        accepted.customer_id,
+      ]),
+      networkBefore,
+    );
+    assert.deepEqual(
+      await rows(
+        "consent_events",
+        "where customer_id=$1 and purpose='network' order by created_at,id",
+        [accepted.customer_id],
+      ),
+      evidenceBefore,
+    );
+    const joined = await rows<{
+      purpose: string;
+      accepted: boolean;
+      source_ui: string;
+    }>(
+      "consent_events",
+      "where customer_id=$1 and source_ui='post-redemption'",
+      [accepted.customer_id],
+    );
+    assert.equal(joined.length, 1);
+    assert.equal(joined[0].purpose, "merchant");
+    assert.equal(joined[0].accepted, true);
   }
 });

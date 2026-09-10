@@ -537,10 +537,21 @@ async function supportClaim(
   offerId = "anchor",
 ) {
   const credential = token();
-  await db.query("insert into customers(id,phone) values($1,$2)", [customerId, phone]);
+  await db.query("insert into customers(id,phone) values($1,$2)", [
+    customerId,
+    phone,
+  ]);
   await db.query(
     "insert into claims(id,customer_id,organization_id,offer_id,offer_version,token_hash,token_encrypted,snapshot) values($1,$2,$3,$4,1,$5,$6,$7)",
-    [claimId, customerId, organizationId, offerId, hash(credential), encrypt(credential), JSON.stringify({ merchant: organizationId })],
+    [
+      claimId,
+      customerId,
+      organizationId,
+      offerId,
+      hash(credential),
+      encrypt(credential),
+      { merchant: organizationId },
+    ],
   );
   await db.query(
     "insert into relationships(customer_id,organization_id,acquisition_claim_id) values($1,$2,$3)",
@@ -552,20 +563,59 @@ test("printed UP references match case-insensitively within the selected merchan
   const claimId = "000000000000000000abcdef";
   await supportClaim(claimId, "merchant", "support-a", "+12125550131");
   for (const reference of ["UP-ABCDEF", "up-abcdef", "Up-aBcDeF"])
-    assert.equal((await customerTimeline(db, operator, reference, "merchant"))?.customer.id, "support-a");
-  assert.equal(await customerTimeline(db, operator, "UP-ABCDEF", "other"), null);
-  assert.equal(await customerTimeline(db, operator, "UP-000000", "merchant"), null);
-  const otherOffer = await saveDraft(db, operator, draft({ organizationId: "other", kind: "anchor" }));
-  await supportClaim("111111111111111111abcdef", "other", "support-b", "+12125550132", otherOffer);
-  assert.equal((await customerTimeline(db, operator, "UP-ABCDEF", "merchant"))?.customer.id, "support-a");
-  assert.equal((await customerTimeline(db, operator, "UP-ABCDEF", "other"))?.customer.id, "support-b");
+    assert.equal(
+      (await customerTimeline(db, operator, reference, "merchant"))?.customer
+        .id,
+      "support-a",
+    );
+  assert.equal(
+    await customerTimeline(db, operator, "UP-ABCDEF", "other"),
+    null,
+  );
+  assert.equal(
+    await customerTimeline(db, operator, "UP-000000", "merchant"),
+    null,
+  );
+  const otherOffer = await saveDraft(
+    db,
+    operator,
+    draft({ organizationId: "other", kind: "anchor" }),
+  );
+  await supportClaim(
+    "111111111111111111abcdef",
+    "other",
+    "support-b",
+    "+12125550132",
+    otherOffer,
+  );
+  assert.equal(
+    (await customerTimeline(db, operator, "UP-ABCDEF", "merchant"))?.customer
+      .id,
+    "support-a",
+  );
+  assert.equal(
+    (await customerTimeline(db, operator, "UP-ABCDEF", "other"))?.customer.id,
+    "support-b",
+  );
 });
 
 test("an ambiguous printed reference requires a full reference without selecting a customer", async () => {
-  const first = "000000000000000000abcdef", second = "111111111111111111abcdef";
+  const first = "000000000000000000abcdef",
+    second = "111111111111111111abcdef";
   await supportClaim(first, "merchant", "support-c", "+12125550133");
   await supportClaim(second, "merchant", "support-d", "+12125550134");
-  await assert.rejects(customerTimeline(db, operator, "up-ABCDEF", "merchant"), error => error instanceof RequestError && /more than one pass.*full pass reference/.test(error.message));
-  assert.equal((await customerTimeline(db, operator, first, "merchant"))?.customer.id, "support-c");
-  assert.equal((await customerTimeline(db, operator, second, "merchant"))?.customer.id, "support-d");
+  await assert.rejects(
+    customerTimeline(db, operator, "up-ABCDEF", "merchant"),
+    (error) =>
+      error instanceof RequestError &&
+      /more than one pass.*full pass reference/.test(error.message),
+  );
+  assert.equal(
+    (await customerTimeline(db, operator, first, "merchant"))?.customer.id,
+    "support-c",
+  );
+  assert.equal(
+    (await customerTimeline(db, operator, second, "merchant"))?.customer.id,
+    "support-d",
+  );
 });
