@@ -11,8 +11,8 @@ import { id, token, hash, encrypt, normalizePhone } from "./security";
 import { RequestError } from "./http";
 
 export const MEMBERSHIP_DISCLOSURE_VERSION = "uptick-membership-2026-09-v1";
-export const MEMBERSHIP_DISCLOSURE =
-  "Join the free Uptick Local membership and receive recurring automated texts about your local Uptick Drops, up to one featured Drop message per week. Consent is not a condition of purchase. Message and data rates may apply. Reply STOP to stop or HELP for help. Participating stores fulfill the perks; this does not subscribe you to their separate marketing. See Uptick’s Terms, Privacy Policy and SMS terms.";
+import { MEMBERSHIP_DISCLOSURE } from "./membership-copy";
+export { MEMBERSHIP_DISCLOSURE } from "./membership-copy";
 export type Member = {
   id: string;
   customer_id: string;
@@ -162,6 +162,7 @@ export async function requestMemberAccess(
     homeZip?: string;
     workZip?: string;
     sourceToken?: string;
+    referralToken?: string;
     consentRequested: boolean;
   },
 ) {
@@ -223,6 +224,23 @@ export async function requestMemberAccess(
         source?.id || null,
       ],
     );
+    // Referral credit must originate on this exact pre-verification access request.
+    // Invalid/expired invitations never prevent someone joining Uptick normally.
+    if (
+      input.referralToken &&
+      !member.verified_at &&
+      /^[A-Za-z0-9_-]{43}$/.test(input.referralToken)
+    ) {
+      const [referral] = await tx.query<{ id: string }>(
+        "select r.id from member_referrals r join market_cells k on k.id=r.market_id where r.public_token=$1 and r.expires_at>now() and r.member_id<>$2 and k.state in ('pilot','live')",
+        [input.referralToken, member.id],
+      );
+      if (referral)
+        await tx.query(
+          "insert into access_referral_intents(access_id,member_id,referral_id) values($1,$2,$3)",
+          [access.id, member.id, referral.id],
+        );
+    }
     return { member, access, credential };
   });
 }
@@ -262,6 +280,11 @@ export async function confirmMemberAccess(
       "update member_access set confirmed_at=now(),expires_at=greatest(expires_at,now()+interval '30 days') where id=$1",
       [access.id],
     );
+    if (!member.verified_at)
+      await tx.query(
+        "insert into member_first_verifications(member_id,access_id) values($1,$2) on conflict(member_id) do nothing",
+        [member.id, access.id],
+      );
     // A weekly message is not a new consent request. Reopening an old link cannot resubscribe.
     const subscribe =
       access.purpose === "access" &&
@@ -361,43 +384,62 @@ export async function memberPreferences(
     });
   });
 }
-export async function supplyUsage(db: DB, supplyId: string, at = new Date()) {
-  const [s] = await db.query<{
+async function supplyUsages(db: DB, supplyIds: string[], at = new Date()) {
+  if (!supplyIds.length) return new Map<string, SupplyUsage>();
+  const rows = await db.query<{
+    id: string;
     quantity: number | null;
     inventory_policy: string;
     adjustment: number;
-  }>(
-    "select s.quantity,s.inventory_policy,coalesce((select sum(delta)::int from supply_adjustments a where a.supply_id=s.id),0) adjustment from network_drop_supplies s where id=$1",
-    [supplyId],
-  );
-  if (!s) throw new RequestError("This Drop is unavailable.", 404);
-  const [n] = await db.query<{
     claimed: number;
     redeemed: number;
     reserved: number;
   }>(
-    `select count(*)::int claimed,count(*) filter(where c.state='redeemed')::int redeemed,count(*) filter(where c.state='active' and (mc.reserved_until is null or mc.reserved_until>$2) and (c.snapshot->>'expires_at')::timestamptz>$2)::int reserved from member_claims mc join claims c on c.id=mc.claim_id where mc.supply_id=$1`,
-    [supplyId, at.toISOString()],
+    `with adjustments as (select supply_id,sum(delta)::int adjustment from supply_adjustments where supply_id=any($1::text[]) group by supply_id), usage as (select mc.supply_id,count(*)::int claimed,count(*) filter(where c.state='redeemed')::int redeemed,count(*) filter(where c.state='active' and (mc.reserved_until is null or mc.reserved_until>$2) and (c.snapshot->>'expires_at')::timestamptz>$2)::int reserved from member_claims mc join claims c on c.id=mc.claim_id where mc.supply_id=any($1::text[]) group by mc.supply_id) select s.id,s.quantity,s.inventory_policy,coalesce(a.adjustment,0) adjustment,coalesce(u.claimed,0) claimed,coalesce(u.redeemed,0) redeemed,coalesce(u.reserved,0) reserved from network_drop_supplies s left join adjustments a on a.supply_id=s.id left join usage u on u.supply_id=s.id where s.id=any($1::text[])`,
+    [supplyIds, at.toISOString()],
   );
-  const quantity =
-    s.inventory_policy === "unlimited"
-      ? null
-      : Math.max(0, (s.quantity || 0) + s.adjustment);
-  const reserved = ["claim", "timed"].includes(s.inventory_policy)
-    ? n.reserved
-    : 0;
-  return {
-    ...n,
-    reserved,
-    quantity,
-    remaining:
-      quantity === null ? null : Math.max(0, quantity - n.redeemed - reserved),
-    policy: s.inventory_policy,
-  };
+  return new Map(
+    rows.map((s) => {
+      const quantity =
+        s.inventory_policy === "unlimited"
+          ? null
+          : Math.max(0, (s.quantity || 0) + s.adjustment);
+      const reserved = ["claim", "timed"].includes(s.inventory_policy)
+        ? s.reserved
+        : 0;
+      return [
+        s.id,
+        {
+          claimed: s.claimed,
+          redeemed: s.redeemed,
+          reserved,
+          quantity,
+          remaining:
+            quantity === null
+              ? null
+              : Math.max(0, quantity - s.redeemed - reserved),
+          policy: s.inventory_policy,
+        },
+      ];
+    }),
+  );
+}
+type SupplyUsage = {
+  claimed: number;
+  redeemed: number;
+  reserved: number;
+  quantity: number | null;
+  remaining: number | null;
+  policy: string;
+};
+export async function supplyUsage(db: DB, supplyId: string, at = new Date()) {
+  const usage = (await supplyUsages(db, [supplyId], at)).get(supplyId);
+  if (!usage) throw new RequestError("This Drop is unavailable.", 404);
+  return usage;
 }
 export async function eligibleDrops(db: DB, memberId: string, at = new Date()) {
   const [member] = await db.query<Member>(
-    `select m.* from uptick_members m join market_cells k on k.id=m.market_id where m.id=$1 and m.state='active' and m.verified_at is not null and k.state in ('pilot','live') and exists(select 1 from market_zips z where z.market_id=k.id and (z.zip=m.home_zip or z.zip=m.work_zip))`,
+    `select m.* from uptick_members m join market_cells k on k.id=m.market_id where m.id=$1 and m.state='active' and m.verified_at is not null and coalesce((select accepted from member_consents c where c.member_id=m.id order by c.sequence desc limit 1),false) and k.state in ('pilot','live') and exists(select 1 from market_zips z where z.market_id=k.id and (z.zip=m.home_zip or z.zip=m.work_zip))`,
     [memberId],
   );
   if (!member) return [];
@@ -405,12 +447,15 @@ export async function eligibleDrops(db: DB, memberId: string, at = new Date()) {
     `${supplySelect} where s.market_id=$1 and s.state='approved' and ml.active and s.starts_at<=$2 and s.expires_at>$2 and not exists(select 1 from claims c where c.customer_id=$3 and c.offer_id=s.offer_id) order by s.expires_at,s.id`,
     [member.market_id, at.toISOString(), member.customer_id],
   );
-  const output: Supply[] = [];
-  for (const supply of supplies) {
-    const usage = await supplyUsage(db, supply.id, at);
-    if (usage.remaining === null || usage.remaining > 0) output.push(supply);
-  }
-  return output;
+  const usages = await supplyUsages(
+    db,
+    supplies.map((supply) => supply.id),
+    at,
+  );
+  return supplies.filter((supply) => {
+    const usage = usages.get(supply.id)!;
+    return usage.remaining === null || usage.remaining > 0;
+  });
 }
 export async function allocationView(db: DB, allocation: Allocation) {
   const options = await db.query<Supply>(
@@ -456,16 +501,25 @@ export async function allocateMember(
       `select c.organization_id,count(*)::int n from member_claims mc join claims c on c.id=mc.claim_id where mc.member_id=$1 and c.state='redeemed' and c.redeemed_at>$2::timestamptz-interval '28 days' group by c.organization_id`,
       [memberId, at.toISOString()],
     );
-    const ranked = await Promise.all(
-      eligible.map(async (s) => ({
-        s,
-        usage: await supplyUsage(tx, s.id, at),
-        recent:
-          history.find((h) => h.organization_id === s.organization_id)?.n || 0,
-      })),
+    const [invitation] = await tx.query<{ supply_id: string }>(
+      "select r.supply_id from referral_joins j join member_referrals r on r.id=j.referral_id where j.member_id=$1 and r.market_id=$2 and r.expires_at>$3 and r.supply_id is not null",
+      [memberId, member.market_id, at.toISOString()],
     );
+    const usages = await supplyUsages(
+      tx,
+      eligible.map((supply) => supply.id),
+      at,
+    );
+    const ranked = eligible.map((s) => ({
+      s,
+      usage: usages.get(s.id)!,
+      recent:
+        history.find((h) => h.organization_id === s.organization_id)?.n || 0,
+    }));
     ranked.sort(
       (a, b) =>
+        Number(b.s.id === invitation?.supply_id) -
+          Number(a.s.id === invitation?.supply_id) ||
         a.recent - b.recent ||
         (a.s.drive_minutes ?? 999) - (b.s.drive_minutes ?? 999) ||
         a.s.id.localeCompare(b.s.id),
@@ -477,13 +531,14 @@ export async function allocateMember(
     for (const [index, { s, usage, recent }] of ranked.slice(0, 3).entries()) {
       const reason = {
         rule: "local-v1",
+        referral: s.id === invitation?.supply_id,
         market: "Home or work ZIP is in this Market Cell",
         recentMerchantRedemptions28d: recent,
         driveMinutesEstimate: s.drive_minutes,
         remainingAtAllocation: usage.remaining,
         inventoryReserved: false,
         ranking:
-          "Local relevance, merchant variety, then operator drive-time estimate",
+          "An eligible shared Uptick, local relevance, merchant variety, then operator drive-time estimate",
       };
       await tx.query(
         "insert into allocation_options(allocation_id,supply_id,market_id,rank,reason) values($1,$2,$3,$4,$5)",
@@ -507,6 +562,7 @@ export async function claimMemberDrop(
   db: DB,
   credential: string,
   supplyId: string,
+  at = new Date(),
 ) {
   return db.transaction(async (tx) => {
     const { member } = await memberAccess(tx, credential, true);
@@ -526,8 +582,8 @@ export async function claimMemberDrop(
       [supplyId],
     );
     const [allocation] = await tx.query<Allocation>(
-      `select a.* from member_allocations a join allocation_options o on o.allocation_id=a.id where a.member_id=$1 and a.week_key=$2 and o.supply_id=$3`,
-      [member.id, weekKey(new Date(), supply.timezone), supplyId],
+      `select a.* from member_allocations a join allocation_options o on o.allocation_id=a.id join market_cells k on k.id=a.market_id where a.member_id=$1 and a.week_key=to_char(date_trunc('week',$3::timestamptz at time zone k.timezone),'YYYY-MM-DD') and o.supply_id=$2`,
+      [member.id, supplyId, at.toISOString()],
     );
     if (!allocation)
       throw new RequestError("Open Your Uptick to see this week’s choices.");
@@ -542,11 +598,13 @@ export async function claimMemberDrop(
         );
       return existing;
     }
-    if (!(await eligibleDrops(tx, member.id)).some((s) => s.id === supplyId))
+    if (
+      !(await eligibleDrops(tx, member.id, at)).some((s) => s.id === supplyId)
+    )
       throw new RequestError(
         "This Drop is no longer available. Your other choices may still be available.",
       );
-    const usage = await supplyUsage(tx, supplyId);
+    const usage = await supplyUsage(tx, supplyId, at);
     if (usage.remaining !== null && usage.remaining < 1)
       throw new RequestError("This Drop has reached its available quantity.");
     const pass = token(),
@@ -555,7 +613,7 @@ export async function claimMemberDrop(
       supply.inventory_policy === "timed"
         ? new Date(
             Math.min(
-              Date.now() + (supply.reservation_minutes || 30) * 60000,
+              at.getTime() + (supply.reservation_minutes || 30) * 60000,
               new Date(supply.expires_at).getTime(),
             ),
           ).toISOString()
@@ -679,45 +737,110 @@ export async function marketCoverage(
   marketId: string,
   at = new Date(),
 ) {
-  const [market] = await db.query<{ timezone: string }>(
-    "select timezone from market_cells where id=$1",
+  const [market] = await db.query<{ timezone: string; state: string }>(
+    "select timezone,state from market_cells where id=$1",
     [marketId],
   );
   if (!market) throw new RequestError("Market not found.", 404);
-  const members = await db.query<Member>(
-    "select * from uptick_members where market_id=$1 and state='active' and verified_at is not null",
+  const members = await db.query<Member & { geographically_relevant: boolean }>(
+    "select m.*,exists(select 1 from market_zips z where z.market_id=m.market_id and (z.zip=m.home_zip or z.zip=m.work_zip)) geographically_relevant from uptick_members m where m.market_id=$1 and m.state='active' and m.verified_at is not null and coalesce((select accepted from member_consents c where c.member_id=m.id order by c.sequence desc limit 1),false)",
     [marketId],
   );
   const window = marketWeekWindow(at, market.timezone);
   const checkAt = new Date(Math.max(window.start.getTime(), Date.now()));
   const supplyRows = await db.query<{
     id: string;
+    offer_id: string;
+    state: string;
+    active: boolean;
+    inventory_policy: string;
     starts_at: string;
     expires_at: string;
   }>(
-    "select id,starts_at,expires_at from network_drop_supplies where market_id=$1 and state='approved' and starts_at<$2 and expires_at>$3",
+    "select s.id,s.offer_id,s.state,l.active,s.inventory_policy,s.starts_at,s.expires_at from network_drop_supplies s join market_locations l on l.market_id=s.market_id and l.location_id=s.location_id where s.market_id=$1 and s.state in ('approved','paused','ended') and s.starts_at<$2 and s.expires_at>$3 order by s.id",
     [marketId, window.end.toISOString(), checkAt.toISOString()],
   );
-  const usages = new Map<string, Awaited<ReturnType<typeof supplyUsage>>>();
-  for (const s of supplyRows)
-    usages.set(s.id, await supplyUsage(db, s.id, checkAt));
-  const fulfilled = await db.query<{ member_id: string }>(
-    `select mc.member_id from member_claims mc join member_allocations a on a.id=mc.allocation_id join claims c on c.id=mc.claim_id where a.market_id=$1 and a.week_key=$2 and (c.state='redeemed' or (c.state='active' and (c.snapshot->>'expires_at')::timestamptz>$3 and (mc.reserved_until is null or mc.reserved_until>$3)))`,
-    [marketId, window.weekKey, checkAt.toISOString()],
+  const usages = await supplyUsages(
+    db,
+    supplyRows.map((supply) => supply.id),
+    checkAt,
   );
-  const alreadyCovered = new Set(fulfilled.map((x) => x.member_id));
+  // Fetch history once for the whole cohort. Prior claims remove offer eligibility;
+  // a choice saved for this week constrains that member to the chosen supply.
+  const claims = await db.query<{
+    member_id: string;
+    offer_id: string;
+    supply_id: string | null;
+    week_key: string | null;
+    allocation_market: string | null;
+    state: string;
+    expires_at: string;
+    reserved_until: string | null;
+    inventory_policy: string | null;
+    supply_state: string | null;
+  }>(
+    `select m.id member_id,c.offer_id,mc.supply_id,a.week_key,a.market_id allocation_market,c.state,c.snapshot->>'expires_at' expires_at,mc.reserved_until,s.inventory_policy,s.state supply_state from uptick_members m join claims c on c.customer_id=m.customer_id left join member_claims mc on mc.claim_id=c.id left join member_allocations a on a.id=mc.allocation_id left join network_drop_supplies s on s.id=mc.supply_id where m.id=any($1::text[])`,
+    [members.map((member) => member.id)],
+  );
+  const histories = new Map<string, typeof claims>();
+  for (const claim of claims) {
+    const history = histories.get(claim.member_id) || [];
+    history.push(claim);
+    histories.set(claim.member_id, history);
+  }
+  const savedOptions = await db.query<{
+    member_id: string;
+    supply_id: string | null;
+  }>(
+    "select a.member_id,o.supply_id from member_allocations a left join allocation_options o on o.allocation_id=a.id where a.member_id=any($1::text[]) and a.week_key=$2",
+    [members.map((member) => member.id), window.weekKey],
+  );
+  const allocations = new Map<string, Set<string>>();
+  for (const option of savedOptions) {
+    const choices = allocations.get(option.member_id) || new Set<string>();
+    if (option.supply_id) choices.add(option.supply_id);
+    allocations.set(option.member_id, choices);
+  }
+  const availableToNewMembers = (supply: (typeof supplyRows)[number]) =>
+    supply.state === "approved" &&
+    supply.active &&
+    ["pilot", "live"].includes(market.state);
+  const alreadyCovered = new Set<string>();
   const candidates = [];
+  const usedSupplies = new Set<string>();
   for (const m of members) {
-    if (alreadyCovered.has(m.id)) continue;
-    const options = new Set<string>();
-    for (const s of supplyRows) {
-      const moment = new Date(
-        Math.max(new Date(s.starts_at).getTime(), checkAt.getTime()),
-      );
-      for (const available of await eligibleDrops(db, m.id, moment))
-        if (available.id === s.id) options.add(s.id);
+    const history = histories.get(m.id) || [];
+    const chosen = history.find((claim) => claim.week_key === window.weekKey);
+    const validClaim =
+      chosen?.state === "active" &&
+      chosen.allocation_market === marketId &&
+      new Date(chosen.expires_at) > checkAt &&
+      (!chosen.reserved_until || new Date(chosen.reserved_until) > checkAt) &&
+      ["approved", "paused", "ended"].includes(chosen.supply_state || "");
+    if (
+      (chosen?.state === "redeemed" && chosen.allocation_market === marketId) ||
+      (validClaim &&
+        ["claim", "timed"].includes(chosen?.inventory_policy || ""))
+    ) {
+      alreadyCovered.add(m.id);
+      continue;
     }
-    candidates.push({ member: m.id, supplies: [...options] });
+    const claimedOffers = new Set(history.map((claim) => claim.offer_id));
+    const options = supplyRows
+      .filter((supply) => {
+        const usage = usages.get(supply.id)!;
+        if (usage.remaining !== null && usage.remaining < 1) return false;
+        if (chosen) return validClaim && chosen.supply_id === supply.id;
+        return (
+          m.geographically_relevant &&
+          availableToNewMembers(supply) &&
+          !claimedOffers.has(supply.offer_id) &&
+          (!allocations.has(m.id) || allocations.get(m.id)!.has(supply.id))
+        );
+      })
+      .map((supply) => supply.id);
+    for (const supplyId of options) usedSupplies.add(supplyId);
+    candidates.push({ member: m.id, supplies: options });
   }
   const slots = new Map<string, string[]>(),
     assigned = new Map<string, string[]>();
@@ -746,9 +869,14 @@ export async function marketCoverage(
     (a, b) => a.supplies.length - b.supplies.length,
   ))
     if (match(c.member, new Set())) coveredMembers++;
-  const capacity = [...usages.values()].some((u) => u.remaining === null)
+  const availableUsages = supplyRows
+    .filter(
+      (supply) => availableToNewMembers(supply) || usedSupplies.has(supply.id),
+    )
+    .map((supply) => usages.get(supply.id)!);
+  const capacity = availableUsages.some((u) => u.remaining === null)
     ? null
-    : [...usages.values()].reduce((n, u) => n + (u.remaining || 0), 0);
+    : availableUsages.reduce((n, u) => n + (u.remaining || 0), 0);
   return {
     marketId,
     weekKey: window.weekKey,
@@ -762,7 +890,7 @@ export async function marketCoverage(
     coveragePercent: members.length
       ? Math.round((coveredMembers / members.length) * 100)
       : null,
-    supplies: supplyRows.length,
+    supplies: supplyRows.filter(availableToNewMembers).length,
     method: "capacity-constrained-matching" as const,
     asOf: at.toISOString(),
     windowStart: window.start.toISOString(),

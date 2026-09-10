@@ -9,12 +9,19 @@ import {
   allocateMember,
   claimMemberDrop,
   supplyUsage,
+  marketCoverage,
 } from "../src/lib/network";
 import {
   createRedemptionPoint,
   redeemAtPoint,
   rotateTapCredential,
 } from "../src/lib/tap";
+import {
+  prepareMembershipWeek,
+  shareUptick,
+  acceptPendingReferral,
+} from "../src/lib/member-experience";
+import { configureMemberSender } from "../src/lib/member-messaging";
 import { aesCmac } from "../src/lib/nfc";
 
 // Called only after verify-postgres.ts has checked the private cluster marker,
@@ -109,6 +116,7 @@ export async function verifyNetworkPostgres(db: DB) {
   assert.equal(await count("member_claims"), 1);
   assert.equal(await count("claims"), 1);
   assert.equal((await supplyUsage(db, scarce)).remaining, 0);
+  assert.equal((await marketCoverage(db, "market")).coveredMembers, 1);
   console.log(
     "PASS: four members competing for one reserved network perk produce one entitlement and one reservation.",
   );
@@ -163,6 +171,9 @@ export async function verifyNetworkPostgres(db: DB) {
   const passes = await Promise.all(
     people.map((person) => claimMemberDrop(db, person.credential, capped)),
   );
+  const beforeRedemption = await marketCoverage(db, "market");
+  assert.equal(beforeRedemption.activeMembers, 4);
+  assert.equal(beforeRedemption.coveredMembers, 1);
   const point = await createRedemptionPoint(db, actor, {
     organizationId: "a",
     locationId: "a-location",
@@ -183,6 +194,7 @@ export async function verifyNetworkPostgres(db: DB) {
   assert.equal(await count("redemptions"), 1);
   assert.equal(await count("redemption_evidence"), 1);
   assert.equal((await supplyUsage(db, capped)).remaining, 0);
+  assert.equal((await marketCoverage(db, "market")).coveredMembers, 1);
   console.log(
     "PASS: four separate network passes racing at a location QR consume the final redemption exactly once.",
   );
@@ -309,5 +321,148 @@ export async function verifyNetworkPostgres(db: DB) {
   );
   console.log(
     "PASS: secure NFC proof reuse across different offers permits one redemption; stale counters and wrong locations fail; fresh counters succeed with exact observed evidence.",
+  );
+  await reset();
+  await supply();
+  await Promise.all(Array.from({ length: 4 }, () => joinedMember()));
+  const prepared = await Promise.all(
+    Array.from({ length: 4 }, () => prepareMembershipWeek(db, 2)),
+  );
+  await prepareMembershipWeek(db, 2);
+  assert.ok(prepared.reduce((n, value) => n + value, 0) <= 4);
+  assert.equal(await count("member_messages"), 4);
+  assert.equal(
+    (await db.query("select id from member_access where purpose='drop'"))
+      .length,
+    4,
+  );
+  assert.equal(await prepareMembershipWeek(db, 2), 0);
+  console.log(
+    "PASS: overlapping weekly schedulers create one access credential and message per member, then advance beyond the first page.",
+  );
+
+  await reset();
+  await supply();
+  const referrer = await joinedMember();
+  await allocateMember(db, referrer.member.id);
+  const invite = await shareUptick(db, referrer.credential);
+  const friends = await Promise.all(
+    Array.from({ length: 6 }, async () => {
+      phoneSequence++;
+      const friend = await requestMemberAccess(db, {
+        phone: `+1201555${String(2000 + phoneSequence)}`,
+        homeZip: "10583",
+        consentRequested: true,
+        referralToken: invite,
+      });
+      await confirmMemberAccess(db, friend.credential, true);
+      return friend;
+    }),
+  );
+  const attributed = await Promise.all(
+    friends.map((friend) => acceptPendingReferral(db, friend.credential)),
+  );
+  assert.equal(attributed.filter((result) => result.attributed).length, 5);
+  assert.equal(await count("referral_joins"), 5);
+  assert.equal(
+    (await db.query("select id from uptick_members where state='active'"))
+      .length,
+    7,
+  );
+  console.log(
+    "PASS: six concurrent first-verified friends respect a five-join invitation cap without rolling back any valid membership.",
+  );
+
+  await reset();
+  await supply();
+  const inviteOwner = await joinedMember();
+  const exactInvite = await shareUptick(db, inviteOwner.credential);
+  phoneSequence++;
+  const pendingPhone = `+1201555${String(2000 + phoneSequence)}`;
+  const directAccess = await requestMemberAccess(db, {
+    phone: pendingPhone,
+    homeZip: "10583",
+    consentRequested: true,
+  });
+  const referralAccess = await requestMemberAccess(db, {
+    phone: pendingPhone,
+    homeZip: "10583",
+    consentRequested: true,
+    referralToken: exactInvite,
+  });
+  await Promise.all(
+    [directAccess, referralAccess].map((access) =>
+      confirmMemberAccess(db, access.credential, true),
+    ),
+  );
+  const exactOutcomes = await Promise.all(
+    [directAccess, referralAccess].map((access) =>
+      acceptPendingReferral(db, access.credential),
+    ),
+  );
+  const [firstVerification] = await db.query<{ access_id: string }>(
+    "select access_id from member_first_verifications where member_id=$1",
+    [directAccess.member.id],
+  );
+  assert.equal(
+    exactOutcomes.filter((outcome) => outcome.attributed).length,
+    firstVerification.access_id === referralAccess.access.id ? 1 : 0,
+  );
+  assert.equal(
+    await count("referral_joins"),
+    firstVerification.access_id === referralAccess.access.id ? 1 : 0,
+  );
+  console.log(
+    "PASS: competing pending access links credit only the invitation attached to the exact first verification.",
+  );
+
+  await reset();
+  await supply("redemption", 100);
+  await db.query(
+    "insert into customers(id,phone) select 'coverage-customer-'||n,'+1212555'||lpad(n::text,4,'0') from generate_series(1000,1199) n",
+  );
+  await db.query(
+    "insert into uptick_members(id,customer_id,home_zip,market_id,state,verified_at) select 'coverage-member-'||n,'coverage-customer-'||n,'10583','market','active',now() from generate_series(1000,1199) n",
+  );
+  await db.query(
+    "insert into member_consents(id,member_id,accepted,disclosure_version,disclosure,source_ui) select 'coverage-consent-'||n,'coverage-member-'||n,true,'fixture','Explicit test membership','fixture' from generate_series(1000,1199) n",
+  );
+  let coverageQueries = 0;
+  const counted: DB = {
+    ...db,
+    query: (sql, params) => {
+      coverageQueries++;
+      return db.query(sql, params);
+    },
+  };
+  const bulkCoverage = await marketCoverage(counted, "market");
+  assert.equal(bulkCoverage.activeMembers, 200);
+  assert.equal(bulkCoverage.coveredMembers, 100);
+  assert.ok(coverageQueries <= 6);
+  console.log(
+    "PASS: a 200-member market uses six SQL round trips and cannot count 100 available items as more than 100 covered members.",
+  );
+
+  await reset();
+  const sharedService = `MG${"a".repeat(32)}`,
+    sharedPhone = "+12015550199";
+  const senderRace = await Promise.allSettled([
+    configureMemberSender(db, actor, {
+      serviceSid: sharedService,
+      phone: sharedPhone,
+      approved: true,
+    }),
+    db.query(
+      "insert into senders(id,organization_id,service_sid,phone,approved) values('legacy-race','b',$1,$2,true)",
+      [sharedService, sharedPhone],
+    ),
+  ]);
+  assert.equal(
+    senderRace.filter((result) => result.status === "fulfilled").length,
+    1,
+  );
+  assert.equal((await count("member_senders")) + (await count("senders")), 1);
+  console.log(
+    "PASS: concurrent merchant and membership sender configuration cannot share one service or phone.",
   );
 }

@@ -63,7 +63,8 @@ export async function POST(request: Request) {
         await seed(db);
         await setSession(`local-${data.mode}`);
         return NextResponse.json({
-          redirect: data.mode === "operator" ? "/operator" : "/merchant",
+          redirect:
+            data.mode === "operator" ? "/operator/network" : "/merchant",
         });
       }
       const email = z.email().parse(data.email);
@@ -98,7 +99,8 @@ export async function POST(request: Request) {
         throw Error("Your account has not been assigned business access.");
       await setSession(auth.user.id, auth.session.access_token);
       return NextResponse.json({
-        redirect: member.role === "operator" ? "/operator" : "/merchant",
+        redirect:
+          member.role === "operator" ? "/operator/network" : "/merchant",
       });
     }
     if (action === "logout") {
@@ -337,6 +339,18 @@ export async function POST(request: Request) {
         })
         .parse(data);
       await db.transaction(async (tx) => {
+        await tx.query("select pg_advisory_xact_lock(73418,1)");
+        if (
+          (
+            await tx.query(
+              "select id from member_senders where service_sid=$1 or phone=$2",
+              [input.serviceSid, input.phone],
+            )
+          ).length
+        )
+          throw new RequestError(
+            "Use a separate merchant sender. This service or phone belongs to Uptick membership.",
+          );
         const changed = await tx.query(
           "update senders set service_sid=$2,phone=$3,approved=$4 where organization_id=$1 returning id",
           [input.organizationId, input.serviceSid, input.phone, input.approved],

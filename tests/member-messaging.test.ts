@@ -2,7 +2,7 @@ import { after, before, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import twilio from "twilio";
 import { memoryDb, type DB } from "../src/lib/db";
-import { id, token, hash, encrypt } from "../src/lib/security";
+import { id, token, hash, encrypt, decrypt } from "../src/lib/security";
 import { isQuietHours, weekKey, type Actor } from "../src/lib/domain";
 import { localMode } from "../src/lib/config";
 import {
@@ -22,6 +22,13 @@ import {
   type MemberMessage,
 } from "../src/lib/member-messaging";
 import { pilotPrincipal, pilotPersona } from "../src/lib/pilot-access";
+import {
+  requestMemberAccess,
+  confirmMemberAccess,
+  allocateMember,
+  claimMemberDrop,
+} from "../src/lib/network";
+import { createRedemptionPoint, redeemAtPoint } from "../src/lib/tap";
 let db: DB;
 const phone = "+12015550123",
   serviceSid = `MG${"b".repeat(32)}`,
@@ -66,6 +73,9 @@ beforeEach(async () => {
   await db.query(
     "insert into market_cells(id,name,slug,state) values('market','Pilot','pilot','pilot')",
   );
+  await db.query(
+    "insert into market_zips(market_id,zip) values('market','10583')",
+  );
   await db.query("insert into customers(id,phone) values('customer',$1)", [
     phone,
   ]);
@@ -107,7 +117,7 @@ async function active() {
     [id()],
   );
 }
-async function drop() {
+async function drop(quantity: number | null = null) {
   const zone = daytimeZone(),
     week = weekKey(new Date(), zone);
   await db.query(
@@ -123,7 +133,8 @@ async function drop() {
     "insert into offer_versions(offer_id,version,qualification,reward,terms,starts_at,expires_at) values('offer',1,'Visit','Free coffee','One per member',now()-interval '1 day',now()+interval '7 days')",
   );
   await db.query(
-    "insert into network_drop_supplies(id,market_id,organization_id,location_id,offer_id,offer_version,state,starts_at,expires_at,inventory_policy,approved_by) values('supply','market','merchant','location','offer',1,'approved',now()-interval '1 day',now()+interval '7 days','unlimited','operator')",
+    "insert into network_drop_supplies(id,market_id,organization_id,location_id,offer_id,offer_version,state,starts_at,expires_at,inventory_policy,quantity,approved_by) values('supply','market','merchant','location','offer',1,'approved',now()-interval '1 day',now()+interval '7 days',$1,$2,'operator')",
+    [quantity === null ? "unlimited" : "redemption", quantity],
   );
   await db.query(
     "insert into member_allocations(id,member_id,market_id,week_key) values('allocation','member','market',$1)",
@@ -247,6 +258,65 @@ test("paused market or missing supply blocks a promised weekly perk", async () =
     (await memberMessageEligibility(db, message))!,
     /No current approved Drop/,
   );
+});
+test("queued weekly messages recheck active location, ZIP relevance and prior offer claims before dispatch", async () => {
+  await active();
+  const message = await queueMemberDrop(db, await drop());
+  assert.equal(await memberMessageEligibility(db, message), null);
+  await db.query("update market_locations set active=false");
+  assert.match(
+    (await memberMessageEligibility(db, message))!,
+    /No current approved Drop/,
+  );
+  await db.query("update market_locations set active=true");
+  await db.query(
+    "update uptick_members set home_zip='99999' where id='member'",
+  );
+  assert.match(
+    (await memberMessageEligibility(db, message))!,
+    /No current approved Drop/,
+  );
+  await db.query(
+    "update uptick_members set home_zip='10583' where id='member'",
+  );
+  assert.equal(await memberMessageEligibility(db, message), null);
+  await db.query(
+    "insert into claims(id,customer_id,organization_id,offer_id,offer_version,token_hash,token_encrypted,snapshot) values('prior-offer','customer','merchant','offer',1,'prior-fixture-hash','prior-fixture-credential','{}')",
+  );
+  assert.match(
+    (await memberMessageEligibility(db, message))!,
+    /No current approved Drop/,
+  );
+  await dispatchMemberMessages(db);
+  assert.equal((await saved(message.id)).state, "suppressed");
+});
+test("a queued weekly message is suppressed when another member uses the last available item", async () => {
+  await active();
+  const message = await queueMemberDrop(db, await drop(1));
+  assert.equal(await memberMessageEligibility(db, message), null);
+  const other = await requestMemberAccess(db, {
+    phone: "+12015550124",
+    homeZip: "10583",
+    consentRequested: true,
+  });
+  await confirmMemberAccess(db, other.credential, true);
+  await allocateMember(db, other.member.id);
+  const pass = await claimMemberDrop(db, other.credential, "supply");
+  const point = await createRedemptionPoint(db, actor, {
+    organizationId: "merchant",
+    locationId: "location",
+    name: "Counter",
+    exposure: "staff",
+  });
+  await redeemAtPoint(db, decrypt(pass.token_encrypted), {
+    pointToken: point.credential.public_token,
+  });
+  assert.match(
+    (await memberMessageEligibility(db, message))!,
+    /No current approved Drop/,
+  );
+  await dispatchMemberMessages(db);
+  assert.equal((await saved(message.id)).state, "suppressed");
 });
 test("staging cannot send to a number removed from its allowlist after queueing", async () => {
   staging();

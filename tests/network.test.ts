@@ -11,6 +11,7 @@ import {
   claimMemberDrop,
   supplyUsage,
   marketCoverage,
+  marketWeekWindow,
 } from "../src/lib/network";
 import { redeem } from "../src/lib/domain";
 import { decrypt } from "../src/lib/security";
@@ -278,4 +279,118 @@ test("foreign keys reject a cross-merchant member entitlement mapping", async ()
       "code" in error &&
       error.code === "23503",
   );
+});
+test("coverage batches a 200-member eligibility graph without counting overlapping capacity twice", async () => {
+  await db.query(
+    "update network_drop_supplies set state='approved',approved_by='operator',quantity=25",
+  );
+  await db.query(
+    "insert into customers(id,phone) select 'bulk-customer-'||n,'+1212555'||lpad(n::text,4,'0') from generate_series(1000,1199) n",
+  );
+  await db.query(
+    "insert into uptick_members(id,customer_id,home_zip,market_id,state,verified_at) select 'bulk-member-'||n,'bulk-customer-'||n,'10583','market','active',now() from generate_series(1000,1199) n",
+  );
+  await db.query(
+    "insert into member_consents(id,member_id,accepted,disclosure_version,disclosure,source_ui) select 'bulk-consent-'||n,'bulk-member-'||n,true,'fixture','Explicit test membership','fixture' from generate_series(1000,1199) n",
+  );
+  let queries = 0;
+  const counted: DB = {
+    ...db,
+    query: (sql, params) => {
+      queries++;
+      return db.query(sql, params);
+    },
+  };
+  const coverage = await marketCoverage(counted, "market");
+  assert.equal(coverage.activeMembers, 200);
+  assert.equal(coverage.eligibleMembers, 200);
+  assert.equal(coverage.capacity, 100);
+  assert.equal(coverage.coveredMembers, 100);
+  assert.equal(coverage.uncoveredMembers, 100);
+  assert.ok(
+    queries <= 6,
+    `Expected a batched graph, received ${queries} SQL round trips`,
+  );
+});
+test("unreserved claimed passes still compete for capped redemption inventory in coverage", async () => {
+  await db.query(
+    "update network_drop_supplies set state=case when id='a' then 'review' else 'paused' end,quantity=1",
+  );
+  const people = [await member(), await member("0102"), await member("0103")];
+  for (const person of people) {
+    await allocateMember(db, person.member.id);
+    await claimMemberDrop(db, person.credential, "a");
+  }
+  const coverage = await marketCoverage(db, "market");
+  assert.equal(coverage.activeMembers, 3);
+  assert.equal(coverage.capacity, 1);
+  assert.equal(coverage.coveredMembers, 1);
+  assert.equal(coverage.uncoveredMembers, 2);
+});
+test("coverage preserves issued reservations after supply pauses without offering their stock twice", async () => {
+  await db.query(
+    "update network_drop_supplies set state=case when id='a' then 'review' else 'paused' end,inventory_policy='claim',quantity=1",
+  );
+  const first = await member();
+  await member("0102");
+  await allocateMember(db, first.member.id);
+  await claimMemberDrop(db, first.credential, "a");
+  await db.query(
+    "update network_drop_supplies set state='paused' where id='a'",
+  );
+  const coverage = await marketCoverage(db, "market");
+  assert.equal(coverage.coveredMembers, 1);
+  assert.equal(coverage.capacity, 0);
+  assert.equal(coverage.supplies, 0);
+});
+test("coverage respects the immutable choices already shown, ZIP relevance, and prior offer claims", async () => {
+  const joined = await member();
+  const allocation = await allocateMember(db, joined.member.id);
+  const options = allocation!.options.map((option) => option.id);
+  await db.query(
+    "update network_drop_supplies set state='paused' where id=any($1::text[])",
+    [options],
+  );
+  assert.equal((await marketCoverage(db, "market")).coveredMembers, 0);
+  const second = await member("0102");
+  assert.equal((await marketCoverage(db, "market")).coveredMembers, 1);
+  await db.query("update uptick_members set home_zip='99999' where id=$1", [
+    second.member.id,
+  ]);
+  assert.equal((await marketCoverage(db, "market")).coveredMembers, 0);
+  await db.query("update uptick_members set home_zip='10583' where id=$1", [
+    second.member.id,
+  ]);
+  const remaining = ["a", "b", "c", "d"].find(
+    (supply) => !options.includes(supply),
+  )!;
+  await db.query(
+    "insert into claims(id,customer_id,organization_id,offer_id,offer_version,token_hash,token_encrypted,snapshot) values('previous-claim',$1,$2,$2,1,'history-fixture-hash','history-fixture-encrypted','{}')",
+    [second.member.customer_id, remaining],
+  );
+  assert.equal((await marketCoverage(db, "market")).coveredMembers, 0);
+});
+test("market weeks use local Monday boundaries through DST and claim lookup uses the market timezone", async () => {
+  const spring = marketWeekWindow(
+    new Date("2026-03-08T16:00:00Z"),
+    "America/New_York",
+  );
+  assert.equal(spring.start.toISOString(), "2026-03-02T05:00:00.000Z");
+  assert.equal(spring.end.toISOString(), "2026-03-09T04:00:00.000Z");
+  const next = marketWeekWindow(
+    new Date(Date.now() + 7 * 86400000),
+    "America/New_York",
+  ).start;
+  const at = new Date(next.getTime() + 60000);
+  await db.query("update organizations set timezone='America/Los_Angeles'");
+  const joined = await member();
+  const allocation = await allocateMember(db, joined.member.id, at);
+  const claim = await claimMemberDrop(
+    db,
+    joined.credential,
+    allocation!.options[0].id,
+    at,
+  );
+  assert.ok(claim.id);
+  assert.equal((await db.query("select * from member_claims")).length, 1);
 });

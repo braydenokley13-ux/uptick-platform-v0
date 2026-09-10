@@ -10,6 +10,7 @@ import {
 import { platformReadiness } from "./launch";
 import { id, decrypt } from "./security";
 import { RequestError, readBody } from "./http";
+import { eligibleDrops } from "./network";
 
 export type MemberMessage = {
   id: string;
@@ -77,6 +78,7 @@ export async function configureMemberSender(
       "Enter the Uptick membership Messaging Service and its US sender number.",
     );
   return db.transaction(async (tx) => {
+    await tx.query("select pg_advisory_xact_lock(73418,1)");
     // A single operator organization lock serializes service replacements.
     await tx.query("select id from organizations where id=$1 for update", [
       actor.organizationId,
@@ -159,112 +161,123 @@ async function queueMemberMessage(
     | { accessId: string; purpose: "access" }
     | (MemberDropInput & { purpose: "drop" }),
 ) {
+  return db.transaction((tx) => queueMemberMessageInTransaction(tx, input));
+}
+// Call only inside the caller's transaction, so credential creation and queueing commit together.
+export async function queueMemberDropInTransaction(
+  tx: DB,
+  input: MemberDropInput,
+) {
+  return queueMemberMessageInTransaction(tx, { ...input, purpose: "drop" });
+}
+async function queueMemberMessageInTransaction(
+  tx: DB,
+  input:
+    | { accessId: string; purpose: "access" }
+    | (MemberDropInput & { purpose: "drop" }),
+) {
   const environment = uptickEnvironment();
   if (!environment)
     throw new RequestError(
       "Set a valid Uptick environment before preparing membership messages.",
       503,
     );
-  return db.transaction(async (tx) => {
-    const [access] = await tx.query<Access>(
-      "select * from member_access where id=$1",
-      [input.accessId],
+  const [access] = await tx.query<Access>(
+    "select * from member_access where id=$1",
+    [input.accessId],
+  );
+  if (!access || access.purpose !== input.purpose)
+    throw new RequestError(
+      "This message needs a matching member access request.",
     );
-    if (!access || access.purpose !== input.purpose)
-      throw new RequestError(
-        "This message needs a matching member access request.",
-      );
-    await tx.query("select id from uptick_members where id=$1 for update", [
-      access.member_id,
-    ]);
-    const [existing] = await tx.query<MemberMessage>(
-      "select * from member_messages where access_id=$1 and purpose=$2",
-      [input.accessId, input.purpose],
-    );
-    if (existing) return existing;
-    const owner = await member(tx, access.member_id);
-    if (!owner) throw new RequestError("Member was not found.");
-    if (new Date(access.expires_at) <= new Date())
-      throw new RequestError("This access request has expired.");
-    let sendAt = new Date(),
-      expiresAt = new Date(access.expires_at);
-    if (input.purpose === "drop") {
-      if (
-        input.memberId !== access.member_id ||
-        owner.state !== "active" ||
-        !owner.verified_at ||
-        !(await latestConsent(tx, owner.id))
-      )
-        throw new RequestError(
-          "Recurring Upticks require current verified membership consent.",
-        );
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(input.weekKey))
-        throw new RequestError("Choose a valid Drop week.");
-      // Allocation ownership and its saved week are checked in the network domain as well.
-      const [allocation] = await tx.query<{
-        member_id: string;
-        week_key: string;
-      }>("select member_id,week_key from member_allocations where id=$1", [
-        input.allocationId,
-      ]);
-      if (
-        !allocation ||
-        allocation.member_id !== owner.id ||
-        allocation.week_key !== input.weekKey
-      )
-        throw new RequestError(
-          "This Drop allocation does not belong to this member and week.",
-        );
-      const [weekly] = await tx.query<MemberMessage>(
-        "select * from member_messages where member_id=$1 and purpose='drop' and week_key=$2",
-        [owner.id, input.weekKey],
-      );
-      if (weekly) return weekly;
-      sendAt = input.sendAt ? new Date(input.sendAt) : sendAt;
-      expiresAt = input.expiresAt
-        ? new Date(
-            Math.min(new Date(input.expiresAt).getTime(), expiresAt.getTime()),
-          )
-        : expiresAt;
-      try {
-        new Intl.DateTimeFormat("en-US", {
-          timeZone: input.timezone || "America/New_York",
-        }).format(sendAt);
-      } catch {
-        throw new RequestError("Choose a valid send time and time zone.");
-      }
-    }
+  await tx.query("select id from uptick_members where id=$1 for update", [
+    access.member_id,
+  ]);
+  const [existing] = await tx.query<MemberMessage>(
+    "select * from member_messages where access_id=$1 and purpose=$2",
+    [input.accessId, input.purpose],
+  );
+  if (existing) return existing;
+  const owner = await member(tx, access.member_id);
+  if (!owner) throw new RequestError("Member was not found.");
+  if (new Date(access.expires_at) <= new Date())
+    throw new RequestError("This access request has expired.");
+  let sendAt = new Date(),
+    expiresAt = new Date(access.expires_at);
+  if (input.purpose === "drop") {
     if (
-      !Number.isFinite(sendAt.getTime()) ||
-      !Number.isFinite(expiresAt.getTime()) ||
-      expiresAt <= sendAt
+      input.memberId !== access.member_id ||
+      owner.state !== "active" ||
+      !owner.verified_at ||
+      !(await latestConsent(tx, owner.id))
     )
       throw new RequestError(
-        "The message must expire after its scheduled time.",
+        "Recurring Upticks require current verified membership consent.",
       );
-    const [sender] = await tx.query<Sender>(
-      "select * from member_senders where active",
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.weekKey))
+      throw new RequestError("Choose a valid Drop week.");
+    // Allocation ownership and its saved week are checked in the network domain as well.
+    const [allocation] = await tx.query<{
+      member_id: string;
+      week_key: string;
+    }>("select member_id,week_key from member_allocations where id=$1", [
+      input.allocationId,
+    ]);
+    if (
+      !allocation ||
+      allocation.member_id !== owner.id ||
+      allocation.week_key !== input.weekKey
+    )
+      throw new RequestError(
+        "This Drop allocation does not belong to this member and week.",
+      );
+    const [weekly] = await tx.query<MemberMessage>(
+      "select * from member_messages where member_id=$1 and purpose='drop' and week_key=$2",
+      [owner.id, input.weekKey],
     );
-    const [message] = await tx.query<MemberMessage>(
-      `insert into member_messages(id,member_id,access_id,sender_id,purpose,allocation_id,week_key,timezone,scheduled_at,expires_at,environment) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning *`,
-      [
-        id(),
-        owner.id,
-        access.id,
-        sender?.id || null,
-        input.purpose,
-        input.purpose === "drop" ? input.allocationId : null,
-        input.purpose === "drop" ? input.weekKey : null,
-        input.purpose === "drop"
-          ? input.timezone || "America/New_York"
-          : "America/New_York",
-        sendAt.toISOString(),
-        expiresAt.toISOString(),
-        environment,
-      ],
-    );
-    return message;
-  });
+    if (weekly) return weekly;
+    sendAt = input.sendAt ? new Date(input.sendAt) : sendAt;
+    expiresAt = input.expiresAt
+      ? new Date(
+          Math.min(new Date(input.expiresAt).getTime(), expiresAt.getTime()),
+        )
+      : expiresAt;
+    try {
+      new Intl.DateTimeFormat("en-US", {
+        timeZone: input.timezone || "America/New_York",
+      }).format(sendAt);
+    } catch {
+      throw new RequestError("Choose a valid send time and time zone.");
+    }
+  }
+  if (
+    !Number.isFinite(sendAt.getTime()) ||
+    !Number.isFinite(expiresAt.getTime()) ||
+    expiresAt <= sendAt
+  )
+    throw new RequestError("The message must expire after its scheduled time.");
+  const [sender] = await tx.query<Sender>(
+    "select * from member_senders where active",
+  );
+  const [message] = await tx.query<MemberMessage>(
+    `insert into member_messages(id,member_id,access_id,sender_id,purpose,allocation_id,week_key,timezone,scheduled_at,expires_at,environment) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning *`,
+    [
+      id(),
+      owner.id,
+      access.id,
+      sender?.id || null,
+      input.purpose,
+      input.purpose === "drop" ? input.allocationId : null,
+      input.purpose === "drop" ? input.weekKey : null,
+      input.purpose === "drop"
+        ? input.timezone || "America/New_York"
+        : "America/New_York",
+      sendAt.toISOString(),
+      expiresAt.toISOString(),
+      environment,
+    ],
+  );
+  return message;
 }
 export async function memberMessageEligibility(
   db: DB,
@@ -331,11 +344,23 @@ export async function memberMessageEligibility(
       allocation.week_key !== message.week_key
     )
       return "Drop allocation does not match.";
-    const available = await db.query(
-      "select 1 from allocation_options x join network_drop_supplies s on s.id=x.supply_id join market_cells market on market.id=s.market_id join uptick_members m on m.id=$2 where x.allocation_id=$1 and s.state='approved' and s.market_id=m.market_id and market.state in ('pilot','live') and s.starts_at<=$3 and s.expires_at>$3 limit 1",
-      [message.allocation_id, owner.id, now.toISOString()],
+    if (
+      (
+        await db.query(
+          "select claim_id from member_claims where allocation_id=$1",
+          [message.allocation_id],
+        )
+      ).length
+    )
+      return "This week's Uptick has already been claimed.";
+    const options = await db.query<{ supply_id: string }>(
+      "select supply_id from allocation_options where allocation_id=$1",
+      [message.allocation_id],
     );
-    if (!available.length)
+    const available = new Set(
+      (await eligibleDrops(db, owner.id, now)).map((supply) => supply.id),
+    );
+    if (!options.some((option) => available.has(option.supply_id)))
       return "No current approved Drop is available in this member's market.";
   }
   return null;
@@ -349,6 +374,7 @@ export async function dispatchMemberMessages(
   db: DB,
   limit = 20,
   send: MemberSmsProvider = provider,
+  onlyMessageId?: string,
 ) {
   await db.query(
     "update member_messages set state='unknown',error_code='worker_interrupted',updated_at=now() where state='submitting' and updated_at<now()-interval '5 minutes'",
@@ -358,8 +384,8 @@ export async function dispatchMemberMessages(
   for (let i = 0; i < Math.min(100, Math.max(0, limit)); i++) {
     const job = await db.transaction(async (tx) => {
       const [candidate] = await tx.query<MemberMessage>(
-        "select * from member_messages where state='queued' and not(id=any($1::text[])) order by scheduled_at,id limit 1",
-        [deferred],
+        "select * from member_messages where state='queued' and not(id=any($1::text[])) and ($2::text is null or id=$2) order by scheduled_at,id limit 1",
+        [deferred, onlyMessageId || null],
       );
       if (!candidate) return null;
       // Match the member-first order of consent/queue changes before locking the outbox.
@@ -465,6 +491,20 @@ export async function dispatchMemberMessages(
     processed++;
   }
   return processed;
+}
+export async function dispatchRequestedMemberAccess(db: DB, messageId: string) {
+  const [message] = await db.query<MemberMessage>(
+    "select * from member_messages where id=$1 and purpose='access'",
+    [messageId],
+  );
+  if (!message)
+    throw new RequestError("Requested access message was not found.");
+  await dispatchMemberMessages(db, 1, provider, message.id);
+  return (
+    await db.query<MemberMessage>("select * from member_messages where id=$1", [
+      message.id,
+    ])
+  )[0];
 }
 const rank: Record<string, number> = {
   submitting: 0,
