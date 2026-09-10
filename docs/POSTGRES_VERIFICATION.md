@@ -24,7 +24,12 @@ The checks cover:
 - Concurrent approvals for one merchant and week producing one broadcast and approved-version record.
 - Same-phone claims at separate merchants, plus domain and database rejection of cross-merchant writes.
 - JSON snapshots and audit details remaining objects, with their policy fields intact.
+- Four verified members racing for the last reserved network perk.
+- Concurrent network allocations and competing choices at different merchants preserving one selected Uptick per week.
+- Four network passes racing for the final location QR redemption.
+- Secure NFC replay across different offers, rejection of older counters, acceptance of a fresh counter, and retained observed evidence.
+- A QR from the same merchant's other location, or another merchant, being rejected before any redemption is recorded.
 
-On September 10, 2026, these checks passed against PostgreSQL 16 with migrations 001–008. They exposed and helped fix a difference between PGlite and postgres.js: pre-stringified JSON parameters became JSON strings in production. Native object parameters and migration 008 now preserve and enforce the required object shape.
+On September 10, 2026, these checks passed against PostgreSQL 16 with migrations 001–011. The earlier checks exposed and helped fix a difference between PGlite and postgres.js: pre-stringified JSON parameters became JSON strings in production. Native object parameters and migration 008 now preserve and enforce the required object shape.
 
-This verifies database transaction behavior, not Supabase JWT/RLS integration, carrier delivery, or crash recovery. The disposable server disables synchronous disk flushing for speed; it is never a production database.
+The NFC race uses generated cryptographic proofs and the actual verifier. It does not prove that physical tags were provisioned or installed. This verifies database transaction behavior, not Supabase JWT/RLS integration, carrier delivery, or crash recovery. The disposable server disables synchronous disk flushing for speed; it is never a production database.
