@@ -1,0 +1,368 @@
+.internal-testing .page-heading h1 {
+  max-width: 760px;
+}
+.test-environment {
+  display: flex;
+  align-items: center;
+  gap: 17px;
+  padding: 21px 24px;
+  border: 1px solid #d9caaa;
+  border-radius: 9px;
+  background: #f0e7d3;
+  margin-bottom: 25px;
+}
+.test-environment > svg {
+  color: var(--amber-deep);
+  flex-shrink: 0;
+}
+.test-environment > div {
+  flex: 1;
+}
+.test-environment strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+.test-environment p {
+  font-size: 11px;
+  line-height: 1.7;
+  color: #75664a;
+  margin-top: 6px;
+}
+.test-environment > .badge {
+  flex-shrink: 0;
+}
+.test-create-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 24px;
+  align-items: start;
+  margin-bottom: 26px;
+}
+.test-form-fields {
+  padding: 26px;
+}
+.test-form-fields > .eyebrow {
+  color: var(--mint-deep);
+}
+.test-form-fields h2 {
+  font-size: 25px;
+  line-height: 1.2;
+  margin: 13px 0 25px;
+}
+.test-form-fields fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.test-form-fields .stack-form > label {
+  font-size: 12px;
+}
+.test-form-fields .stack-form > .fine {
+  font-size: 10px;
+  line-height: 1.7;
+  margin-top: -7px;
+}
+.test-form-fields input,
+.test-form-fields select {
+  font-size: 13px;
+}
+.test-form-fields .check-row {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.7;
+}
+.test-form-fields .error {
+  font-size: 12px;
+  line-height: 1.7;
+  margin-top: 18px;
+}
+.test-sms-preview {
+  padding: 29px;
+  background: var(--marine);
+  color: var(--paper);
+  border-radius: 11px;
+}
+.test-sms-preview > .eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--mint);
+  font-size: 8px;
+}
+.test-sms-preview h2 {
+  font-size: 30px;
+  line-height: 1.15;
+  margin: 25px 0;
+}
+.test-sms-preview h2 em {
+  color: var(--mint);
+}
+.test-sms-bubble {
+  padding: 21px;
+  background: #e8e9df;
+  color: var(--ink);
+  border-radius: 12px 12px 12px 2px;
+  font-size: 12px;
+  line-height: 1.9;
+  overflow-wrap: anywhere;
+}
+.test-sms-preview > .fine {
+  font-size: 10px;
+  color: #b2c7bd;
+  line-height: 1.8;
+  margin: 20px 0;
+}
+.test-policy-note {
+  padding-top: 19px;
+  border-top: 1px solid #3f5454;
+}
+.test-policy-note strong {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--amber);
+}
+.test-policy-note p {
+  font-size: 11px;
+  line-height: 1.8;
+  color: #b2c7bd;
+  margin-top: 7px;
+}
+.test-saved {
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+  margin-top: 23px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+.test-saved > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--mint-deep);
+  font-size: 13px;
+}
+.test-saved > p {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.8;
+}
+.test-saved > .text-link {
+  font-size: 11px;
+  border: 0;
+  background: none;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+}
+.test-history td > small {
+  display: block;
+  font-size: 10px;
+  line-height: 1.6;
+  margin-top: 6px;
+  color: var(--muted);
+}
+.test-history td > strong {
+  font-weight: 500;
+  font-size: 13px;
+}
+.test-provider-id {
+  font-family: var(--mono);
+  font-size: 8px !important;
+  word-break: break-all;
+}
+.test-history td > .text-link {
+  white-space: nowrap;
+  font-size: 11px;
+}
+.test-separation-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 22px 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.8;
+}
+.test-separation-note > svg {
+  flex-shrink: 0;
+  color: var(--mint-deep);
+}
+.test-pass-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  background: var(--amber);
+  color: var(--marine);
+  padding: 14px 20px;
+}
+.test-pass-banner strong {
+  font: 10px/1.6 var(--mono);
+  letter-spacing: 0.025em;
+  text-align: center;
+}
+.internal-test-pass .pass-top {
+  border-bottom: 4px solid var(--amber);
+}
+.test-pass-disclaimer {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 18px;
+  background: #f0e8d7;
+  border: 1px solid #deceb0;
+  border-radius: 8px;
+  margin: 25px 0;
+  color: #746346;
+  font-size: 11px;
+  line-height: 1.8;
+}
+.test-pass-disclaimer svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.test-pass-actions > p {
+  font-size: 11px;
+  line-height: 1.8;
+  color: var(--muted);
+  margin-bottom: 17px;
+}
+.test-pass-actions > .error {
+  color: #9c3d29;
+  margin-top: 15px;
+}
+.test-pass-success {
+  padding: 23px;
+  border-radius: 9px;
+  border: 1px solid #bed1c0;
+  background: #e8eee2;
+  text-align: center;
+}
+.test-pass-success > svg {
+  color: var(--mint-deep);
+  margin-bottom: 12px;
+}
+.test-pass-success h2 {
+  font-size: 24px;
+}
+.test-pass-success p {
+  font-size: 11px;
+  line-height: 1.8;
+  color: #5d7161;
+  margin-top: 12px;
+}
+.test-pass-footer {
+  margin: 22px 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.8;
+}
+.test-pass-actions .button-row {
+  justify-content: center;
+}
+.test-pass-actions .button-row > .button {
+  font-size: 11px;
+  padding: 11px 13px;
+}
+@media (max-width: 1000px) {
+  .test-create-grid {
+    grid-template-columns: 1fr;
+  }
+  .test-sms-preview {
+    display: grid;
+    grid-template-columns: 1fr 1.2fr;
+    gap: 10px 25px;
+  }
+  .test-sms-preview > .eyebrow {
+    grid-column: 1/-1;
+  }
+  .test-sms-preview h2 {
+    margin: 17px 0;
+  }
+  .test-sms-bubble {
+    grid-column: 2;
+    grid-row: 2/5;
+  }
+  .test-sms-preview > .fine {
+    margin-top: 0;
+  }
+  .test-environment {
+    flex-wrap: wrap;
+  }
+  .test-environment > .badge {
+    margin-left: 37px;
+  }
+}
+@media (max-width: 700px) {
+  .test-environment {
+    padding: 19px;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .test-environment strong {
+    font-size: 12px;
+  }
+  .test-environment p {
+    font-size: 10px;
+  }
+  .test-environment > .badge {
+    margin-left: 32px;
+  }
+  .test-form-fields {
+    padding: 23px 20px;
+  }
+  .test-form-fields h2 {
+    font-size: 24px;
+  }
+  .test-form-fields input,
+  .test-form-fields select {
+    font-size: 14px;
+  }
+  .test-form-fields .stack-form > label {
+    font-size: 12px;
+  }
+  .test-sms-preview {
+    display: block;
+    padding: 24px;
+  }
+  .test-sms-preview h2 {
+    font-size: 32px;
+    margin: 23px 0;
+  }
+  .test-sms-bubble {
+    font-size: 12px;
+  }
+  .test-sms-preview > .fine {
+    font-size: 10px;
+    margin: 20px 0;
+  }
+  .test-pass-banner {
+    padding: 12px 17px;
+  }
+  .test-pass-banner strong {
+    font-size: 8px;
+  }
+  .test-pass-disclaimer {
+    padding: 16px;
+    font-size: 10px;
+  }
+  .test-pass-actions .button-row {
+    flex-wrap: wrap;
+  }
+  .test-pass-success h2 {
+    font-size: 23px;
+  }
+  .test-history td > small {
+    font-size: 9px;
+  }
+  .test-separation-note {
+    font-size: 10px;
+  }
+  .test-pass-footer {
+    font-size: 10px;
+  }
+}
