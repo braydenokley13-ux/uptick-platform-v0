@@ -12,16 +12,17 @@
 
 The pre-refoundation application is clean and pushed at `11d62ae`. Its 57 domain/database tests, four HTTP tests, real PostgreSQL concurrency harness, lint, TypeScript, build and browser flows passed. These are the baseline, not evidence that the refoundation is done.
 
-Refoundation is **in progress**. Migration 009 and `src/lib/network.ts` now implement membership/access/consent, ZIP-to-market relevance, acquisition attribution, immutable weekly allocation, one chosen claim, configurable reservation policies, and capacity-constrained market coverage. Eleven focused network tests pass. New domain claims cannot use the old direct redemption action. No old subscriber is enrolled automatically.
+Refoundation is **in final integration and verification**, not externally launched. The committed foundation through `0c1d4fc` includes migrations 009–011, membership/market allocation, permanent QR and secure NFC verification, membership messaging, protected staging personas and network operations. Current integration work adds consumer pages, referral attribution and fair weekly preparation (013), merchant Growth commitments (012), member support, navigation, messaging controls and sample pilot seeding. Run `git status --short` to see which checkpoints have landed.
 
-The parallel messaging/Tap foundations have focused tests passing and are being committed separately. Consumer and operator UI integration remains in progress; do not treat the presence of these modules as product completion. Before browser testing, seed a deliberate network pilot fixture and restart the app to apply forward migrations.
+The local sample now has one Market Cell, two convenience stores, three acquisition sources and four weeks of approved supply. `/join/river-house` is the sample acquisition entry. No member activity was seeded: any records shown came from actual local test interactions. A browser check has completed signup → explicit private-link confirmation → featured claim → permanent location QR → recorded redemption. Full final browser and regression checks are still in progress.
 
-## Work ownership during this session
+## Resume carefully
 
-- Root: migration 009, member/access/consent domain, eligibility/allocation/coverage, consumer portal, referral, integration, checkpoint commits.
-- `tap_refoundation`: migration 010, permanent redemption points, QR/NFC credential verification and replay protection, Tap UI/tests/provisioning documentation.
-- `membership_messaging`: migration 011, membership outbox/sender, development/staging/production send gates, signed callbacks and protected pilot personas.
-- `network_operations`: operator Market/Acquisition/Supply/Allocation controls and aggregate reporting; subsequent merchant Growth integration.
+1. Inspect running processes before starting the app. The current development command is `npm run dev -- --webpack`; use `UPTICK_LOW_DISK=true` to disable the optional webpack disk cache.
+2. Never run a separate seed/migration process while the app has `.data/uptick` open. Unit tests use their own in-memory databases.
+3. The full unit suite now runs one test file at a time to limit memory pressure. Run `npm test`, then lint/TypeScript, then the production build and HTTP checks.
+4. Disk space on this machine has fluctuated below 500 MiB. New preflight guards refuse to start development below 256 MiB or a build/isolated PostgreSQL cluster below 768 MiB. A guard refusal is not a failed product test. Do not remove unrelated user files or bypass the margin.
+5. Keep commits focused, update this note with actual results, push the feature branch and verify the remote SHA. Never merge main automatically.
 
 ## Required safeguards
 
