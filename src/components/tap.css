@@ -1,0 +1,217 @@
+.tap-arrival {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 0;
+  color: var(--marine, #143e40);
+}
+.tap-arrival svg {
+  flex-shrink: 0;
+}
+.tap-arrival p {
+  margin: 3px 0;
+  color: var(--muted, #657373);
+}
+.tap-confirm .button {
+  width: 100%;
+  justify-content: center;
+  min-height: 56px;
+  white-space: normal;
+  text-align: center;
+}
+.tap-confirm .fine-print {
+  text-align: center;
+  margin-top: 12px;
+}
+.tap-complete {
+  background: #bdf0d2;
+  color: #123f39;
+  border: 2px solid #1f6658;
+  border-radius: 20px;
+  padding: 32px 20px;
+  text-align: center;
+  display: grid;
+  gap: 12px;
+}
+.tap-complete h2 {
+  font-size: clamp(28px, 6vw, 40px);
+  line-height: 1.1;
+  margin: 0;
+}
+.tap-complete p {
+  margin: 0;
+}
+.tap-complete time {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 16px;
+}
+.tap-complete small {
+  font-size: 11px;
+  line-height: 1.5;
+}
+.tap-complete-check {
+  height: 76px;
+  width: 76px;
+  display: grid;
+  place-items: center;
+  background: #123f39;
+  color: #bdf0d2;
+  border-radius: 50%;
+  margin: 0 auto 8px;
+}
+.tap-setup-form {
+  display: grid;
+  gap: 16px;
+}
+.tap-setup-form label {
+  display: grid;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 13px;
+}
+.tap-setup-form input,
+.tap-setup-form select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #d5dcd7;
+  background: white;
+  border-radius: 9px;
+  min-height: 44px;
+  padding: 11px 12px;
+  font: inherit;
+  font-weight: 400;
+}
+.tap-operator-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
+  gap: 24px;
+  align-items: start;
+}
+.tap-operator-grid > *,
+.tap-point-card {
+  min-width: 0;
+}
+.tap-point-card {
+  padding: 24px;
+  border: 1px solid #d8dfd9;
+  border-radius: 16px;
+  background: #fff;
+  margin-bottom: 20px;
+}
+.tap-point-card h2 {
+  font-size: 22px;
+  letter-spacing: -0.7px;
+  margin: 6px 0;
+}
+.tap-point-card .eyebrow {
+  margin: 0;
+}
+.tap-qr-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  border-top: 1px solid #e3e6e0;
+  padding: 20px 0;
+  margin-top: 18px;
+}
+.tap-qr-row img {
+  width: 150px;
+  height: 150px;
+  flex-shrink: 0;
+}
+.tap-qr-row p {
+  font-size: 13px;
+  line-height: 1.6;
+}
+.tap-qr-row a {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.tap-point-controls details {
+  border-top: 1px solid #e3e6e0;
+  padding: 16px 0;
+}
+.tap-point-controls summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+}
+.tap-point-controls .tap-setup-form {
+  margin-top: 16px;
+}
+.tap-action-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.tap-action-row .button {
+  font-size: 12px;
+  padding: 10px 14px;
+}
+.tap-notice {
+  padding: 12px;
+  background: #e4f5eb;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.tap-software-note {
+  padding: 20px;
+  background: #f8efdc;
+  border: 1px solid #e9d9ad;
+  border-radius: 12px;
+  line-height: 1.6;
+  font-size: 13px;
+}
+.tap-history-list {
+  list-style: none;
+  padding: 0;
+  margin: 18px 0;
+}
+.tap-history-list li {
+  padding: 12px 0;
+  border-bottom: 1px solid #e0e5df;
+  font-size: 13px;
+}
+.tap-history-list time {
+  display: block;
+  font-size: 11px;
+  margin-top: 4px;
+  color: #687671;
+}
+@media (max-width: 760px) {
+  .tap-operator-grid {
+    grid-template-columns: 1fr;
+  }
+  .tap-point-card {
+    padding: 18px;
+  }
+  .tap-qr-row {
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .tap-qr-row img {
+    width: 112px;
+    height: 112px;
+  }
+}
+@media print {
+  .tap-point-controls,
+  .tap-setup-form,
+  .tap-software-note,
+  nav,
+  aside,
+  header {
+    display: none !important;
+  }
+  .tap-point-card {
+    break-inside: avoid;
+  }
+  .tap-operator-grid {
+    display: block;
+  }
+  .tap-qr-row img {
+    width: 200px;
+    height: 200px;
+  }
+}
