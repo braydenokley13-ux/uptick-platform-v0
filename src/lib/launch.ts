@@ -1,3 +1,4 @@
+import { uptickEnvironment } from "./environment";
 import type { DB } from "./db";
 import { appUrl, localMode, messagingReady } from "./config";
 
@@ -16,6 +17,11 @@ export function platformReadiness() {
     /* Invalid application URL keeps the gate closed. */
   }
   const checks: ReadinessCheck[] = [
+    {
+      key: "environment",
+      label: "Explicit staging or production environment",
+      ready: ["staging", "production"].includes(uptickEnvironment() || ""),
+    },
     {
       key: "origin",
       label: "Canonical HTTPS application origin",

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import {
   ArrowUpRight,
   ArrowRight,
@@ -1672,6 +1672,14 @@ async function OfferDetail({
   id: string;
   edit?: boolean;
 }) {
+  const [networkSupply] = await db.query<{ market_id: string }>(
+    "select market_id from network_drop_supplies where offer_id=$1",
+    [id],
+  );
+  if (networkSupply)
+    redirect(
+      `/operator/network/supply?market=${encodeURIComponent(networkSupply.market_id)}`,
+    );
   const offer = data.offers.find((o) => o.id === id);
   if (!offer) notFound();
   const meta = await loadOfferMetadata(db, offer.id, offer.current_version),

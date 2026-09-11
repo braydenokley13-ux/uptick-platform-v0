@@ -1,4 +1,5 @@
 import twilio from "twilio";
+import { simulatedTransport, smsEnvironmentBlock } from "./environment";
 import type { DB } from "./db";
 import {
   authorize,
@@ -8,7 +9,7 @@ import {
   type Offer,
 } from "./domain";
 import { businessReadiness } from "./launch";
-import { appUrl, localMode } from "./config";
+import { appUrl } from "./config";
 import { id, token, hash, encrypt, decrypt, normalizePhone } from "./security";
 import { RequestError } from "./http";
 import { internalTestMessage } from "./testing-copy";
@@ -158,7 +159,9 @@ export async function createInternalTest(
   }
   await rateLimit(db, `internal-test:${actor.id}`, 20, 3600);
   await rateLimit(db, `internal-test-phone:${hash(phone)}`, 8, 3600);
-  const development = localMode() && process.env.SMS_TRANSPORT !== "twilio";
+  const environmentBlock = smsEnvironmentBlock(phone);
+  if (environmentBlock) throw new RequestError(environmentBlock, 403);
+  const development = simulatedTransport();
   const prepared = await db.transaction(async (tx) => {
     await tx.query("select id from offers where id=$1 for update", [
       input.offerId,
@@ -271,6 +274,7 @@ export async function createInternalTest(
       )
     ).length > 0;
   if (
+    !!smsEnvironmentBlock(phone) ||
     !ready.readyToAcceptClaims ||
     currentSender?.service_sid !== run.service_sid ||
     !internalTestAllowlist().includes(phone) ||

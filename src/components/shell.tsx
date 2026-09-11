@@ -21,16 +21,17 @@ import type { Actor } from "@/lib/domain";
 import { localMode } from "@/lib/config";
 const merchantLinks = [
   ["", "Home", LayoutDashboard],
-  ["anchor", "Your offer", Gift],
-  ["network", "Your local network", Radio],
-  ["drops", "Weekly Drops", Gift],
-  ["audience", "Your audience", Users],
-  ["results", "Results", ChartNoAxesCombined],
   ["plan", "Growth Plan", ClipboardCheck],
-  ["calendar", "Next 30 days", History],
+  ["drops", "Your Drop", Gift],
+  ["audience", "Local demand", Users],
+  ["network", "Your network", Radio],
+  ["results", "Results", ChartNoAxesCombined],
+  ["calendar", "Upcoming Drops", History],
 ] as const;
 const operatorLinks = [
-  ["", "Control center", LayoutDashboard],
+  ["network", "Network control", LayoutDashboard],
+  ["tap", "Uptick Tap", Radio],
+  ["", "Merchant operations", Store],
   ["businesses", "Businesses", Store],
   ["placements", "Placements & QR", Radio],
   ["offers", "Offers", Gift],
@@ -83,7 +84,7 @@ export function Shell({
         {!operator && (
           <Link className="nav-create" href="/merchant/create">
             <Plus size={17} />
-            Offer Studio
+            Create a Drop
           </Link>
         )}
         <div className="sidebar-bottom">

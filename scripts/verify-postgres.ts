@@ -11,7 +11,9 @@ import {
   approve,
   type Actor,
 } from "../src/lib/domain";
+import { verifyNetworkPostgres } from "./verify-postgres-network";
 import { decrypt } from "../src/lib/security";
+process.env.UPTICK_ENV = "development";
 process.env.UPTICK_LOCAL_MODE = "true";
 process.env.APP_URL = "http://localhost:3000";
 process.env.SMS_TRANSPORT = "development";
@@ -239,6 +241,7 @@ try {
   console.log(
     "PASS: concurrent same-phone claims retain separate merchant entitlements; domain and database reject cross-tenant writes.",
   );
+  await verifyNetworkPostgres(db);
   console.log("ALL SEPARATE-SESSION POSTGRESQL CHECKS PASSED.");
 } finally {
   await sql.end({ timeout: 5 });

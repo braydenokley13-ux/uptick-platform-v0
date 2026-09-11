@@ -44,6 +44,7 @@ after(async () => {
   await db.close?.();
 });
 beforeEach(async () => {
+  process.env.UPTICK_ENV = "development";
   process.env.UPTICK_LOCAL_MODE = "true";
   process.env.APP_URL = "http://localhost:3000";
   process.env.SMS_TRANSPORT = "development";
@@ -71,6 +72,8 @@ beforeEach(async () => {
   );
 });
 function production() {
+  process.env.UPTICK_ENV = "production";
+  process.env.PRODUCTION_DELIVERY_ENABLED = "true";
   process.env.UPTICK_LOCAL_MODE = "false";
   process.env.APP_URL = "https://uptick.example";
   process.env.SMS_TRANSPORT = "twilio";

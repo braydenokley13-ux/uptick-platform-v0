@@ -1,6 +1,7 @@
 import { disclosure } from "./consent-copy";
 export { disclosure } from "./consent-copy";
 import type { DB } from "./db";
+import { RequestError } from "./http";
 import { id, token, hash, encrypt, normalizePhone } from "./security";
 import { assertApprovalReady, assertClaimReady } from "./launch";
 export type Actor = {
@@ -256,12 +257,26 @@ export async function createEntitlement(
   );
   return claim;
 }
+export async function assertLegacyOffer(db: DB, offerId: string) {
+  if (
+    (
+      await db.query("select id from network_drop_supplies where offer_id=$1", [
+        offerId,
+      ])
+    ).length
+  )
+    throw new RequestError(
+      "Manage this network Drop in Network control. Merchant campaign approval and messaging do not apply.",
+      409,
+    );
+}
 export async function queueMessage(
   db: DB,
   claim: Claim,
   purpose: "fulfillment" | "merchant",
   broadcastId: string | null = null,
 ) {
+  await assertLegacyOffer(db, claim.offer_id);
   const [sender] = await db.query<{ id: string }>(
     "select id from senders where organization_id=$1",
     [claim.organization_id],
@@ -299,6 +314,15 @@ export async function acceptClaim(
     const { offer } = await sourceOffer(tx, input.sourceToken);
     if (!offerAvailable(offer))
       throw Error("This offer is not accepting new claims right now.");
+    if (
+      (
+        await tx.query(
+          "select id from network_drop_supplies where offer_id=$1",
+          [offer.id],
+        )
+      ).length
+    )
+      throw Error("Join Uptick to see your local Drop choices.");
     await assertClaimReady(tx, offer.organization_id);
     const [customer] = await tx.query<{ id: string }>(
       "insert into customers(id,phone) values($1,$2) on conflict(phone) do update set phone=excluded.phone returning id",
@@ -434,6 +458,16 @@ export async function confirmPassChoices(
 export async function redeem(db: DB, credential: string) {
   return db.transaction(async (tx) => {
     const initial = await getPass(tx, credential);
+    if (
+      (
+        await tx.query("select claim_id from member_claims where claim_id=$1", [
+          initial.id,
+        ])
+      ).length
+    )
+      throw Error(
+        "Use the Uptick Tap at the participating store to redeem this pass.",
+      );
     await tx.query("select id from offers where id=$1 for update", [
       initial.offer_id,
     ]);
@@ -616,6 +650,17 @@ export async function saveDraft(db: DB, actor: Actor, input: DraftInput) {
         throw Error("Offer type cannot change.");
       if (!["draft", "review"].includes(old.state))
         throw Error("Published terms cannot be edited. Create a new offer.");
+      if (
+        (
+          await tx.query(
+            "select id from network_drop_supplies where offer_id=$1 and approved_by is not null",
+            [offerId],
+          )
+        ).length
+      )
+        throw Error(
+          "This network Drop has an approved commitment. Create a new offer to change its promise.",
+        );
       version = old.current_version + 1;
       await tx.query(
         "update offers set title=$2,current_version=$3,state=$4 where id=$1",
@@ -698,6 +743,7 @@ export async function approve(
     ]);
     if (!offer) throw Error("Offer not found.");
     authorize(actor, offer.organization_id, true);
+    await assertLegacyOffer(tx, offer.id);
     await tx.query("select id from organizations where id=$1 for update", [
       offer.organization_id,
     ]);
@@ -767,6 +813,7 @@ export async function pauseOffer(db: DB, actor: Actor, offerId: string) {
     );
     if (!o) throw Error("Offer not found.");
     authorize(actor, o.organization_id, true);
+    await assertLegacyOffer(tx, o.id);
     await tx.query("update offers set state='paused' where id=$1", [offerId]);
     await tx.query(
       "update broadcasts set state='paused' where offer_id=$1 and state='scheduled'",

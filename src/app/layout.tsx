@@ -6,8 +6,9 @@ import "@fontsource/geist-mono/400.css";
 import "@fontsource/newsreader/400-italic.css";
 import "./globals.css";
 export const metadata: Metadata = {
-  title: "Uptick Growth — Good things come around",
-  description: "Local offers. Real visits. A reason to come back.",
+  title: "Uptick Local — Good things come around",
+  description:
+    "Your free local membership. A worthwhile perk nearby. A reason to come around.",
   robots: { index: false, follow: false },
 };
 export default function RootLayout({
