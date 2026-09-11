@@ -1,51 +1,56 @@
-# Uptick refoundation — resumable checkpoint
+# Uptick refoundation — verified local checkpoint
 
-## Start here
+## Start here, one step at a time
 
-1. Read this file and `docs/REFOUNDATION_BRIEF.md`.
-2. Run `git status --short` and read the latest commits. Keep existing uncommitted work; other agents may be editing independent files.
-3. Continue on `codex/uptick-operating-platform`. Never merge main automatically.
-4. Read the relevant installed Next.js guides in `node_modules/next/dist/docs/` before changing routes/components.
-5. Test each coherent change, commit its exact files, push when green, and update this note.
+1. Open `/Users/braydenwhite/Desktop/uptick-platform-v0`.
+2. Read this file, [the release report](REFOUNDATION_RELEASE.md), [QA](QA.md) and the source [refoundation brief](REFOUNDATION_BRIEF.md).
+3. Run `git status --short` and `git log -5 --oneline`. Preserve any later uncommitted work. Continue on `codex/uptick-operating-platform`; do not merge main automatically.
+4. Check free space with `df -h .` and the existing server with `lsof -nP -iTCP:3000 -sTCP:LISTEN`. Do not launch a second server into an occupied port or a second process against `.data/uptick`.
+5. The latest application checkpoint is `83ec668`. Application and documentation checkpoints are pushed together at completion; documentation follows in a separate commit. Use `git rev-parse HEAD` and `git ls-remote origin refs/heads/codex/uptick-operating-platform` for the actual latest local/remote SHA.
+6. The final production build succeeded, and `npm start` was left running on localhost:3000. If it has stopped, run `npm start` while the built `.next` exists. After source changes, stop it, build once with a safe margin, then restart. For development use `npm run dev -- --webpack`.
 
-## Current checkpoint
+## What is complete locally
 
-The pre-refoundation application is clean and pushed at `11d62ae`. Its 57 domain/database tests, four HTTP tests, real PostgreSQL concurrency harness, lint, TypeScript, build and browser flows passed. These are the baseline, not evidence that the refoundation is done.
+Uptick membership is the primary consumer relationship. Member join/consent/private-link confirmation, featured and alternative weekly choices, inventory-safe claim/reservation, directions, QR/Tap redemption, durable receipts/history, preferences and referrals are implemented. Merchant Growth supplies objectives, inventory/economics and staff commitments; the operator approves the exact saved version. Operators manage Market Cells, partners/sources, supply, allocation, coverage, messaging, protected support, evidence and cohorts.
 
-Refoundation is **in final integration and verification**, not externally launched. The committed foundation through `0c1d4fc` includes migrations 009–011, membership/market allocation, permanent QR and secure NFC verification, membership messaging, protected staging personas and network operations. Current integration work adds consumer pages, referral attribution and fair weekly preparation (013), merchant Growth commitments (012), member support, navigation, messaging controls and sample pilot seeding. Run `git status --short` to see which checkpoints have landed.
+Migrations 001–013 are forward migrations. Existing claims, legacy merchant programs, consent and approved history remain preserved; old campaign actions cannot take over a network Drop. See [the release report](REFOUNDATION_RELEASE.md) for the detailed scope and Git history.
 
-The local sample now has one Market Cell, two convenience stores, three acquisition sources and four weeks of approved supply. `/join/river-house` is the sample acquisition entry. No member activity was seeded: any records shown came from actual local test interactions. A browser check has completed signup → explicit private-link confirmation → featured claim → permanent location QR → recorded redemption. Full final browser and regression checks are still in progress.
+The sample has one Market Cell, two convenience stores, three acquisition sources and four weeks of approved supply. `/join/river-house` is the source entry. Sample geography and partnerships are illustrative. The seed creates no member activity. Local browser QA subsequently created two fictional members, one referral and two redemptions, plus a merchant breakfast commitment approved for September 17. Do not export or document their private links.
 
-## Resume carefully
+## Verification at completion
 
-1. Inspect running processes before starting the app. The current development command is `npm run dev -- --webpack`; use `UPTICK_LOW_DISK=true` to disable the optional webpack disk cache.
-2. Never run a separate seed/migration process while the app has `.data/uptick` open. Unit tests use their own in-memory databases.
-3. The full unit suite now runs one test file at a time to limit memory pressure. Run `npm test`, then lint/TypeScript, then the production build and HTTP checks.
-4. Disk space on this machine has fluctuated below 500 MiB. New preflight guards refuse to start development below 256 MiB or a build/isolated PostgreSQL cluster below 768 MiB. A guard refusal is not a failed product test. Do not remove unrelated user files or bypass the margin.
-5. Keep commits focused, update this note with actual results, push the feature branch and verify the remote SHA. Never merge main automatically.
+- **146/146** unit/database tests passed.
+- The final Next.js production build passed, with one worker and TypeScript.
+- **12/12** request-level HTTP integration tests passed against the built server.
+- Full lint, TypeScript and formatting checks passed after final integration.
+- Real PostgreSQL 16 concurrency harness passed with migrations 001–013 and four separate sessions; its disposable cluster was cleaned up.
+- Actual browser checks covered source join, explicit confirmation, featured claim, referral join, alternative claim, wrong-store rejection, correct-store redemption and receipt reload, mobile layouts, merchant saved objectives/commitment and operator approval, referral reporting/support, simulated messaging and isolated NFC reference rehearsal.
 
-## Required safeguards
+Automated later-week fixtures verify return and mature retention reporting. Two real calendar weeks were not spent in a live pilot; no such outcome is claimed.
 
-- Reuse customers, immutable offer versions and durable claims. Preserve old issued passes and records.
-- New recurring membership consent needs a new explicit choice and phone-possession confirmation. Merely loading a private link never confirms either.
-- Public acquisition links never disclose an existing private member credential in staging/production.
-- Eligibility, allocation, claim/reservation and redemption are separate saved facts. Allocation is not an inventory reservation.
-- Supply quantity and timed reservations must hold under concurrent claims/redemptions. All redemption paths must enforce the new verification policy for network claims.
-- QR proves possession of a location credential; NFC proves authenticated credential use. Neither proves a purchase. Staff-gated configuration is operational context, not digital receipt confirmation.
-- Staging real SMS is restricted to server allowlisted internal recipients across **all** old and new send paths.
-- No secret tag keys or private links in logs, audit detail, commits or analytics.
-- Local PGlite data directory supports only one process. Stop the app before separately seeding/migrating that directory. Tests use separate in-memory databases.
+## Disk and local database
 
-## Completion sequence
+The earlier failure was disk space, not a model limit. Approximately 2.2 GiB of abandoned runtime installer staging caches and 230 MiB of disposable package cache were removed. Installed runtimes, user documents and app data were preserved. Available space remains affected by other applications; do not assume the recovered amount stays free.
 
-1. Domain/schema tests and first green refoundation commit.
-2. Consumer membership/Your Uptick mobile journey.
-3. Tap and messaging integration with independently tested modules.
-4. Operator market operations and merchant Growth refactor.
-5. Supply/cohort/evidence reporting, maps/navigation and referrals.
-6. Production build, HTTP and browser QA, real PostgreSQL races, final security audit.
-7. Hosted staging only if real managed DB/auth/hosting credentials are available. Otherwise record exact external setup; never claim a local demo is a hosted pilot.
+- `predev` requires 256 MiB; `prebuild` requires 768 MiB.
+- `UPTICK_LOW_DISK=true` disables webpack disk cache and limits generation workers.
+- `npm test` runs test files serially.
+- The PostgreSQL harness requires 768 MiB before initialization and 512 MiB afterward and cleans its own cluster.
+- PGlite `.data/uptick` supports one process. Stop the app before a separate seed/migration operation. Unit tests use separate memory databases.
+- Preserve `.env.local`, encryption keys and local data. Do not delete unrelated user files, runtime installations, or old media directories to make space.
 
-## External facts
+## External work required for a real pilot
 
-No production credentials, Supabase project, approved membership sender, physical NFC hardware or tag provisioning were available at the prior checkpoint. No real SMS was sent. No public deployment was created. The prior build runs at localhost:3000 when its server is active. Check the current process before starting another.
+No hosted deployment or real SMS was performed. No managed database/auth credentials, approved dedicated Uptick sender or physical NFC hardware were available.
+
+1. Provision separate hosted staging with PostgreSQL/Supabase, actual Auth users, independent secrets, HTTPS origin, scheduler and legal/support identity. Apply all migrations and bootstrap the operator using the documented script.
+2. Configure the dedicated membership Messaging Service, real sender and reviewed provider approvals. Set exact internal recipients. Verify real authentication/tenant isolation, signed callbacks, STOP/START and consent re-entry on that staging environment.
+3. Program real NFC tags and validate multiple phones, counters/replay, QR fallback, placement and staff instructions. The tested cryptographic adapter does not prove physical installation or purchase verification.
+4. Replace illustrative places, partners, costs and supply with agreed pilot records; verify four weeks of stock, fallback capacity and support ownership.
+5. Run the small live pilot and observe actual later-week returns before drawing retention or economics conclusions.
+
+External setup: [membership messaging](MEMBERSHIP_MESSAGING.md), [Twilio](TWILIO.md), [Uptick Tap](UPTICK_TAP.md), [location intelligence](LOCATION_INTELLIGENCE.md), [PostgreSQL verification](POSTGRES_VERIFICATION.md).
+
+## Rules to preserve
+
+Read the relevant installed Next.js guide in `node_modules/next/dist/docs/` before route/component changes. Keep changes in coherent, tested commits and push regularly. Preserve immutable promise/consent/evidence history, geography and tenant boundaries, and all environment delivery gates. Allocation is not reservation; QR/NFC is not a digitally verified purchase; provider delivery is not a read. Never log or commit private access/pass credentials or tag keys.

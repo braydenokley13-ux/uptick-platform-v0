@@ -3,7 +3,7 @@
 The ordinary `npm test` suite uses PGlite. Use the separate command below to verify the production database adapter and transactions across independent PostgreSQL sessions.
 
 1. Make locally installed PostgreSQL server binaries (`initdb` and `pg_ctl`) available on your `PATH`. The harness does not install them.
-2. Keep at least 256 MB free in `/tmp`. The script also checks that more than 100 MB remains after initialization.
+2. Keep at least 768 MiB free in `/tmp`. The script also checks that at least 512 MiB remains after initialization.
 3. From the repository directory, run:
 
    ```sh
@@ -29,7 +29,11 @@ The checks cover:
 - Four network passes racing for the final location QR redemption.
 - Secure NFC replay across different offers, rejection of older counters, acceptance of a fresh counter, and retained observed evidence.
 - A QR from the same merchant's other location, or another merchant, being rejected before any redemption is recorded.
+- Overlapping weekly preparation workers preserving one message per member/week.
+- Referral-cap races and exact first-verification attribution under concurrent confirmation.
+- Capacity-aware coverage for 200 members using six SQL round trips, including members already served or reserved.
+- Concurrent sender configuration preserving separation between merchant and Uptick membership programs.
 
-On September 10, 2026, these checks passed against PostgreSQL 16 with migrations 001–011. The earlier checks exposed and helped fix a difference between PGlite and postgres.js: pre-stringified JSON parameters became JSON strings in production. Native object parameters and migration 008 now preserve and enforce the required object shape.
+On September 10, 2026, the complete updated harness passed against PostgreSQL 16 with migrations 001–013. Its private server and temporary directory were removed successfully afterward. The earlier checks exposed and helped fix a difference between PGlite and postgres.js: pre-stringified JSON parameters became JSON strings in production. Native object parameters and migration 008 now preserve and enforce the required object shape.
 
 The NFC race uses generated cryptographic proofs and the actual verifier. It does not prove that physical tags were provisioned or installed. This verifies database transaction behavior, not Supabase JWT/RLS integration, carrier delivery, or crash recovery. The disposable server disables synchronous disk flushing for speed; it is never a production database.

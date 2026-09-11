@@ -1,114 +1,107 @@
-# Uptick Growth
+# Uptick Local
 
-Uptick’s operating product for local acquisition and recorded return: a nearby placement → QR → requested private pass → redemption → optional Weekly Drop subscription → later Drop → recorded return.
+Uptick Local is a free local consumer membership. Uptick Growth is the merchant demand product, and an Uptick Drop is the recurring member benefit.
 
-The public `upticklocal` repository remains the marketing and film site. This application reuses its marine / warm-canvas palette, Geist type, and restrained Newsreader accents, without its media stack. The five supplied mockups are product direction; the wider scope is mapped in [docs/PRODUCT_MAP.md](docs/PRODUCT_MAP.md).
+The primary product loop is **acquisition partner or direct join → explicit Uptick membership → useful local weekly choices → one claimed Drop → destination verification → recorded redemption → next week**. A convenience store supplies the perk. It does not receive an unrestricted member phone list or independent marketing permission.
 
-## Start locally, step by step
+This repository is the operating application. The separate `upticklocal` repository remains the canonical marketing/brand reference. The application keeps Uptick’s marine, warm canvas, mint and amber visual system while separating simple member and merchant experiences from more powerful operator controls.
 
-1. Install Node 22.13+ (Node 26.3.1 was used here) and ensure at least 2 GB of free disk space.
-2. Run `npm ci` in this directory. This installs the versions recorded in `package-lock.json`.
-3. Copy `.env.example` to `.env.local`. Keep `UPTICK_LOCAL_MODE=true`, `SMS_TRANSPORT=development`, and `APP_URL=http://localhost:3000`.
-4. Run `npm run db:seed`. This creates a local PostgreSQL-compatible PGlite database in `.data/uptick`, applies migrations, and inserts the illustrative businesses and offers. It does not invent customers, claims, redemptions, or delivered messages.
-5. Run `npm run dev -- --webpack`.
-6. Open `http://localhost:3000`. Select **Merchant view** or **Operator view** under the clearly marked local development section.
-7. Open `http://localhost:3000/c/pilot-carwash-2026` for the customer test. Use a fictional US number such as `(201) 555-0123`. No SMS is sent in development transport.
-8. Claim the offer. Open the development pass. If you requested optional texts, confirm or turn off those choices on the private pass. Tap **Open my pass** (or **Open my pass & save choices**), then redeem with the test cashier confirmation.
-9. On the redeemed pass, choose the optional Weekly Drop subscription. Open the merchant workspace to see the recorded activity.
+**Current verification:** the refoundation runs in a successful local production build. The member, referral, two-store redemption, merchant commitment and operator approval journeys have been exercised in the browser. The real PostgreSQL race harness passed with migrations 001–013. Final test counts and the distinction between software verification and hosted/physical launch are recorded in [QA](docs/QA.md), [the release report](docs/REFOUNDATION_RELEASE.md) and [the resumable checkpoint](docs/HANDOFF.md). No public deployment or real SMS delivery is claimed.
 
-Local identity shortcuts require explicit local mode, a loopback APP_URL, and no Vercel environment. Sample businesses are prevented from sending through Twilio. They are not production customers.
+## Start locally, one step at a time
 
-If the machine is short of disk space, `UPTICK_LOW_DISK=true` disables webpack disk caching. This trades rebuild speed for less temporary storage. It does not reduce the space needed to install dependencies.
+1. Open a terminal in this repository. Use Node 22.13 or newer; the existing development environment used Node 26.3.1.
+2. Check free storage with `df -h .`. Dependency installation needs substantial space. Leave at least 2 GiB before a fresh install and avoid running another build at the same time. The app checks for 256 MiB before development startup and 768 MiB before a production build; these are minimum guards, not a guarantee that unrelated applications will stop consuming storage.
+3. If dependencies are missing, run `npm ci`. If `node_modules` is already present and matches the lockfile, there is no need to reinstall for every session.
+4. If `.env.local` does not exist, copy `.env.example` to `.env.local`. Preserve an existing file. For the local sample, set `UPTICK_ENV=development`, `UPTICK_LOCAL_MODE=true`, `SMS_TRANSPORT=development`, `APP_URL=http://localhost:3000` and `UPTICK_LOW_DISK=true`.
+5. Stop any existing Uptick server before seeding. Run `npm run db:seed`. This applies forward migrations and creates the illustrative River Neighborhood Market Cell, two gas/convenience-store destinations, acquisition partners, four weeks of sample free Drop supply and sample Tap points. It creates no members, claims, redemptions or delivered messages.
+6. Run `npm run dev -- --webpack`. Wait for the server to report that it is ready, then open [localhost:3000](http://localhost:3000).
+7. Open [the local workspace login](http://localhost:3000/login) when you want the merchant or operator view. Local identity buttons require the explicit development environment, a loopback origin and no Vercel hosting context.
+8. Keep only one process connected to `.data/uptick`. Stop the server before rerunning the seed or migration command. The local PGlite database is a single-process development transport, not a hosted production database.
 
-## Main surfaces
+The seed is repeatable without resetting existing activity. Once the sample market exists, rerunning it does not erase or extend its saved offer windows. Use Offer Studio and operator supply review to add later weeks. Sample addresses, coordinates and partnerships are illustrative; no real installation or agreement is asserted.
 
-- Customer: `/c/{publicSourceToken}`, `/p/{privatePassCredential}`, merchant-specific pass history and preferences, `/privacy`, `/terms`, `/sms`.
-- Merchant: Home, current Anchor, Local Network, Weekly Drops, Offer Studio, Audience, Growth Plan, Results, next 30 days, and activity.
-- Operator: Today inbox, businesses/locations, placement and QR management, source history, offer review/scheduling, messages, private support timelines, audit, onboarding, and screen creative.
-- Artifacts: source QR SVG, versioned screen creative SVG, printable staff/pilot page, authorized merchant consent-evidence export.
+`UPTICK_LOW_DISK=true` disables webpack disk caching and reduces generated development storage. It trades rebuild speed for less disk use. It does not eliminate the need for storage. If the startup/build guard stops a command, recover a safe margin before retrying; do not repeatedly launch it into a full disk.
 
-All figures are read from saved records. Source visits include repeated browser page visits and are not screen impressions. A claim is a saved entitlement. A redemption is an atomic database record. Carrier delivery is not a read. Recorded returns are later Drop-linked redemptions after an initial recorded redemption, not all physical return visits.
+## Try the member loop locally
 
-## Database and authentication
+1. Open [the River House acquisition page](http://localhost:3000/join/river-house). The sample market serves ZIPs `10583`, `10530` and `10606`.
+2. Enter a fictional US phone number such as `(201) 555-0123`, your sample home ZIP and the displayed membership choice. Development transport sends no SMS.
+3. Open the clearly labeled local access link returned by the form. Review the exact disclosure and deliberately confirm your phone and membership choice. Merely loading the private link confirms neither.
+4. On **Your Uptick**, inspect the featured free perk and available alternatives. Claim one. Allocation, claim and inventory reservation are separate records; the saved inventory policy controls whether claiming reserves an item.
+5. Open the private pass and choose its Tap preparation action. In the operator workspace, open **Uptick Tap** and the matching sample destination’s redemption QR/link. Use the same browser profile so its private pairing cookie is present. This is a software rehearsal, not a physical-store visit.
+6. Confirm redemption explicitly. Check the green result, saved reward and timestamp. Return to **Your Uptick** to inspect the durable redeemed record. Another weekly choice must not create a second entitlement for the same member/week.
+7. Inspect **Operator → Market network → Members & cohorts** and **Member messaging**. The ledger distinguishes simulation, provider acceptance and delivery. Protected support can find the exact normalized phone even before a first claim, and returns masked results without private credentials.
 
-Production uses PostgreSQL through `DATABASE_URL`; Supabase is the intended host and auth provider. PGlite is a local, single-process development transport for the same SQL schema, not a Vercel database.
+A static location QR proves use of a store credential, not physical presence or purchase. Secure NFC adds authenticated tag/counter evidence when real hardware is provisioned. Staff-controlled configuration does not digitally prove that a cashier checked a receipt. See [Uptick Tap setup and evidence](docs/UPTICK_TAP.md).
 
-1. Create a Supabase project in your account.
-2. Set `DATABASE_URL` to its server-side Postgres/pooler connection. The postgres driver disables prepared statements for transaction pooling.
-3. Set `SUPABASE_URL` and `SUPABASE_ANON_KEY` for server-side password sign-in.
-4. Generate independent secrets with `openssl rand -hex 32`, then set `PASS_ENCRYPTION_KEY`, `SESSION_SECRET`, and `CRON_SECRET` in your secret manager. Do not put them in Git. Keep the pass encryption key backed up; replacing it invalidates the ability to send previously issued encrypted credentials.
-5. Run `npm run db:migrate` with these environment variables loaded. Migration files are applied once in filename order and tracked in `schema_migrations`.
-6. Create the first operator user in **Supabase → Authentication → Users** in that same project. Set the user’s actual UUID as `OPERATOR_AUTH_USER_ID`, and set `OPERATOR_ORGANIZATION_NAME` to the operating organization’s real name. Do not use a sample UUID. Keep `DATABASE_URL` set to an administrator connection for this one-time setup, then run `node --import tsx scripts/bootstrap-operator.ts`. The command checks that the UUID exists in `auth.users`, creates the operating organization and first operator membership in one transaction, and records an audit event. It refuses to create another first operator if one already exists. Rerunning it for the same operator makes no changes.
-7. Replace the administrator connection with the intended server database role, then sign in through `/login` using that Supabase user’s normal credentials. The bootstrap command creates no password, session, or runtime bypass. Every operation rechecks the live membership; merchant scope is enforced server-side. Assign later existing-user access in the operator UI. Browser Supabase roles have no policies permitting direct table access. RLS is enabled on private tables.
+## Product surfaces
 
-A dedicated server DB role with only required privileges is recommended; keep it server-only. The application’s service connection must be able to access RLS-protected tables, while `anon` and `authenticated` must not receive backend privileges. See [docs/SECURITY.md](docs/SECURITY.md) for the actual guarantees and remaining live-service verification.
+| Audience          | Main surfaces                                                                                             | Purpose                                                                                                                             |
+| ----------------- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Members           | `/`, `/join/{source}`, `/your-uptick`, `/u/{privateAccess}`, `/p/{privatePass}`, `/r/{referral}`          | Join, confirm membership, view weekly choices, claim, redeem, manage preferences and share allowed invitations.                     |
+| Merchants         | `/merchant`, Growth Plan, Your Drop, Local Demand, Your Network, Results and Offer Studio                 | Set a demand objective, propose a free reward, commit inventory/economics and inspect attributable outcomes.                        |
+| Operators         | `/operator/network`                                                                                       | Market Cells, destination links, acquisition partners/sources, supply review, capacity-aware allocation and source/member evidence. |
+| Operators         | `/operator/network/messaging`, `/operator/network/members`, `/operator/tap`                               | Configure the membership sender, prepare/review/dispatch, inspect a protected member journey, and manage redemption points.         |
+| Retained programs | Existing customer claim/pass routes, operator business/placement/review tools and isolated internal tests | Honor existing issued promises and independent merchant consent without enrolling those customers automatically in membership.      |
 
-Local data is designed for one app process. Do not simultaneously open the same PGlite directory from a seed script, test script, and running server. Stop the server before rerunning migrations on that directory. Integration tests use a separate in-memory database.
+All metrics are based on saved records. Source loads may include previews and repeats; they are not impressions or unique people. Weekly coverage counts a member already served, reserved or matched to remaining supply once. It is not a count of new claims available now. Future coverage uses today’s members and saved supply without reserving inventory across weeks. Directions handoff is not an arrival; a redemption is not a verified purchase; a provider delivery callback is not a read.
 
-## Configure the actual pilot
+## Configure a real Market Cell
 
-1. Enter the operator workspace and choose **Launch a merchant**.
-2. Create Joe’s real business, category, timezone, and location. Do not reuse the illustrative seed as production data.
-3. Add Main Street Car Wash, Quick Lube, and Ridge Tire as host businesses, with their actual locations/categories.
-4. Use Offer Studio to create the Anchor: buy $25 of gas → free large coffee. Enter exact dates, terms, optional reward-cost estimates, and staff instructions. Submit it for review.
-5. Create each host placement with its screen context and external reference. The operator chooses placement manually. Matching merchant/host categories are blocked as direct competitors; incomplete categories are visibly unassessed.
-6. Generate a QR for each source. Generate and export the screen creative associated with that source. A creative revision gets a new source/QR; old sources and claims retain their original context.
-7. Install or schedule the creative through your external screen system. Record the operator confirmation, time, and note in Uptick. This is not proof of playback or human impressions.
-8. Complete the sender and policy setup below. Production approval and public claim creation require configured PostgreSQL, Supabase, independent encryption/session secrets, canonical HTTPS, approved Twilio transport/sender, reviewed legal identity/support contact, and a scheduler secret. The operator workspace shows these checks. Local mode keeps its explicit simulation path.
-9. Brief the cashier, approve the Anchor for a controlled internal test, and complete the claim/pass/manual launch checklist before distributing the QR to customers. The manual notes record human verification; they do not prove carrier or screen-system success. After that test, draft a Weekly Drop, review the quality warnings and actual eligible audience, and approve its schedule.
+1. Provision the managed database, authentication, independent secrets and HTTPS described below. Keep staging separate from production.
+2. Create the actual operator and merchant businesses/locations. Start with one tight gas-station/convenience-store market, not arbitrary broad geography. Replace sample locations with verified addresses and record manual travel estimates as estimates.
+3. In **Market network → Markets**, define the operating boundary, timezone and explicit home/work ZIP coverage. Connect the participating merchant locations.
+4. In **Acquisition**, create actual partners and a source for each channel/campaign. Each public membership link/QR preserves its original source attribution. A partner receives aggregate adoption, not a resident/member list.
+5. In the merchant workspace, set the Growth objective and create the free Drop in Offer Studio. Save its exact dates, qualification, reward, economics and staff instructions. Submit the inventory and verification commitment for review.
+6. Configure the location’s real Uptick Tap points. Staff policy requires an active staff point; public policy also needs a staff fallback. Saving a point does not certify physical installation or staff training.
+7. Review and approve the current saved offer version and supply commitment. Superseded versions must be resubmitted. Approved promises remain fixed; later inventory changes use an audited adjustment. Check this week and future supply coverage before promising a recurring benefit.
+8. Configure the dedicated Uptick membership sender, reviewed disclosures and internal staging recipients. Rehearse the actual join/consent/claim/Tap/redemption flow, then inspect the next-week queue and provider outcomes before public distribution.
 
-Do not merge or publish the marketing site to deploy this app. The application uses one canonical `APP_URL` in V0 so customer links, callbacks, and mutation-origin checks agree. A single production origin such as `app.upticklocal.com` is the simplest first deployment. A separate claim domain needs an explicit allowed-origin/domain configuration before use.
+Do not use the illustrative seed in production. No screen playback platform, POS transaction verification, forecasted incremental visits or automated campaign registration is implied by these controls.
 
-## Rehearse without changing production results
+## Managed PostgreSQL and Supabase authentication
 
-1. Add only approved internal recipients to `INTERNAL_TEST_NUMBERS`, separated by commas, in the server environment. In local development, a fictional number such as `+12015550123` is suitable. An empty allowlist disables creation.
-2. Restart the app after changing the environment. Run migrations 001–008 before production use.
-3. Sign in as an operator and open **Internal testing**. Choose a saved merchant Anchor or Weekly Drop. Review its exact test message, enter an approved number, and confirm the tester requested it.
-4. In development transport, choose **Create a local test pass**. In configured production transport, the action sends a real SMS only after merchant, sender, legal, platform, allowlist, and suppression checks pass. Sample businesses cannot send through Twilio.
-5. Open the private test pass, deliberately open it, and confirm the test redemption. Every screen is labeled TEST; no purchase or free item is involved.
-6. Read the internal ledger for the result. Development means no SMS. Provider acceptance is not delivery. Unknown outcomes are retained for investigation and never automatically resent.
+1. Create the intended Supabase project and database. Set the server-side `DATABASE_URL`; the postgres driver disables prepared statements for transaction pooling. Browser clients must not receive this credential.
+2. Set `SUPABASE_URL` and `SUPABASE_ANON_KEY` for server-side password sign-in. Create the actual first operator Auth user in that project.
+3. Generate separate random values for `PASS_ENCRYPTION_KEY`, `SESSION_SECRET` and `CRON_SECRET`, for example using `openssl rand -hex 32` separately for each. Store them in a secret manager, never Git. Preserve the encryption key needed for existing saved credentials.
+4. Set `UPTICK_ENV=staging` or `production`, `UPTICK_LOCAL_MODE=false` and the canonical HTTPS `APP_URL`. Run `npm run db:migrate` with that intended environment loaded. The repository uses forward SQL migrations in filename order, tracked in `schema_migrations`; local-mode scripts must never be pointed at a production database.
+5. For the one-time operator bootstrap, set `OPERATOR_AUTH_USER_ID` to the existing user’s actual UUID and `OPERATOR_ORGANIZATION_NAME` to the real operating organization. Use an administrator database connection for `npm run bootstrap:operator`. The script verifies `auth.users`, creates the organization/membership atomically and audits the action. It creates no password or runtime bypass.
+6. Replace the administrator connection with the intended server database role. Sign in at `/login`. Every operation rechecks live membership; merchant scope is enforced server-side. Browser database roles have no policies granting direct private-table access.
 
-Tests live in separate `internal_test_runs` and `internal_test_events` tables. They create no production customers, claims, redemptions, subscriptions, broadcasts, or merchant metrics. The signed test status endpoint is `/api/twilio-test`; the SDK includes its test identifier in the callback URL. Keep `/t/*` credentials private and redact those paths in upstream logs just like `/p/*`.
+For protected staging personas, `STAGING_TEST_USER_IDS` allows only listed, authenticated users who still have a live operator membership. It is not a public demo login. Verify the real Supabase JWT/session/RLS integration in staging; local identities do not prove it.
 
-## Messaging and scheduling
+## Messaging and external delivery gates
 
-See [docs/TWILIO.md](docs/TWILIO.md) for the registration decision and exact webhook setup.
+The primary recurring sender is **Uptick Local → Uptick member**. Its sender, exact consent history, suppression and outbox are independent of retained merchant programs. See [Twilio setup](docs/TWILIO.md) and [membership messaging architecture](docs/MEMBERSHIP_MESSAGING.md).
 
-- `SMS_TRANSPORT=development`: durable outbox records become `development`. They are never labeled sent or delivered. A private pass link is returned to the submitting browser only in explicit local mode.
-- `SMS_TRANSPORT=twilio`: actual sends require Twilio credentials, `MESSAGING_APPROVED=true`, `LEGAL_APPROVED=true`, canonical HTTPS, and an approved per-merchant sender record. Sample businesses cannot send.
-- `GET /api/cron` requires `Authorization: Bearer {CRON_SECRET}`. `vercel.json` requests a one-minute schedule; choose a Vercel plan supporting that interval or configure an equivalent authenticated scheduler.
-- Each run expands due Drops and processes a bounded outbox batch. It checks consent, suppression, week, business quiet hours, and offer validity immediately before provider submission.
-- A send with an uncertain provider outcome becomes `unknown`; it is not blindly retried. A crashed submission becomes unknown after five minutes. The operator inspects provider status before deciding on a manual recovery procedure.
-- STOP blocks the sender internally and withdraws subscriptions for the affected merchant plus network scope. START clears sender suppression only, requiring a fresh merchant subscription choice.
-- Quiet hours are our V0 scheduling choice of 9 AM–8 PM in the merchant timezone, not a blanket statement of legal sufficiency. Customer-timezone precision and jurisdiction review are production expansion considerations.
+- `development` never sends real SMS. Simulated records are labeled `development`, never delivered.
+- Staging with Twilio requires the actual credentials, approved sender/platform/legal setup and exact allowed internal recipient numbers in `INTERNAL_TEST_NUMBERS`. An empty or malformed list disables real staging sends.
+- Production also requires `PRODUCTION_DELIVERY_ENABLED=true`. A Vercel preview cannot select the production environment.
+- `/api/cron` requires the configured bearer secret. It prepares membership weeks and processes bounded legacy/member queues. A one-minute schedule is declared in `vercel.json`; provision a hosting plan or authenticated scheduler that actually supports it.
+- Operator **Member messaging** exposes sender configuration, readiness, exact sanitized copy, current-week preparation, explicit reviewed dispatch and the outcome ledger. Unknown provider outcomes are not retried automatically.
+- STOP pauses the affected membership program; START clears suppression without silently renewing consent. Separate merchant programs retain their own consent and sender behavior.
 
-A public claim submission does not reveal an existing private pass in production. Repeated claims return the same entitlement internally and do not automatically resend indefinitely. If a customer lost their original SMS, support investigates the message record rather than issuing a second entitlement.
+The isolated older merchant test ledger at `/operator/testing` remains available and does not change production metrics. It is not a substitute for testing the actual new membership loop in a separate staging database. Real Twilio registration, legal review, sender approval, carrier callbacks, DNS, physical Tap/NFC installation, monitoring, backups and staff training remain external work.
 
-## Verification
+## Verify and release
+
+Use [docs/QA.md](docs/QA.md) for the current evidence, targeted test map and outstanding checks. The older [verification record](docs/VERIFICATION.md) documents the pre-refoundation baseline; its successful build must not be mistaken for a final build of the current integration.
+
+With a safe disk margin, run the checks in sequence:
 
 ```sh
-npm run test
+npm test
 npm run typecheck
 npm run lint
+npm run format:check
 npm run build
-npm run test:e2e
 ```
 
-The integration suite exercises the domain using PGlite, including the complete scheduled-return loop, production-readiness rollback, consent evidence, and request limits. `npm run test:e2e` runs HTTP boundary checks through the running Next application; it starts a local development server if one is not running. Stop the app before running seed/migration scripts against its local data directory. Set `PLAYWRIGHT_BASE_URL` only to a controlled test deployment to check that existing server instead. This suite checks rejected origins, JSON limits, unauthenticated access, and unsigned callbacks; it does not send messages or change customer data.
+`npm test` runs test files serially to reduce memory and temporary-storage pressure. For HTTP boundary checks, run `npm run test:e2e` against a controlled local/test server. To exercise the production build, start it with `npm start` and set `PLAYWRIGHT_BASE_URL=http://localhost:3000` for that HTTP run. The request tests do not replace browser interaction checks.
 
-The separate `bash scripts/verify-postgres.sh` harness verifies the production adapter and races across independent PostgreSQL sessions in its own disposable local cluster. See [docs/POSTGRES_VERIFICATION.md](docs/POSTGRES_VERIFICATION.md). It never connects to an existing database.
+The isolated real-PostgreSQL harness is `bash scripts/verify-postgres.sh`. It requires local PostgreSQL executables and at least 768 MiB free in `/tmp`, creates only its own disposable local cluster, and ignores any existing `DATABASE_URL`. See [the harness record](docs/POSTGRES_VERIFICATION.md). Stop the app before any independent script opens its local PGlite data directory.
 
-These checks are not proof of Supabase JWT/RLS integration, live carrier delivery, or registered A2P traffic. The browser verification and precise limits of this build are recorded in [docs/VERIFICATION.md](docs/VERIFICATION.md).
+Before public traffic, configure the managed services and real records, apply all migrations, complete the fresh production/HTTP/browser/PostgreSQL checks, verify signed callbacks and staging recipient limits, and establish operating recovery procedures. Redact private `/u/*`, `/p/*`, `/t/*` and Tap credential/query paths in hosting/proxy logs; application logging settings cannot control upstream logs. Keep third-party analytics away from private member pages.
 
-## Deployment gate
-
-The repository is intended to be deployable once the environment is configured, but no real customer launch is implied by local tests. Before accepting production traffic:
-
-1. Configure managed PostgreSQL, migrations, Supabase users/memberships, HTTPS, and server secrets.
-2. Supply reviewed legal/business identity, support address, privacy/terms/SMS copy and retention policy. Set `LEGAL_APPROVED=true` only after review.
-3. Complete Twilio registration for the correct business/ISV relationship, approve sender/campaign, configure callbacks and Advanced Opt-Out, and set messaging approval only when verified.
-4. Verify webhooks and live PostgreSQL concurrency/tenant restrictions in staging. Configure upstream access-log redaction for `/p/*` and `/t/*` private credentials and disable third-party analytics on customer pages. Verify that the reverse proxy overwrites `x-real-ip` with the actual client address before setting `TRUST_PROXY_IP_HEADERS=true`; never trust a forwarded client-supplied value. Configure upstream traffic/SMS abuse controls as well. Without trusted IP information, the app uses a broad aggregate request limit and still limits normalized phones and login emails separately.
-5. Use **Internal testing** to rehearse carrier delivery and cashier actions outside production metrics. Then verify the actual consent → scheduled Drop → recorded return loop in a controlled staging environment. Set up backups, error monitoring, missed-cron detection, and the unknown-send reconciliation procedure.
-6. Complete the operator launch checklist and confirm actual screen handoff before publicly distributing a real Anchor QR. Approval is permitted for the controlled internal test once the machine-checkable production gates pass. The platform does not certify the manual checklist or make an external screen live.
-
-The generated policy surfaces explicitly remain drafts until reviewed. The software does not register a legal business, approve a carrier campaign, provision DNS, or fabricate successful external connections.
+Continue committing coherent green checkpoints on the working branch. Do not merge `main` automatically. A local sample journey, protected test mode or saved approval checkbox is not a live customer launch.
