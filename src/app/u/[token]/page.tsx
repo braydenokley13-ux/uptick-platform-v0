@@ -152,7 +152,7 @@ export default async function YourUptick({
                   <small>
                     {h.state === "redeemed"
                       ? "Recorded redemption"
-                      : h.state === "revoked"
+                      : h.state === "invalidated"
                         ? "Pass voided"
                         : new Date(h.reserved_until || h.snapshot.expires_at) <=
                             new Date()

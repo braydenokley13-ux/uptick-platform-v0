@@ -47,7 +47,7 @@ export async function memberHome(db: DB, credential: string) {
   const current = allocated ? { ...allocated, options } : null;
   const history = await db.query<{
     id: string;
-    state: string;
+    state: "active" | "redeemed" | "invalidated";
     created_at: string;
     redeemed_at: string | null;
     token_encrypted: string;
