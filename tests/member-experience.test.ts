@@ -432,6 +432,7 @@ test("member history uses actual Tap evidence and remains available when members
   assert.equal(home.current, null);
   assert.equal(home.history[0].state, "redeemed");
   assert.equal(home.saved?.id, pass.id);
+  assert.equal(home.shareableSupplyId, "supply");
 });
 test("the only saved pass remains on Your Uptick when it no longer appears in new-claim eligibility", async () => {
   await supply();
@@ -451,6 +452,7 @@ test("the only saved pass remains on Your Uptick when it no longer appears in ne
   const paused = await memberHome(db, member.credential);
   assert.equal(paused.current, null);
   assert.equal(paused.saved?.id, pass.id);
+  assert.equal(paused.shareableSupplyId, undefined);
 });
 test("dedicated sender separation is enforced in both directions at the database boundary", async () => {
   const service = `MG${"b".repeat(32)}`,

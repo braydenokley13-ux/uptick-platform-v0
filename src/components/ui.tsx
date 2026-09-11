@@ -121,7 +121,7 @@ export function Footer() {
         <Link href="/privacy">Privacy</Link>
         <Link href="/sms">SMS & help</Link>
       </div>
-      <p>No app. No account. Just something good nearby.</p>
+      <p>No app. Just something good nearby.</p>
     </footer>
   );
 }

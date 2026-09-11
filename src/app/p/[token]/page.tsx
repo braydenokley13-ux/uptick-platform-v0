@@ -10,6 +10,8 @@ import {
   SuccessIcon,
 } from "@/components/ui";
 import { PassActions } from "@/components/forms";
+import { networkPass } from "@/lib/network";
+import { NetworkPass } from "@/components/member-ui";
 export const dynamic = "force-dynamic";
 export default async function PassPage({
   params,
@@ -41,6 +43,8 @@ export default async function PassPage({
       </div>
     );
   }
+  const memberPass = await networkPass(db, token);
+  if (memberPass) return <NetworkPass data={memberPass} token={token} />;
   const state = passState(claim),
     o = claim.snapshot;
   const requestedChoices = await getClaimChoices(db, claim.id);

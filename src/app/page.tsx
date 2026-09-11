@@ -3,6 +3,10 @@ import { getActor } from "@/lib/auth";
 export default async function Home() {
   const actor = await getActor();
   redirect(
-    actor ? (actor.role === "operator" ? "/operator" : "/merchant") : "/login",
+    actor
+      ? actor.role === "operator"
+        ? "/operator/network"
+        : "/merchant"
+      : "/join",
   );
 }

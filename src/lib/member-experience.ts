@@ -26,6 +26,7 @@ export async function memberHome(db: DB, credential: string) {
       ...identity,
       current: null,
       saved: null,
+      shareableSupplyId: undefined,
       history: [],
       market: null,
     };
@@ -50,6 +51,7 @@ export async function memberHome(db: DB, credential: string) {
     created_at: string;
     redeemed_at: string | null;
     token_encrypted: string;
+    offer_id: string;
     snapshot: { merchant: string; reward: string; expires_at: string };
     method: string | null;
     current_week: boolean;
@@ -57,14 +59,22 @@ export async function memberHome(db: DB, credential: string) {
     `select c.*,e.method,a.week_key=to_char(date_trunc('week',now() at time zone k.timezone),'YYYY-MM-DD') current_week from member_claims mc join claims c on c.id=mc.claim_id join member_allocations a on a.id=mc.allocation_id join market_cells k on k.id=a.market_id left join redemption_evidence e on e.claim_id=c.id where mc.member_id=$1 order by c.created_at desc,c.id desc limit 20`,
     [identity.member.id],
   );
-  const [market] = await db.query<{ name: string; timezone: string }>(
-    "select name,timezone from market_cells where id=$1",
-    [identity.member.market_id],
-  );
+  const [market] = await db.query<{
+    name: string;
+    timezone: string;
+    state: string;
+  }>("select name,timezone,state from market_cells where id=$1", [
+    identity.member.market_id,
+  ]);
+  const saved = history.find((claim) => claim.current_week) || null;
+  const shareable = saved
+    ? allocated?.options.find((option) => option.offer_id === saved.offer_id)
+    : options[0];
   return {
     ...identity,
     current,
-    saved: history.find((claim) => claim.current_week) || null,
+    saved,
+    shareableSupplyId: shareable?.shareable ? shareable.id : undefined,
     history,
     market: market || null,
   };
