@@ -2,7 +2,8 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Radio, ShieldCheck } from "lucide-react";
+import { Radio, ShieldCheck } from "lucide-react";
+import { TapReceipt, type TapReceiptRecord } from "./tap-receipt";
 
 async function action(body: object) {
   let response: Response;
@@ -39,13 +40,7 @@ export function TapRedeemButton({
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
-  const [result, setResult] = useState<{
-    reward: string;
-    merchant: string;
-    redeemedAt: string;
-    timezone: string;
-    evidence: { method: string; staff_gated: boolean };
-  } | null>(null);
+  const [result, setResult] = useState<TapReceiptRecord | null>(null);
   async function redeem() {
     setBusy(true);
     setError("");
@@ -65,40 +60,7 @@ export function TapRedeemButton({
       setBusy(false);
     }
   }
-  if (result)
-    return (
-      <div className="tap-complete" role="status">
-        <span className="tap-complete-check">
-          <Check size={48} />
-        </span>
-        <p className="eyebrow">UPTICK REDEEMED</p>
-        <h2>{result.reward}</h2>
-        <strong>{result.merchant}</strong>
-        <time dateTime={result.redeemedAt}>
-          {new Date(result.redeemedAt).toLocaleString("en-US", {
-            timeZone: result.timezone,
-            month: "short",
-            day: "numeric",
-            hour: "numeric",
-            minute: "2-digit",
-            second: "2-digit",
-          })}
-        </time>
-        <p>
-          Show this screen to the cashier.
-          <br />
-          This pass has been used.
-        </p>
-        <small>
-          {result.evidence?.method === "secure_nfc"
-            ? "Secure location credential recorded"
-            : result.evidence?.method === "qr"
-              ? "Location QR recorded"
-              : "Self-confirmation recorded"}
-          {result.evidence?.staff_gated ? " · Staff-gated counter" : ""}
-        </small>
-      </div>
-    );
+  if (result) return <TapReceipt record={result} />;
   return (
     <div className="tap-confirm">
       <button className="button" disabled={busy} onClick={redeem}>

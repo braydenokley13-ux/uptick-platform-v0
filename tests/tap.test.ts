@@ -18,6 +18,7 @@ import {
   rotateTapCredential,
   simulateTap,
   tapLanding,
+  tapPassView,
 } from "../src/lib/tap";
 
 process.env.UPTICK_LOCAL_MODE = "true";
@@ -167,6 +168,73 @@ function proof(counter: number) {
   ).toString("hex");
   return { encryptedPicc, mac };
 }
+
+test("Tap landing reads restore a durable used receipt without changing redemption, events or possession", async () => {
+  const station = await setup();
+  const pass = await station.claim();
+  const before = (
+    await db.query<{ n: number }>("select count(*)::int n from demand_events")
+  )[0].n;
+  const initial = await tapPassView(db, pass.privateToken, station.point);
+  assert.equal(initial.state, "active");
+  assert.equal(initial.matches, true);
+  assert.equal(initial.claim.opened_at, null);
+  assert.equal((await db.query("select * from redemptions")).length, 0);
+  assert.equal(
+    (
+      await db.query<{ n: number }>("select count(*)::int n from demand_events")
+    )[0].n,
+    before,
+  );
+  const redeemed = await redeemAtPoint(db, pass.privateToken, {
+    pointToken: station.credential.public_token,
+  });
+  const savedEvents = (
+    await db.query<{ n: number }>("select count(*)::int n from demand_events")
+  )[0].n;
+  for (let reload = 0; reload < 2; reload++) {
+    const view = await tapPassView(db, pass.privateToken, station.point);
+    assert.equal(view.state, "redeemed");
+    assert.equal(
+      new Date(view.claim.redeemed_at!).toISOString(),
+      new Date(redeemed.claim.redeemed_at!).toISOString(),
+    );
+    assert.equal(view.evidence?.method, "qr");
+    assert.equal(view.evidence?.staff_gated, true);
+  }
+  assert.equal((await db.query("select * from redemptions")).length, 1);
+  assert.equal((await db.query("select * from redemption_evidence")).length, 1);
+  assert.equal(
+    (
+      await db.query<{ n: number }>("select count(*)::int n from demand_events")
+    )[0].n,
+    savedEvents,
+  );
+});
+test("Tap landing reads distinguish expired reservations and exhausted inventory before offering an action", async () => {
+  const expired = await setup({
+    reservedUntil: new Date(Date.now() - 60000).toISOString(),
+  });
+  const expiredPass = await expired.claim();
+  assert.equal(
+    (await tapPassView(db, expiredPass.privateToken, expired.point)).state,
+    "expired",
+  );
+  const capped = await setup({ quantity: 1 });
+  const first = await capped.claim();
+  const second = await capped.claim();
+  await redeemAtPoint(db, first.privateToken, {
+    pointToken: capped.credential.public_token,
+  });
+  const exhausted = await tapPassView(db, second.privateToken, capped.point);
+  assert.match(exhausted.blockedReason!, /available quantity has been used/);
+  assert.equal(exhausted.state, "active");
+  assert.equal((await db.query("select * from redemptions")).length, 1);
+  await assert.rejects(
+    tapPassView(db, "invalid-private-pass", capped.point),
+    /not valid/,
+  );
+});
 
 test("AES-CMAC passes independent NIST vectors for empty, full, and partial blocks", () => {
   const k = Buffer.from("2b7e151628aed2a6abf7158809cf4f3c", "hex");

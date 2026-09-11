@@ -11,6 +11,7 @@ import {
 import { RequestError } from "./http";
 import { id, token } from "./security";
 import { NFC_PROFILE, nfcKey, verifyNtag424, type NfcProof } from "./nfc";
+import { supplyUsage } from "./network";
 
 export type TapPoint = {
   id: string;
@@ -282,6 +283,59 @@ export async function tapLanding(db: DB, publicToken: string) {
       404,
     );
   return point;
+}
+
+// A landing-page read restores the saved result without redeeming, confirming
+// possession, recording a visit, or consuming an NFC authentication counter.
+export async function tapPassView(
+  db: DB,
+  privateToken: string,
+  point: TapPoint,
+  at = new Date(),
+) {
+  const claim = await getPass(db, privateToken);
+  const [offer] = await db.query<{ location_id: string }>(
+    "select location_id from offers where id=$1",
+    [claim.offer_id],
+  );
+  const [supply] = await db.query<Supply>(
+    "select s.*,mc.reserved_until from member_claims mc join network_drop_supplies s on s.id=mc.supply_id where mc.claim_id=$1",
+    [claim.id],
+  );
+  const matches =
+    claim.organization_id === point.organization_id &&
+    offer?.location_id === point.location_id;
+  let state = passState(claim, at);
+  if (
+    state === "active" &&
+    supply?.reserved_until &&
+    new Date(supply.reserved_until) <= at
+  )
+    state = "expired";
+  let blockedReason: string | null = null;
+  if (state === "active" && supply) {
+    if (!["approved", "paused", "ended"].includes(supply.state))
+      blockedReason = "This Drop is not available for redemption right now.";
+    else if (
+      supply.verification_mode === "staff_tap" &&
+      point.exposure !== "staff"
+    )
+      blockedReason =
+        "Ask the cashier to present the staff Uptick Tap after checking the offer.";
+    else if (supply.inventory_policy !== "unlimited") {
+      const usage = await supplyUsage(db, supply.id, at);
+      if (usage.quantity !== null && usage.redeemed >= usage.quantity)
+        blockedReason = "This Drop’s available quantity has been used.";
+    }
+  }
+  const [evidence] =
+    state === "redeemed"
+      ? await db.query<TapEvidence>(
+          "select * from redemption_evidence where claim_id=$1",
+          [claim.id],
+        )
+      : [];
+  return { claim, matches, state, blockedReason, evidence: evidence || null };
 }
 
 async function lockedClaim(db: DB, privateToken: string) {

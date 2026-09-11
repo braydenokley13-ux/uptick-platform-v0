@@ -2,12 +2,12 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { Radio } from "lucide-react";
 import { getDb } from "@/lib/db";
-import { getPass, passState, type Claim } from "@/lib/domain";
 import { decrypt } from "@/lib/security";
 import { RequestError } from "@/lib/http";
-import { tapLanding } from "@/lib/tap";
+import { tapLanding, tapPassView } from "@/lib/tap";
 import { Badge, Brand, Footer, Location } from "@/components/ui";
 import { TapRedeemButton } from "@/components/tap-controls";
+import { TapReceipt } from "@/components/tap-receipt";
 import "@/components/tap.css";
 export const dynamic = "force-dynamic";
 export default async function TapPage({
@@ -43,24 +43,15 @@ export default async function TapPage({
     );
   }
   const encrypted = (await cookies()).get("uptick-active-pass")?.value;
-  let claim: Claim | null = null;
+  let selected: Awaited<ReturnType<typeof tapPassView>> | null = null;
   if (encrypted) {
     try {
-      claim = await getPass(db, decrypt(encrypted));
+      selected = await tapPassView(db, decrypt(encrypted), point);
     } catch {
       /* An expired or invalid pairing simply asks for the private pass again. */
     }
   }
-  const [offer] = claim
-    ? await db.query<{ location_id: string }>(
-        "select location_id from offers where id=$1",
-        [claim.offer_id],
-      )
-    : [];
-  const matches =
-    !!claim &&
-    claim.organization_id === point.organization_id &&
-    offer?.location_id === point.location_id;
+  const claim = selected?.claim;
   const nfc =
     typeof query.e === "string" && typeof query.c === "string"
       ? { encryptedPicc: query.e, mac: query.c }
@@ -112,7 +103,7 @@ export default async function TapPage({
                   Find Uptick membership
                 </Link>
               </>
-            ) : !matches ? (
+            ) : !selected?.matches ? (
               <>
                 <h2>Your selected pass is for another store.</h2>
                 <p>
@@ -124,6 +115,31 @@ export default async function TapPage({
                   {claim.snapshot.address}
                 </p>
               </>
+            ) : selected.state === "redeemed" ? (
+              <TapReceipt
+                record={{
+                  reward: claim.snapshot.reward,
+                  merchant: claim.snapshot.merchant,
+                  redeemedAt: claim.redeemed_at
+                    ? new Date(claim.redeemed_at).toISOString()
+                    : null,
+                  timezone: claim.snapshot.timezone,
+                  evidence: selected.evidence,
+                }}
+              />
+            ) : selected.state !== "active" ? (
+              <>
+                <h2>This pass is {selected.state}.</h2>
+                <p>
+                  Open your Uptick membership for the current availability and
+                  offer dates.
+                </p>
+              </>
+            ) : selected.blockedReason ? (
+              <>
+                <h2>This pass isn’t ready here.</h2>
+                <p>{selected.blockedReason}</p>
+              </>
             ) : !secureReady ? (
               <>
                 <h2>Tap the secure sign again.</h2>
@@ -133,7 +149,7 @@ export default async function TapPage({
                   fallback.
                 </p>
               </>
-            ) : ["active", "redeemed"].includes(passState(claim)) ? (
+            ) : (
               <>
                 <p className="eyebrow">YOUR SELECTED DROP</p>
                 <h2>{claim.snapshot.reward}</h2>
@@ -145,15 +161,7 @@ export default async function TapPage({
                     does not digitally verify a purchase.
                   </p>
                 )}
-                <TapRedeemButton pointToken={token} nfc={nfc} />
-              </>
-            ) : (
-              <>
-                <h2>This pass is {passState(claim)}.</h2>
-                <p>
-                  Open your Uptick membership for the current availability and
-                  offer dates.
-                </p>
+                <TapRedeemButton key={claim.id} pointToken={token} nfc={nfc} />
               </>
             )}
           </div>
