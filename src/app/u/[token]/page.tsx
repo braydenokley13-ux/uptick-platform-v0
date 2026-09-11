@@ -152,13 +152,22 @@ export default async function YourUptick({
                   <small>
                     {h.state === "redeemed"
                       ? "Recorded redemption"
-                      : new Date(h.snapshot.expires_at) < new Date()
-                        ? "Offer ended"
-                        : "Saved pass"}{" "}
+                      : h.state === "revoked"
+                        ? "Pass voided"
+                        : new Date(h.reserved_until || h.snapshot.expires_at) <=
+                            new Date()
+                          ? h.reserved_until
+                            ? "Reservation ended"
+                            : "Offer ended"
+                          : "Saved pass"}{" "}
                     ·{" "}
                     {new Date(h.redeemed_at || h.created_at).toLocaleDateString(
                       "en-US",
-                      { month: "short", day: "numeric" },
+                      {
+                        month: "short",
+                        day: "numeric",
+                        timeZone: h.snapshot.timezone,
+                      },
                     )}
                   </small>
                 </div>

@@ -52,11 +52,17 @@ export async function memberHome(db: DB, credential: string) {
     redeemed_at: string | null;
     token_encrypted: string;
     offer_id: string;
-    snapshot: { merchant: string; reward: string; expires_at: string };
+    reserved_until: string | null;
+    snapshot: {
+      merchant: string;
+      reward: string;
+      expires_at: string;
+      timezone: string;
+    };
     method: string | null;
     current_week: boolean;
   }>(
-    `select c.*,e.method,a.week_key=to_char(date_trunc('week',now() at time zone k.timezone),'YYYY-MM-DD') current_week from member_claims mc join claims c on c.id=mc.claim_id join member_allocations a on a.id=mc.allocation_id join market_cells k on k.id=a.market_id left join redemption_evidence e on e.claim_id=c.id where mc.member_id=$1 order by c.created_at desc,c.id desc limit 20`,
+    `select c.*,mc.reserved_until,e.method,a.week_key=to_char(date_trunc('week',now() at time zone k.timezone),'YYYY-MM-DD') current_week from member_claims mc join claims c on c.id=mc.claim_id join member_allocations a on a.id=mc.allocation_id join market_cells k on k.id=a.market_id left join redemption_evidence e on e.claim_id=c.id where mc.member_id=$1 order by c.created_at desc,c.id desc limit 20`,
     [identity.member.id],
   );
   const [market] = await db.query<{

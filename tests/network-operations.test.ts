@@ -20,13 +20,19 @@ import {
   membershipMessagingOperations,
   lookupNetworkMember,
 } from "../src/lib/network-operations";
-import { createRedemptionPoint } from "../src/lib/tap";
+import { createRedemptionPoint, redeemAtPoint } from "../src/lib/tap";
+import {
+  shareUptick,
+  acceptPendingReferral,
+} from "../src/lib/member-experience";
+import { decrypt } from "../src/lib/security";
 import {
   requestMemberAccess,
   confirmMemberAccess,
   claimMemberDrop,
   supplyUsage,
 } from "../src/lib/network";
+import { merchantGrowth } from "../src/lib/merchant-growth";
 process.env.UPTICK_LOCAL_MODE = "true";
 process.env.APP_URL = "http://localhost:3000";
 process.env.SMS_TRANSPORT = "development";
@@ -525,4 +531,213 @@ test("protected member support resolves normalized phones before a claim without
     await lookupNetworkMember(db, operator, { phone: "+12125550142" }),
     null,
   );
+});
+
+test("referral cohorts count distinct verified members and keep source attribution separate without private data", async () => {
+  const sourceId = await saveAcquisitionSource(db, operator, {
+    marketId,
+    partnerId: "",
+    name: "Resident newsletter",
+    channel: "partner-email",
+    campaign: "Founding members",
+    cost: "",
+    state: "active",
+  });
+  const [source] = await db.query<{ token: string }>(
+    "select token from acquisition_sources where id=$1",
+    [sourceId],
+  );
+  const original = await requestMemberAccess(db, {
+    phone: "+12125550151",
+    homeZip: "10583",
+    sourceToken: source.token,
+    consentRequested: true,
+  });
+  await confirmMemberAccess(db, original.credential, true);
+  const supplyId = await saveSupply(db, operator, supplyInput());
+  await approveSupply(db, operator, supplyId);
+  await allocateMarket(db, operator, marketId);
+  const invitation = await shareUptick(db, original.credential, supplyId);
+  const referred = await requestMemberAccess(db, {
+    phone: "+12125550152",
+    homeZip: "10583",
+    referralToken: invitation,
+    consentRequested: true,
+  });
+  await confirmMemberAccess(db, referred.credential, true);
+  await acceptPendingReferral(db, referred.credential);
+  await acceptPendingReferral(db, referred.credential);
+  await allocateMarket(db, operator, marketId);
+  const claimed = await claimMemberDrop(db, referred.credential, supplyId);
+  const [point] = await db.query<{ public_token: string }>(
+    "select c.public_token from redemption_credentials c join redemption_points p on p.id=c.point_id where p.location_id='location' and p.exposure='staff' and p.state='active' and c.state='active' limit 1",
+  );
+  await redeemAtPoint(db, decrypt(claimed.token_encrypted), {
+    pointToken: point.public_token,
+  });
+  await redeemAtPoint(db, decrypt(claimed.token_encrypted), {
+    pointToken: point.public_token,
+  });
+  let data = await networkOperations(db, operator, marketId);
+  assert.equal(data.members.joined, 2);
+  assert.equal(data.sources[0].joins, 1);
+  assert.deepEqual(data.referrals, {
+    joined: 1,
+    verified: 1,
+    allocated: 1,
+    claimed: 1,
+    redeemed: 1,
+    source_overlap: 0,
+  });
+  const support = await lookupNetworkMember(db, operator, {
+    phone: "+12125550152",
+  });
+  assert.equal(support?.member.referred, true);
+  assert.equal(support?.member.source, null);
+  assert.equal(JSON.stringify(support).includes(original.member.id), false);
+  for (const secret of [
+    "+12125550151",
+    "+12125550152",
+    original.credential,
+    referred.credential,
+    invitation,
+    decrypt(claimed.token_encrypted),
+  ]) {
+    assert.equal(JSON.stringify(data).includes(secret), false);
+    assert.equal(JSON.stringify(support).includes(secret), false);
+  }
+  const mixed = await requestMemberAccess(db, {
+    phone: "+12125550153",
+    homeZip: "10583",
+    sourceToken: source.token,
+    referralToken: invitation,
+    consentRequested: true,
+  });
+  await confirmMemberAccess(db, mixed.credential, true);
+  await acceptPendingReferral(db, mixed.credential);
+  data = await networkOperations(db, operator, marketId);
+  assert.equal(data.members.joined, 3);
+  assert.equal(data.sources[0].joins, 2);
+  assert.equal(data.referrals.joined, 2);
+  assert.equal(data.referrals.source_overlap, 1);
+  assert.equal(data.referrals.claimed, 1);
+  assert.equal(data.referrals.redeemed, 1);
+  const mixedSupport = await lookupNetworkMember(db, operator, {
+    phone: "+12125550153",
+  });
+  assert.equal(mixedSupport?.member.source, "Resident newsletter");
+  assert.equal(mixedSupport?.member.referred, true);
+});
+
+test("later network redemptions count one returning member and retention uses exact mature windows", async () => {
+  const sourceId = await saveAcquisitionSource(db, operator, {
+    marketId,
+    partnerId: "",
+    name: "Return cohort",
+    channel: "partner-email",
+    campaign: "Six week pilot",
+    cost: "",
+    state: "active",
+  });
+  const [source] = await db.query<{ token: string }>(
+    "select token from acquisition_sources where id=$1",
+    [sourceId],
+  );
+  const member = await requestMemberAccess(db, {
+    phone: "+12125550154",
+    homeZip: "10583",
+    sourceToken: source.token,
+    consentRequested: true,
+  });
+  await confirmMemberAccess(db, member.credential, true);
+  const supplyId = await saveSupply(db, operator, supplyInput());
+  await approveSupply(db, operator, supplyId);
+  await allocateMarket(db, operator, marketId);
+  const claim = await claimMemberDrop(db, member.credential, supplyId);
+  const [point] = await db.query<{ public_token: string }>(
+    "select c.public_token from redemption_credentials c join redemption_points p on p.id=c.point_id where p.location_id='location' and p.exposure='staff' and c.state='active'",
+  );
+  await redeemAtPoint(db, decrypt(claim.token_encrypted), {
+    pointToken: point.public_token,
+  });
+  await redeemAtPoint(db, decrypt(claim.token_encrypted), {
+    pointToken: point.public_token,
+  });
+  let data = await networkOperations(db, operator, marketId);
+  assert.equal(
+    data.members.returned,
+    0,
+    "Reloading one redemption is not a return.",
+  );
+  assert.equal(
+    data.sources[0].mature2,
+    0,
+    "New members do not have mature retention windows.",
+  );
+
+  // This in-memory fixture represents a prior week. Immutable history is inserted
+  // with its original timestamps; no history trigger is bypassed or disabled.
+  await db.query(
+    "update uptick_members set created_at=now()-interval '36 days' where id=$1",
+    [member.member.id],
+  );
+  await db.query(
+    "insert into offers(id,organization_id,location_id,kind,state,title) values('past-drop','merchant','location','drop','live','Earlier coffee')",
+  );
+  await db.query(
+    "insert into offer_versions(offer_id,version,qualification,reward,terms,starts_at,expires_at) values('past-drop',1,'Visit the store','Earlier coffee','One per member',now()-interval '20 days',now()-interval '13 days')",
+  );
+  await db.query(
+    "insert into network_drop_supplies(id,market_id,organization_id,location_id,offer_id,offer_version,state,starts_at,expires_at,inventory_policy,quantity,verification_mode,approved_by) values('past-supply',$1,'merchant','location','past-drop',1,'approved',now()-interval '20 days',now()-interval '13 days','redemption',2,'staff_tap','operator')",
+    [marketId],
+  );
+  await db.query(
+    "insert into member_allocations(id,member_id,market_id,week_key,created_at) values('past-allocation',$1,$2,to_char(date_trunc('week',(now()-interval '18 days') at time zone 'America/New_York'),'YYYY-MM-DD'),now()-interval '18 days')",
+    [member.member.id, marketId],
+  );
+  await db.query(
+    "insert into allocation_options(allocation_id,supply_id,market_id,rank,reason) values('past-allocation','past-supply',$1,1,'{}')",
+    [marketId],
+  );
+  await db.query(
+    "insert into claims(id,customer_id,organization_id,offer_id,offer_version,token_hash,token_encrypted,snapshot,state,created_at,redeemed_at) select 'past-claim',customer_id,organization_id,'past-drop',1,'past-fixture-hash',token_encrypted,snapshot || jsonb_build_object('reward','Earlier coffee','starts_at',now()-interval '20 days','expires_at',now()-interval '13 days','origin',jsonb_build_object('network',true,'market_id',$2::text,'supply_id','past-supply','allocation_id','past-allocation')),'redeemed',now()-interval '18 days',now()-interval '18 days' from claims where id=$1",
+    [claim.id, marketId],
+  );
+  await db.query(
+    "insert into member_claims(claim_id,member_id,customer_id,organization_id,supply_id,offer_id,allocation_id,created_at) values('past-claim',$1,$2,'merchant','past-supply','past-drop','past-allocation',now()-interval '18 days')",
+    [member.member.id, member.member.customer_id],
+  );
+  await db.query(
+    "insert into redemptions(id,claim_id,organization_id,created_at) values('past-redemption','past-claim','merchant',now()-interval '18 days')",
+  );
+  await db.query(
+    "insert into redemption_evidence(id,claim_id,organization_id,point_id,credential_id,method,verification_level,verification_policy,staff_gated,actor,created_at) select 'past-evidence','past-claim',organization_id,point_id,credential_id,method,verification_level,verification_policy,staff_gated,actor,now()-interval '18 days' from redemption_evidence where claim_id=$1",
+    [claim.id],
+  );
+  data = await networkOperations(db, operator, marketId);
+  assert.equal(data.members.redeemed, 1);
+  assert.equal(data.members.returned, 1);
+  assert.equal(
+    data.sources[0].redeemed,
+    1,
+    "Source adoption counts people, not their redemption total.",
+  );
+  assert.equal(data.sources[0].mature2, 1);
+  assert.equal(data.sources[0].retained2, 1);
+  assert.equal(data.sources[0].mature4, 1);
+  assert.equal(
+    data.sources[0].retained4,
+    0,
+    "A day-36 return is outside the day-28 through day-34 window.",
+  );
+  const result = await merchantGrowth(db, merchant);
+  assert.equal(result.metrics.redemptions, 2);
+  assert.equal(result.metrics.visitors, 1);
+  assert.equal(result.metrics.returns, 1);
+  assert.equal(result.metrics.qr, 2);
+  const other = await merchantGrowth(db, {
+    ...merchant,
+    organizationId: "second",
+  });
+  assert.equal(other.metrics.returns, 0);
 });

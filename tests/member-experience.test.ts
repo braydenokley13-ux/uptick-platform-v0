@@ -432,7 +432,7 @@ test("member history uses actual Tap evidence and remains available when members
   assert.equal(home.current, null);
   assert.equal(home.history[0].state, "redeemed");
   assert.equal(home.saved?.id, pass.id);
-  assert.equal(home.shareableSupplyId, "supply");
+  assert.equal(home.shareableSupplyId, undefined);
 });
 test("the only saved pass remains on Your Uptick when it no longer appears in new-claim eligibility", async () => {
   await supply();
@@ -444,6 +444,7 @@ test("the only saved pass remains on Your Uptick when it no longer appears in ne
   assert.ok(home.current?.allocation.id);
   assert.equal(home.current?.options.length, 0);
   assert.equal(home.saved?.id, pass.id);
+  assert.equal(home.shareableSupplyId, "supply");
   await memberPreferences(db, member.credential, {
     homeZip: "10583",
     workZip: "",

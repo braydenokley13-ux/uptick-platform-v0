@@ -867,6 +867,7 @@ export async function networkOperations(
     memberRows,
     allocations,
     activity,
+    referralRows,
   ] = await Promise.all([
     db.query<LocationRow>(
       `select l.*,g.name merchant,g.is_demo,ml.active,ml.drive_minutes from locations l join organizations g on g.id=l.organization_id left join market_locations ml on ml.location_id=l.id and ml.market_id=$1 where 'merchant'=any(g.capabilities) order by g.name,l.name`,
@@ -916,6 +917,17 @@ export async function networkOperations(
       `select e.id,e.kind,e.evidence_class,e.created_at,o.title,s.name source,upper(right(e.member_id,6)) member_ref from demand_events e left join network_drop_supplies d on d.id=e.supply_id left join offers o on o.id=d.offer_id left join acquisition_sources s on s.id=e.source_id where e.market_id=$1 order by e.created_at desc limit 40`,
       [marketId],
     ),
+    db.query<{
+      joined: number;
+      verified: number;
+      allocated: number;
+      claimed: number;
+      redeemed: number;
+      source_overlap: number;
+    }>(
+      `select count(*)::int joined,count(*) filter(where m.verified_at is not null)::int verified,count(*) filter(where exists(select 1 from member_allocations a where a.member_id=m.id))::int allocated,count(*) filter(where exists(select 1 from member_claims mc where mc.member_id=m.id))::int claimed,count(*) filter(where exists(select 1 from member_claims mc join claims c on c.id=mc.claim_id where mc.member_id=m.id and c.redeemed_at is not null))::int redeemed,count(*) filter(where m.source_id is not null)::int source_overlap from uptick_members m where exists(select 1 from referral_joins j join member_referrals r on r.id=j.referral_id where j.member_id=m.id and r.market_id=$1)`,
+      [marketId],
+    ),
   ]);
   const asOf = new Date();
   const coverage = market
@@ -948,6 +960,7 @@ export async function networkOperations(
     members: memberRows[0],
     allocations,
     activity,
+    referrals: referralRows[0],
     coverage,
     usage,
     asOf: asOf.toISOString(),
@@ -1058,8 +1071,9 @@ export async function lookupNetworkMember(db: DB, actor: Actor, raw: unknown) {
     source: string | null;
     channel: string | null;
     partner: string | null;
+    referred: boolean;
   }>(
-    `select m.id,upper(right(m.id,6)) reference,right(c.phone,4) phone_hint,m.state,m.verified_at,m.created_at,m.home_zip,m.work_zip,k.name market,s.name source,s.channel,p.name partner from uptick_members m join customers c on c.id=m.customer_id left join market_cells k on k.id=m.market_id left join acquisition_sources s on s.id=m.source_id left join acquisition_partners p on p.id=s.partner_id where c.phone=$1`,
+    `select m.id,upper(right(m.id,6)) reference,right(c.phone,4) phone_hint,m.state,m.verified_at,m.created_at,m.home_zip,m.work_zip,k.name market,s.name source,s.channel,p.name partner,exists(select 1 from referral_joins j where j.member_id=m.id) referred from uptick_members m join customers c on c.id=m.customer_id left join market_cells k on k.id=m.market_id left join acquisition_sources s on s.id=m.source_id left join acquisition_partners p on p.id=s.partner_id where c.phone=$1`,
     [phone],
   );
   await audit(

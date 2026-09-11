@@ -899,7 +899,7 @@ export function MerchantGrowthView({
               </h2>
               <p>
                 {current
-                  ? `${current.reward}. Available through ${date(current.expires_at, data.organization.timezone)}.`
+                  ? `${current.reward}. Ends ${date(current.expires_at, data.organization.timezone, true)}.`
                   : review
                     ? `${review} ${review === 1 ? "commitment is" : "commitments are"} with Uptick. Your saved terms and budgets remain visible below.`
                     : "Start with one useful free perk. Choose your quantity and dates, then let Uptick handle the local distribution."}
@@ -1079,13 +1079,15 @@ export function MerchantGrowthView({
         <>
           <Results data={data} />
           <div className="mg-supply-list">
-            {data.supplies.map((s) => (
-              <SupplyCard
-                key={s.id}
-                supply={s}
-                timezone={data.organization.timezone}
-              />
-            ))}
+            {data.supplies
+              .filter((s) => new Date(s.starts_at) <= new Date(data.asOf))
+              .map((s) => (
+                <SupplyCard
+                  key={s.id}
+                  supply={s}
+                  timezone={data.organization.timezone}
+                />
+              ))}
           </div>
         </>
       )}

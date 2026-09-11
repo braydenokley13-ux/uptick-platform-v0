@@ -1563,6 +1563,46 @@ function Members({ data }: { data: NetworkOperations }) {
         redemption in that exact return window. Young cohorts remain “Not
         mature,” rather than reporting a misleading zero.
       </Evidence>
+      <section className="panel network-panel">
+        <p className="eyebrow">MEMBER INVITATIONS · RECORDED REFERRAL COHORT</p>
+        <h2>When a member brings someone along.</h2>
+        <p>
+          {data.referrals.joined} distinct member
+          {data.referrals.joined === 1 ? "" : "s"} with an accepted referral
+          recorded for this market. Each person counts once in each stage,
+          regardless of how many later allocations, claims or redemptions they
+          have.
+        </p>
+        <div className="network-metrics">
+          <Metric
+            label="VERIFIED REFERRED JOINS"
+            value={data.referrals.verified}
+            note="Accepted referral and confirmed phone"
+          />
+          <Metric
+            label="ALLOCATED"
+            value={data.referrals.allocated}
+            note="At least one saved weekly allocation"
+          />
+          <Metric
+            label="CLAIMED"
+            value={data.referrals.claimed}
+            note="At least one recorded network claim"
+          />
+          <Metric
+            label="REDEEMED"
+            value={data.referrals.redeemed}
+            note="At least one recorded network redemption"
+          />
+        </div>
+        <Evidence>
+          {data.referrals.source_overlap} of these members also have an original
+          acquisition-source record. Referral credit is separate from that
+          source; do not add overlapping cohorts to produce a member total. This
+          reports accepted joins and subsequent actions, not invitations sent,
+          impressions or a referral conversion rate.
+        </Evidence>
+      </section>
       <div className="network-definition-grid">
         <div>
           <strong>Observed</strong>

@@ -220,10 +220,23 @@ export function NetworkMemberLookup() {
             <div>
               <dt>Acquisition record</dt>
               <dd>
-                {result.member.source || "Direct / source not recorded"}
+                {result.member.source ||
+                  (result.member.referred
+                    ? "Member invitation"
+                    : "Direct / source not recorded")}
                 {result.member.channel ? ` · ${result.member.channel}` : ""}
                 <br />
                 {result.member.partner || "No acquisition partner"}
+                {result.member.referred && (
+                  <>
+                    <br />
+                    Referral credit recorded
+                    {result.member.source
+                      ? " separately from the original source"
+                      : ""}
+                    .
+                  </>
+                )}
               </dd>
             </div>
             <div>
