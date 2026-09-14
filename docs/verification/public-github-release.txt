@@ -1,3 +1,20 @@
+PUBLIC GITHUB RELEASE: MERGED; PRODUCTION PUBLICATION PENDING
+
+Current state verified after commissioning
+- Pull request: https://github.com/braydenokley13-ux/upticklocal/pull/13
+- State: MERGED at 2026-09-14T03:27:07Z.
+- Merge commit and current main: 6e6f135a44c0ab63b89abecfd6f1d82272bfa253.
+- Source branch: codex/pilot-service-alignment at e6174b72a598c5949b3680ada23ac313574e8530.
+- Public Vercel project: prj_ZHFEe3PL6RGJ1fmkLS0RZ1kC2Bjv.
+- Production branch remains claude/bundle-implementation-gdtawu.
+- NEXT_PUBLIC_UPTICK_PILOT_ENROLLMENT_OPEN=false was written with sensitive protection to production and preview; see public-hosted-gate.json.
+- Automatic review requires specific approval to switch the public production branch to main and publish the merged source. That approval question remains pending.
+- No public production deployment/promotion was requested after the merge.
+
+Historical pre-merge preparation record follows. Its OPEN/unchanged-main and
+no-environment-write statements describe the earlier preparation stage only;
+the current state above supersedes them.
+
 PUBLIC GITHUB RELEASE PREPARATION: PASS
 
 Repository
@@ -19,7 +36,7 @@ Review branch
 Pull request
 - URL: https://github.com/braydenokley13-ux/upticklocal/pull/13
 - Title: Align public pilot service copy
-- State at final inspection: OPEN
+- State at preparation inspection: OPEN
 - Draft: no
 - Mergeability reported by GitHub: MERGEABLE
 - Base/head recorded by GitHub: 7b453a5f765bbb022f2e916dce0f4f0ea63e9717 / e6174b72a598c5949b3680ada23ac313574e8530

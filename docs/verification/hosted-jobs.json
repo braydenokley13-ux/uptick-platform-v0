@@ -1,0 +1,25 @@
+{
+  "checked_at": "2026-09-14T03:46:54.607Z",
+  "jobs": [
+    {
+      "state": "succeeded",
+      "job_key": "membership_dispatch",
+      "processed": 0,
+      "error_code": null,
+      "started_at": "2026-09-14T03:46:18.23759+00:00",
+      "finished_at": "2026-09-14T03:46:18.303339+00:00"
+    },
+    {
+      "state": "succeeded",
+      "job_key": "membership_prepare",
+      "processed": 0,
+      "error_code": null,
+      "started_at": "2026-09-14T03:45:38.121064+00:00",
+      "finished_at": "2026-09-14T03:45:38.157732+00:00"
+    }
+  ],
+  "grants": 0,
+  "members": 0,
+  "releases": 0,
+  "member_messages": 0
+}

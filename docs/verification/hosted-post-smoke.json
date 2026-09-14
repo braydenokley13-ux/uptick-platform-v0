@@ -1,0 +1,53 @@
+{
+  "checked_at": "2026-09-14T03:44:06.557Z",
+  "base": "https://pilot.upticklocal.com",
+  "deployment": "dpl_X82XhAVUwV1Pgj3BDX3nLyi6LYLM",
+  "scope": "Anonymous rejection checks; reserved fictional number used only for a closed enrollment request. No authenticated journey or carrier delivery claimed.",
+  "results": [
+    {
+      "name": "Closed hosted join",
+      "path": "/api/member",
+      "status": 503,
+      "expected": 503,
+      "pass": true,
+      "cacheControl": "private, no-store",
+      "response": "{\"error\":\"Membership text requests are not available in this environment yet.\"}"
+    },
+    {
+      "name": "Member preference requires session",
+      "path": "/api/member",
+      "status": 401,
+      "expected": 401,
+      "pass": true,
+      "cacheControl": "private, no-store",
+      "response": "{\"error\":\"Open Your Uptick to continue.\"}"
+    },
+    {
+      "name": "Operator admission API requires operator",
+      "path": "/api/pilot-operations",
+      "status": 403,
+      "expected": 403,
+      "pass": true,
+      "cacheControl": "private, no-store",
+      "response": "{\"error\":\"Operator access is required.\"}"
+    },
+    {
+      "name": "Cross-origin account request rejected",
+      "path": "/api/member",
+      "status": 403,
+      "expected": 403,
+      "pass": true,
+      "cacheControl": "private, no-store",
+      "response": "{\"error\":\"Request origin is not allowed.\"}"
+    },
+    {
+      "name": "Unsigned callback rejected",
+      "path": "/api/member-twilio/status",
+      "status": 403,
+      "expected": 403,
+      "pass": true,
+      "cacheControl": "no-store",
+      "response": "Membership callback could not be processed."
+    }
+  ]
+}

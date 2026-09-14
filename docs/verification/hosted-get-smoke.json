@@ -1,0 +1,131 @@
+{
+  "checkedAt": "2026-09-14T03:44:30.293Z",
+  "base": "https://pilot.upticklocal.com",
+  "deployment": {
+    "id": "dpl_X82XhAVUwV1Pgj3BDX3nLyi6LYLM",
+    "sourceCommit": "33dc34325307174137a4b2ea9f6399c0fb43b161",
+    "status": "READY"
+  },
+  "method": "Anonymous HTTP GET; redirect: manual; 15 second request timeout; no cookies, auth, POST, or mutation",
+  "network": {
+    "sandboxAttempt": "All 12 fetches failed during connection setup with TypeError: fetch failed.",
+    "approvedCanonicalRetry": "Successful read-only retry after network escalation against the same canonical host."
+  },
+  "routes": [
+    {
+      "path": "/login",
+      "status": 200,
+      "location": null,
+      "cacheControl": "private, no-cache, no-store, max-age=0, must-revalidate",
+      "contentType": "text/html; charset=utf-8",
+      "bodyBytes": 9651,
+      "textSignals": { "Good to have you back.": true }
+    },
+    {
+      "path": "/join",
+      "status": 200,
+      "location": null,
+      "cacheControl": "private, no-cache, no-store, max-age=0, must-revalidate",
+      "contentType": "text/html; charset=utf-8",
+      "bodyBytes": 17582,
+      "textSignals": { "A little free.": true, "Your next good thing": true }
+    },
+    {
+      "path": "/your-uptick",
+      "status": 307,
+      "location": "/join",
+      "cacheControl": "private, no-cache, no-store, max-age=0, must-revalidate",
+      "contentType": "text/html; charset=utf-8",
+      "bodyBytes": 6052,
+      "textSignals": { "/join": true }
+    },
+    {
+      "path": "/privacy",
+      "status": 200,
+      "location": null,
+      "cacheControl": "private, no-cache, no-store, max-age=0, must-revalidate",
+      "contentType": "text/html; charset=utf-8",
+      "bodyBytes": 14090,
+      "textSignals": { "Your privacy matters.": true, "What we collect": true }
+    },
+    {
+      "path": "/terms",
+      "status": 200,
+      "location": null,
+      "cacheControl": "private, no-cache, no-store, max-age=0, must-revalidate",
+      "contentType": "text/html; charset=utf-8",
+      "bodyBytes": 13439,
+      "textSignals": {
+        "Simple offers. Clear terms.": true,
+        "No SMS or purchase requirement": true
+      }
+    },
+    {
+      "path": "/sms",
+      "status": 200,
+      "location": null,
+      "cacheControl": "private, no-cache, no-store, max-age=0, must-revalidate",
+      "contentType": "text/html; charset=utf-8",
+      "bodyBytes": 13416,
+      "textSignals": { "headingEncodedAsHtmlEntity": true, "Reply STOP": true }
+    },
+    {
+      "path": "/operator/pilot",
+      "status": 307,
+      "location": "/login",
+      "cacheControl": "private, no-cache, no-store, max-age=0, must-revalidate",
+      "contentType": "text/html; charset=utf-8",
+      "bodyBytes": 6540,
+      "textSignals": { "/login": true }
+    },
+    {
+      "path": "/merchant",
+      "status": 307,
+      "location": "/login",
+      "cacheControl": "private, no-cache, no-store, max-age=0, must-revalidate",
+      "contentType": "text/html; charset=utf-8",
+      "bodyBytes": 7371,
+      "textSignals": { "/login": true }
+    },
+    {
+      "path": "/api/growth-programs",
+      "status": 401,
+      "location": null,
+      "cacheControl": "private, no-store",
+      "contentType": "application/json",
+      "bodyBytes": 47,
+      "body": "{\"error\":\"Sign in to your merchant workspace.\"}",
+      "recordsReturned": false
+    },
+    {
+      "path": "/api/pilot-promise",
+      "status": 401,
+      "location": null,
+      "cacheControl": "private, no-store",
+      "contentType": "application/json",
+      "bodyBytes": 32,
+      "body": "{\"error\":\"Sign in to continue.\"}",
+      "recordsReturned": false
+    },
+    {
+      "path": "/api/cron",
+      "status": 401,
+      "location": null,
+      "cacheControl": "public, max-age=0, must-revalidate",
+      "contentType": "text/plain;charset=UTF-8",
+      "bodyBytes": 12,
+      "body": "Unauthorized"
+    },
+    {
+      "path": "/api/cron/prepare",
+      "status": 401,
+      "location": null,
+      "cacheControl": "public, max-age=0, must-revalidate",
+      "contentType": "text/plain;charset=UTF-8",
+      "bodyBytes": 12,
+      "body": "Unauthorized"
+    }
+  ],
+  "result": "PASS",
+  "materialFailures": []
+}
