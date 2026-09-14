@@ -13,6 +13,7 @@ import {
 } from "../src/lib/domain";
 import { verifyNetworkPostgres } from "./verify-postgres-network";
 import { verifyPilotPostgres } from "./verify-postgres-pilot";
+import { verifyLockOrderPostgres } from "./verify-postgres-lock-order";
 import { decrypt } from "../src/lib/security";
 process.env.UPTICK_ENV = "development";
 process.env.UPTICK_LOCAL_MODE = "true";
@@ -245,6 +246,7 @@ try {
   );
   await verifyNetworkPostgres(db);
   await verifyPilotPostgres(db);
+  await verifyLockOrderPostgres(db);
   console.log("ALL SEPARATE-SESSION POSTGRESQL CHECKS PASSED.");
 } finally {
   await sql.end({ timeout: 5 });

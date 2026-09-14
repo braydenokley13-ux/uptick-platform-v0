@@ -637,13 +637,19 @@ async function programForSupply(
   runId: string | null,
   newPlacements: number,
 ) {
-  const [program] = await db.query<{
+  // Find every commercial link for this supply and week FIRST, without
+  // filtering on the approved version. Filtering in the WHERE clause made a
+  // link to a pending, superseded, terminated or wrong-version Program return
+  // no row at all, so genuinely paid supply was silently released as organic.
+  // An unlinked supply is organic; a linked supply must satisfy every
+  // commercial condition or the release is rejected.
+  const links = await db.query<{
     program_id: string;
     program_version: number;
     status: string;
     approved_version: number | null;
-    benefit_ceiling: number;
-    planned_placements: number;
+    benefit_ceiling: number | null;
+    planned_placements: number | null;
     approved_for_run: boolean;
   }>(
     `select l.program_id,l.program_version,p.status,p.approved_version,
@@ -652,22 +658,32 @@ async function programForSupply(
        and a.program_version=l.program_version and a.run_id=$3 and a.decision='approved') approved_for_run
      from program_supply_links l
      join growth_programs p on p.id=l.program_id
-     join growth_program_versions v on v.program_id=l.program_id and v.version=l.program_version
-     join growth_program_week_plans w on w.program_id=l.program_id
+     left join growth_program_versions v on v.program_id=l.program_id and v.version=l.program_version
+     left join growth_program_week_plans w on w.program_id=l.program_id
       and w.program_version=l.program_version and w.week_key=l.week_key
      where l.supply_id=$1 and l.week_key=$2
-      and l.program_version=p.approved_version`,
+     order by l.program_id,l.program_version`,
     [supplyId, week, runId],
   );
-  if (!program) return null;
+  if (!links.length) return null;
+  if (links.length > 1)
+    throw new RequestError(
+      "This supply is linked to more than one Growth Program version for this week. Resolve the commercial attribution before releasing.",
+    );
+  const [program] = links;
   if (
     !runId ||
     !program.approved_for_run ||
+    program.approved_version === null ||
     program.approved_version !== program.program_version ||
     !["approved", "active"].includes(program.status)
   )
     throw new RequestError(
       "Paid supply must come from the approved Program version for this pilot run.",
+    );
+  if (program.benefit_ceiling === null || program.planned_placements === null)
+    throw new RequestError(
+      "The linked Growth Program version has no approved ceiling or weekly plan for this week.",
     );
   const [{ total, week_total }] = await db.query<{
     total: number;
@@ -704,6 +720,14 @@ export async function releaseWeeklyBenefits(
     );
   const fingerprint = releaseFingerprint(input);
   return db.transaction(async (tx) => {
+    // Shared lock order (see docs/PILOT_ARCHITECTURE.md, "Lock order"):
+    // growth_program_coordination -> pilot_runs -> market_cells ->
+    // growth_programs -> network_drop_supplies (id asc) -> uptick_members (id asc).
+    // Program approval takes the coordination singleton before the pilot run, so
+    // the weekly release must do the same or the two deadlock against each other.
+    await tx.query(
+      "select singleton from growth_program_coordination where singleton=true for update",
+    );
     let run:
       | {
           id: string;
@@ -842,16 +866,25 @@ export async function releaseWeeklyBenefits(
     );
     if (members.length !== memberIds.length)
       throw new RequestError("The reviewed cohort includes an unknown member.");
+    // A frozen pilot run already fixed who is owed a benefit. Admission -- not
+    // the member's current, mutable profile geography -- identifies that
+    // obligation, so one admitted member moving house (or having no currently
+    // resolved market at all) cannot block the whole cohort's committed week.
+    // Without a frozen run there is no admission record to rely on, so the
+    // release still has to resolve the audience by current market.
     if (
       members.some(
         (member) =>
-          member.market_id !== input.marketId ||
           member.data_kind !== input.dataKind ||
           member.state !== "active" ||
           !member.verified_at ||
           (input.dataKind === "real" && !member.age_confirmed_at),
       )
     )
+      throw new RequestError(
+        "Every released member must be active, verified, adult-confirmed and in the same cohort classification.",
+      );
+    if (!run && members.some((member) => member.market_id !== input.marketId))
       throw new RequestError(
         "Every released member must be active, verified, adult-confirmed and in the same cohort classification.",
       );
@@ -876,9 +909,6 @@ export async function releaseWeeklyBenefits(
         );
     }
 
-    await tx.query(
-      "select singleton from growth_program_coordination where singleton=true for update",
-    );
     const supplyPrograms = new Map<
       string,
       Awaited<ReturnType<typeof programForSupply>>
@@ -1433,7 +1463,11 @@ export async function issueIncidentRecovery(
       );
       if (
         !fallback ||
-        fallback.state !== "approved" ||
+        // 'exhausted' is a derived capacity observation, not a withdrawal of
+        // the operator's approval. Availability is recomputed from actually
+        // consumed and still-live reservations below, so a fallback whose
+        // reservation expired unused becomes usable again.
+        !["approved", "exhausted"].includes(fallback.state) ||
         fallback.dependency_key === fallback.primary_dependency ||
         fallback.readiness_state !== "ready" ||
         !fallback.owner_approved_by ||
@@ -1488,10 +1522,16 @@ export async function issueIncidentRecovery(
         instructions: fallback.instructions,
         remedy_type: "same_counter",
       };
-      if (used + 1 >= fallback.usable_capacity)
+      // Record the derived observation for operator visibility only. It must
+      // never become a terminal state: an unconsumed reservation that later
+      // expires releases capacity again, and the next recovery recomputes
+      // 'used' from redeemed grants plus still-live reservations.
+      const nextState =
+        used + 1 >= fallback.usable_capacity ? "exhausted" : "approved";
+      if (nextState !== fallback.state)
         await tx.query(
-          "update pilot_supply_fallbacks set state='exhausted',updated_at=now() where id=$1",
-          [fallback.id],
+          "update pilot_supply_fallbacks set state=$2,updated_at=now() where id=$1",
+          [fallback.id, nextState],
         );
     } else {
       if (!input.replacementSupplyId || input.fallbackId)
