@@ -3,6 +3,7 @@ import type { DB } from "./db";
 import { audit, authorize, type Actor } from "./domain";
 import { RequestError } from "./http";
 import { id } from "./security";
+import { loadPilotRun, pilotCapacity } from "./pilot-operations";
 
 export const programObjectives = [
   ["introduce_store", "Introduce the store"],
@@ -27,6 +28,7 @@ const programVersionInput = z.object({
     "quieter_period",
   ]),
   objectiveNote: z.string().trim().max(1000),
+  placementCategory: z.string().trim().min(2).max(80),
   startsOn: day,
   endsOn: day,
   funderOrganizationId: participant,
@@ -86,6 +88,7 @@ type ProgramVersionRecord = {
   name: string;
   objective: string;
   objective_note: string;
+  placement_category: string;
   starts_on: string;
   ends_on: string;
   negotiated_fee_cents: number | null;
@@ -146,6 +149,13 @@ function validateVersionInput(raw: unknown) {
         "Every planned week must fall inside the Program dates.",
       );
   if (data.protection) {
+    if (
+      data.protection.competingCategory.toLowerCase() !==
+      data.placementCategory.toLowerCase()
+    )
+      throw new RequestError(
+        "Use the same category for the paid placement and its protection.",
+      );
     if (!data.locationIds.includes(data.protection.protectedLocationId))
       throw new RequestError(
         "Protection must use a participating Program location.",
@@ -216,13 +226,14 @@ async function insertVersion(
   data: ProgramVersionInput,
 ) {
   await db.query(
-    "insert into growth_program_versions(program_id,version,name,objective,objective_note,starts_on,ends_on,buyer_organization_id,funder_organization_id,fulfiller_organization_id,negotiated_fee_cents,commercial_status,benefit_ceiling,operating_constraints,evaluation_plan,proposed_by) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)",
+    "insert into growth_program_versions(program_id,version,name,objective,objective_note,placement_category,starts_on,ends_on,buyer_organization_id,funder_organization_id,fulfiller_organization_id,negotiated_fee_cents,commercial_status,benefit_ceiling,operating_constraints,evaluation_plan,proposed_by) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)",
     [
       programId,
       version,
       data.name,
       data.objective,
       data.objectiveNote,
+      data.placementCategory.toLowerCase(),
       data.startsOn,
       data.endsOn,
       data.buyerOrganizationId,
@@ -253,7 +264,7 @@ async function insertVersion(
         programId,
         version,
         data.protection.protectedLocationId,
-        data.protection.competingCategory.toLowerCase(),
+        data.placementCategory.toLowerCase(),
         data.protection.radiusMiles,
         data.protection.startsOn,
         data.protection.endsOn,
@@ -541,7 +552,10 @@ function exceptions(value: unknown) {
   }
   return [];
 }
-function miles(a: ProtectionRecord, b: ProtectionRecord) {
+function miles(
+  a: Pick<ProtectionRecord, "latitude" | "longitude">,
+  b: Pick<ProtectionRecord, "latitude" | "longitude">,
+) {
   if (
     a.latitude === null ||
     a.longitude === null ||
@@ -559,22 +573,31 @@ function miles(a: ProtectionRecord, b: ProtectionRecord) {
       Math.sin(lon / 2) ** 2;
   return 3958.8 * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
 }
-function protectedException(a: ProtectionRecord, b: ProtectionRecord) {
-  const aAllowsB = exceptions(a.exceptions).some((token) =>
+type PlacementRecord = {
+  program_id: string;
+  buyer_organization_id: string;
+  location_id: string;
+  placement_category: string;
+  starts_on: string;
+  ends_on: string;
+  latitude: number | null;
+  longitude: number | null;
+};
+
+function protectionAllows(
+  protection: ProtectionRecord,
+  placement: Pick<
+    PlacementRecord,
+    "program_id" | "buyer_organization_id" | "location_id"
+  >,
+) {
+  return exceptions(protection.exceptions).some((token) =>
     [
-      `program:${b.program_id}`,
-      `organization:${b.buyer_organization_id}`,
-      `location:${b.protected_location_id}`,
+      `program:${placement.program_id}`,
+      `organization:${placement.buyer_organization_id}`,
+      `location:${placement.location_id}`,
     ].includes(token),
   );
-  const bAllowsA = exceptions(b.exceptions).some((token) =>
-    [
-      `program:${a.program_id}`,
-      `organization:${a.buyer_organization_id}`,
-      `location:${a.protected_location_id}`,
-    ].includes(token),
-  );
-  return aAllowsB || bAllowsA;
 }
 
 export async function approveGrowthProgramVersion(
@@ -597,6 +620,7 @@ export async function approveGrowthProgramVersion(
     await tx.query(
       "select singleton from growth_program_coordination where singleton=true for update",
     );
+    const run = await loadPilotRun(tx, data.runId, true);
     const [version] = await tx.query<
       ProgramVersionRecord &
         ProgramRecord & {
@@ -647,6 +671,27 @@ export async function approveGrowthProgramVersion(
       throw new RequestError(
         "Agree and record the negotiated fee before approval.",
       );
+    const [{ credited }] = await tx.query<{ credited: number }>(
+      "select coalesce(sum(amount_cents),0)::int credited from growth_program_credits where program_id=$1",
+      [data.programId],
+    );
+    if (Number(version.negotiated_fee_cents) < Number(credited))
+      throw new RequestError(
+        "The amended negotiated fee cannot be lower than credits already recorded for this Program.",
+      );
+    if (
+      version.approved_version &&
+      version.approved_version !== data.programVersion
+    ) {
+      const [issued] = await tx.query<{ id: string }>(
+        "select id from fulfillment_grants where source_program_id=$1 limit 1",
+        [data.programId],
+      );
+      if (issued)
+        throw new RequestError(
+          "This Program already has issued member obligations. Create a new Program for prospective weeks instead of amending it.",
+        );
+    }
 
     const weekPlans = await tx.query<{
       week_key: string;
@@ -792,17 +837,29 @@ export async function approveGrowthProgramVersion(
     const booked = new Map(
       bookedRows.map((row) => [dateValue(row.week_key), Number(row.booked)]),
     );
+    const backed = await pilotCapacity(tx, run);
+    const [{ admitted }] = await tx.query<{ admitted: number }>(
+      "select count(*)::int admitted from pilot_admissions where run_id=$1",
+      [run.id],
+    );
+    const effectiveAudience = run.cohort_frozen_at
+      ? Number(admitted)
+      : Math.min(Number(run.target_members), Number(backed.capacity));
+    if (effectiveAudience < 1)
+      throw new RequestError(
+        "The selected pilot has no backed audience available for paid placements.",
+      );
     const guidance = Math.floor(
-      Number(version.hard_cap) * Number(version.paid_load_guidance),
+      effectiveAudience * Number(version.paid_load_guidance),
     );
     let guidanceExceeded = false;
     for (const week of weekPlans) {
       const total =
         (booked.get(dateValue(week.week_key)) || 0) +
         Number(week.planned_placements);
-      if (total > Number(version.hard_cap))
+      if (total > effectiveAudience)
         throw new RequestError(
-          `Paid placements for ${dateValue(week.week_key)} exceed the pilot member-week hard cap.`,
+          `Paid placements for ${dateValue(week.week_key)} exceed the backed pilot audience of ${effectiveAudience}.`,
         );
       if (total > guidance) guidanceExceeded = true;
     }
@@ -815,35 +872,61 @@ export async function approveGrowthProgramVersion(
       "select x.*,p.buyer_organization_id,l.latitude,l.longitude from growth_program_protections x join growth_programs p on p.id=x.program_id join locations l on l.id=x.protected_location_id where x.program_id=$1 and x.program_version=$2",
       [data.programId, data.programVersion],
     );
+    const candidatePlacements = await tx.query<PlacementRecord>(
+      "select x.program_id,p.buyer_organization_id,x.location_id,v.placement_category,v.starts_on,v.ends_on,l.latitude,l.longitude from growth_program_locations x join growth_programs p on p.id=x.program_id join growth_program_versions v on v.program_id=x.program_id and v.version=x.program_version join locations l on l.id=x.location_id where x.program_id=$1 and x.program_version=$2",
+      [data.programId, data.programVersion],
+    );
+    const activeProtections = await tx.query<ProtectionRecord>(
+      "select x.*,p.buyer_organization_id,l.latitude,l.longitude from growth_programs p join growth_program_protections x on x.program_id=p.id and x.program_version=p.approved_version join locations l on l.id=x.protected_location_id where p.id<>$1 and p.status in ('approved','active')",
+      [data.programId],
+    );
+    for (const existing of activeProtections)
+      for (const placement of candidatePlacements) {
+        const overlappingDates =
+          dateNumber(placement.starts_on) <= dateNumber(existing.ends_on) &&
+          dateNumber(existing.starts_on) <= dateNumber(placement.ends_on);
+        if (
+          overlappingDates &&
+          placement.placement_category.toLowerCase() ===
+            existing.competing_category.toLowerCase() &&
+          !protectionAllows(existing, placement)
+        ) {
+          const distance = miles(existing, placement);
+          if (distance === null)
+            throw new RequestError(
+              "Paid placement locations need coordinates before protection review.",
+            );
+          if (distance <= Number(existing.radius_miles))
+            throw new RequestError(
+              "This paid featured placement conflicts with active commercial protection.",
+            );
+        }
+      }
     if (candidate) {
       if (candidate.latitude === null || candidate.longitude === null)
         throw new RequestError(
           "Add coordinates to the protected location before approval.",
         );
-      const active = await tx.query<ProtectionRecord>(
-        "select x.*,p.buyer_organization_id,l.latitude,l.longitude from growth_programs p join growth_program_protections x on x.program_id=p.id and x.program_version=p.approved_version join locations l on l.id=x.protected_location_id where p.id<>$1 and p.status in ('approved','active')",
+      const activePlacements = await tx.query<PlacementRecord>(
+        "select x.program_id,p.buyer_organization_id,x.location_id,v.placement_category,v.starts_on,v.ends_on,l.latitude,l.longitude from growth_programs p join growth_program_versions v on v.program_id=p.id and v.version=p.approved_version join growth_program_locations x on x.program_id=v.program_id and x.program_version=v.version join locations l on l.id=x.location_id where p.id<>$1 and p.status in ('approved','active')",
         [data.programId],
       );
-      for (const existing of active) {
+      for (const placement of activePlacements) {
         const overlappingDates =
-          dateNumber(candidate.starts_on) <= dateNumber(existing.ends_on) &&
-          dateNumber(existing.starts_on) <= dateNumber(candidate.ends_on);
+          dateNumber(candidate.starts_on) <= dateNumber(placement.ends_on) &&
+          dateNumber(placement.starts_on) <= dateNumber(candidate.ends_on);
         if (
           overlappingDates &&
           candidate.competing_category.toLowerCase() ===
-            existing.competing_category.toLowerCase() &&
-          candidate.placement_scope === existing.placement_scope &&
-          !protectedException(candidate, existing)
+            placement.placement_category.toLowerCase() &&
+          !protectionAllows(candidate, placement)
         ) {
-          const distance = miles(candidate, existing);
+          const distance = miles(candidate, placement);
           if (distance === null)
             throw new RequestError(
-              "Protected locations need coordinates before conflict review.",
+              "Paid placement locations need coordinates before protection review.",
             );
-          if (
-            distance <= Number(candidate.radius_miles) ||
-            distance <= Number(existing.radius_miles)
-          )
+          if (distance <= Number(candidate.radius_miles))
             throw new RequestError(
               "This paid featured placement conflicts with active commercial protection.",
             );
@@ -862,6 +945,8 @@ export async function approveGrowthProgramVersion(
         JSON.stringify({
           weeks: capacity,
           hardCap: Number(version.hard_cap),
+          backedAudience: Number(backed.capacity),
+          effectiveAudience,
           paidLoadGuidance: Number(version.paid_load_guidance),
           guidanceExceeded,
           attentionExceptionReason: data.attentionExceptionReason,
@@ -901,7 +986,7 @@ export async function recordProgramCredit(db: DB, actor: Actor, raw: unknown) {
       programId: key,
       amountCents: z.number().int().positive().max(100_000_000),
       reason: z.string().trim().min(10).max(1000),
-      reference: z.string().trim().max(300),
+      reference: z.string().trim().min(1).max(300),
     })
     .parse(raw);
   return db.transaction(async (tx) => {
@@ -915,6 +1000,24 @@ export async function recordProgramCredit(db: DB, actor: Actor, raw: unknown) {
       throw new RequestError(
         "Approve the negotiated Program before recording a credit.",
       );
+    const [existing] = await tx.query<{
+      id: string;
+      amount_cents: number;
+      reason: string;
+    }>(
+      "select id,amount_cents,reason from growth_program_credits where program_id=$1 and reference=$2",
+      [data.programId, data.reference],
+    );
+    if (existing) {
+      if (
+        Number(existing.amount_cents) === data.amountCents &&
+        existing.reason === data.reason
+      )
+        return existing.id;
+      throw new RequestError(
+        "This Program credit reference already identifies a different credit.",
+      );
+    }
     const [total] = await tx.query<{ credited: number }>(
       "select coalesce(sum(amount_cents),0)::int credited from growth_program_credits where program_id=$1",
       [data.programId],
@@ -927,8 +1030,8 @@ export async function recordProgramCredit(db: DB, actor: Actor, raw: unknown) {
         "Program credits cannot exceed the approved negotiated fee.",
       );
     const creditId = id();
-    await tx.query(
-      "insert into growth_program_credits(id,program_id,amount_cents,reason,reference,approved_by) values($1,$2,$3,$4,$5,$6)",
+    const [inserted] = await tx.query<{ id: string }>(
+      "insert into growth_program_credits(id,program_id,amount_cents,reason,reference,approved_by) values($1,$2,$3,$4,$5,$6) on conflict do nothing returning id",
       [
         creditId,
         data.programId,
@@ -938,6 +1041,25 @@ export async function recordProgramCredit(db: DB, actor: Actor, raw: unknown) {
         actor.id,
       ],
     );
+    if (!inserted) {
+      const [concurrent] = await tx.query<{
+        id: string;
+        amount_cents: number;
+        reason: string;
+      }>(
+        "select id,amount_cents,reason from growth_program_credits where program_id=$1 and reference=$2",
+        [data.programId, data.reference],
+      );
+      if (
+        concurrent &&
+        Number(concurrent.amount_cents) === data.amountCents &&
+        concurrent.reason === data.reason
+      )
+        return concurrent.id;
+      throw new RequestError(
+        "This Program credit reference already identifies a different credit.",
+      );
+    }
     await audit(
       tx,
       actor.id,
@@ -1024,7 +1146,7 @@ export async function growthProgramWorkspace(db: DB, actor: Actor) {
         ProgramRecord &
           ProgramVersionRecord & { market_name: string; credit_cents: number }
       >(
-        "select p.*,v.name,v.objective,v.objective_note,v.starts_on,v.ends_on,v.buyer_organization_id,v.funder_organization_id,v.fulfiller_organization_id,v.negotiated_fee_cents,v.commercial_status,v.benefit_ceiling,v.operating_constraints,v.evaluation_plan,m.name market_name,(select coalesce(sum(c.amount_cents),0)::int from growth_program_credits c where c.program_id=p.id) credit_cents from growth_programs p join growth_program_versions v on v.program_id=p.id and v.version=p.current_version join market_cells m on m.id=p.market_id where p.buyer_organization_id=$1 or v.funder_organization_id=$1 or v.fulfiller_organization_id=$1 order by p.created_at desc",
+        "select p.*,v.name,v.objective,v.objective_note,v.placement_category,v.starts_on,v.ends_on,v.buyer_organization_id,v.funder_organization_id,v.fulfiller_organization_id,v.negotiated_fee_cents,v.commercial_status,v.benefit_ceiling,v.operating_constraints,v.evaluation_plan,m.name market_name,(select coalesce(sum(c.amount_cents),0)::int from growth_program_credits c where c.program_id=p.id) credit_cents from growth_programs p join growth_program_versions v on v.program_id=p.id and v.version=p.current_version join market_cells m on m.id=p.market_id where p.buyer_organization_id=$1 or v.funder_organization_id=$1 or v.fulfiller_organization_id=$1 order by p.created_at desc",
         [organizationId],
       ),
       db.query<Record<string, unknown>>(

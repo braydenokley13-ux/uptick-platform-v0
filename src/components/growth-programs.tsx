@@ -112,6 +112,7 @@ function ProgramForm({
       }))
       .filter((week) => week.weekKey && week.plannedPlacements > 0);
     const fee = value(form, "negotiatedFee");
+    const placementCategory = value(form, "placementCategory");
     const fulfillerOrganizationId =
       existing?.fulfiller_organization_id || data.organization.id;
     const funderOrganizationId =
@@ -128,6 +129,7 @@ function ProgramForm({
         name: value(form, "name"),
         objective: value(form, "objective"),
         objectiveNote: value(form, "objectiveNote"),
+        placementCategory,
         startsOn: value(form, "startsOn"),
         endsOn: value(form, "endsOn"),
         funderOrganizationId,
@@ -142,7 +144,7 @@ function ProgramForm({
         protection: protectedPlacement
           ? {
               protectedLocationId: value(form, "protectedLocationId"),
-              competingCategory: value(form, "competingCategory"),
+              competingCategory: placementCategory,
               radiusMiles: Number(form.get("radiusMiles")),
               startsOn: value(form, "protectionStartsOn"),
               endsOn: value(form, "protectionEndsOn"),
@@ -212,6 +214,21 @@ function ProgramForm({
           defaultValue={existing?.objective_note || ""}
           placeholder="A short, bounded outcome we can evaluate after four weeks."
         />
+      </label>
+      <label>
+        Paid placement category
+        <input
+          name="placementCategory"
+          required
+          minLength={2}
+          maxLength={80}
+          defaultValue={existing?.placement_category || ""}
+          placeholder="For example: convenience store"
+        />
+        <span className="fine-print">
+          Uptick uses this category to honor existing paid placement protection,
+          whether or not this Program requests its own protection.
+        </span>
       </label>
       <div className="gp-form-grid">
         <label>
@@ -404,17 +421,6 @@ function ProgramForm({
                 ))}
               </select>
             </label>
-            <label>
-              Competing category
-              <input
-                name="competingCategory"
-                required
-                defaultValue={String(
-                  existing?.protection?.competing_category ||
-                    "convenience store",
-                )}
-              />
-            </label>
           </div>
           <div className="gp-form-grid three">
             <label>
@@ -568,6 +574,7 @@ function ProgramCard({
         </div>
       </div>
       <div className="gp-role-row">
+        <span>Paid category: {program.placement_category}</span>
         <span>Buyer: {program.buyer_organization_id}</span>
         <span>Funder: {program.funder_organization_id}</span>
         <span>Fulfiller: {program.fulfiller_organization_id}</span>

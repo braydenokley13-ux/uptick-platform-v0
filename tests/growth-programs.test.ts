@@ -84,6 +84,7 @@ function programInput(
     objective: "introduce_breakfast" as const,
     objectiveNote:
       "Introduce the free morning benefit to relevant local members.",
+    placementCategory: "coffee shop",
     startsOn: "2030-01-07",
     endsOn: "2030-01-13",
     funderOrganizationId: buyer,
@@ -101,11 +102,41 @@ function programInput(
   };
 }
 
-async function pilotRun(runId: string, marketId: string, hardCap = 200) {
+async function pilotRun(
+  runId: string,
+  marketId: string,
+  hardCap = 200,
+  targetMembers = hardCap,
+) {
   await db.query(
     "insert into pilot_runs(id,market_id,name,starts_on,ends_on,state,data_kind,target_members,hard_cap,operator_owner,support_owner,backup_support_owner,created_by) values($1,$2,$3,'2030-01-07','2030-02-04','draft','internal',$4,$4,'operator','support','backup','operator')",
-    [runId, marketId, `${marketId} pilot`, hardCap],
+    [runId, marketId, `${marketId} pilot`, targetMembers],
   );
+  if (targetMembers !== hardCap)
+    await db.query("update pilot_runs set hard_cap=$2 where id=$1", [
+      runId,
+      hardCap,
+    ]);
+  const organizationId = marketId === "m2" ? "b" : "a";
+  for (const [index, weekKey] of [
+    "2030-01-07",
+    "2030-01-14",
+    "2030-01-21",
+    "2030-01-28",
+  ].entries()) {
+    const supplyId = `${runId}-backing-${index}`;
+    await approvedSupply({
+      id: supplyId,
+      marketId,
+      organizationId,
+      locationId: `${organizationId}-location`,
+      quantity: targetMembers,
+    });
+    await db.query(
+      "insert into pilot_week_supplies(run_id,week_key,supply_id,committed_quantity,confirmed_by) values($1,$2,$3,$4,'operator')",
+      [runId, weekKey, supplyId, targetMembers],
+    );
+  }
 }
 
 async function approvedSupply(options: {
@@ -427,7 +458,12 @@ test("approval uses stored weekly supply and readiness, then records negotiated 
     /approved Program supply link for this week/,
   );
   const results = await growthProgramWorkspace(db, merchant("a"));
-  assert.equal(Number(results.executions[0].issued), 1);
+  assert.equal(
+    Number(
+      results.executions.find((row) => row.supply_id === "supply-a")?.issued,
+    ),
+    1,
+  );
   const credit = await recordProgramCredit(db, operator, {
     programId,
     amountCents: 2500,
@@ -435,6 +471,25 @@ test("approval uses stored weekly supply and readiness, then records negotiated 
     reference: "incident-1",
   });
   assert.ok(credit);
+  assert.equal(
+    await recordProgramCredit(db, operator, {
+      programId,
+      amountCents: 2500,
+      reason: "Credit for one documented missed service commitment.",
+      reference: "incident-1",
+    }),
+    credit,
+  );
+  await assert.rejects(
+    recordProgramCredit(db, operator, {
+      programId,
+      amountCents: 2000,
+      reason:
+        "A conflicting amount must not reuse the same evidence reference.",
+      reference: "incident-1",
+    }),
+    /already identifies a different credit/,
+  );
   await assert.rejects(
     recordProgramCredit(db, operator, {
       programId,
@@ -453,6 +508,78 @@ test("approval uses stored weekly supply and readiness, then records negotiated 
   assert.equal(amended.programs[0].approved_version, 1);
   assert.equal(amended.programs[0].pending_version, 2);
   assert.equal(amended.programs[0].approved_obligation?.version, 1);
+
+  await linkProgramSupply(db, operator, {
+    programId,
+    programVersion: 2,
+    supplyId: "supply-a",
+    weekKey: "2030-01-07",
+  });
+  await assert.rejects(
+    approveGrowthProgramVersion(db, operator, {
+      programId,
+      programVersion: 2,
+      runId: "run-1",
+      note: "Review the prospective version without changing issued promises.",
+      attentionExceptionReason: null,
+    }),
+    /issued member obligations/,
+  );
+});
+
+test("an amended fee cannot fall below prior credits", async () => {
+  const programId = await createGrowthProgram(db, operator, programInput());
+  await pilotRun("run-credit", "m1", 50);
+  await approvedSupply({
+    id: "credit-supply",
+    marketId: "m1",
+    organizationId: "a",
+    locationId: "a-location",
+  });
+  await db.query(
+    "insert into pilot_week_supplies(run_id,week_key,supply_id,committed_quantity,confirmed_by) values('run-credit','2030-01-07','credit-supply',50,'operator')",
+  );
+  await linkProgramSupply(db, operator, {
+    programId,
+    programVersion: 1,
+    supplyId: "credit-supply",
+    weekKey: "2030-01-07",
+  });
+  await approveGrowthProgramVersion(db, operator, {
+    programId,
+    programVersion: 1,
+    runId: "run-credit",
+    note: "Reviewed the original fee and backed execution capacity.",
+    attentionExceptionReason:
+      "The full fixed cohort receives the single paid featured placement.",
+  });
+  await recordProgramCredit(db, operator, {
+    programId,
+    amountCents: 2500,
+    reason: "Documented credit against the approved service obligation.",
+    reference: "credit-evidence-1",
+  });
+  await proposeGrowthProgramAmendment(db, operator, programId, {
+    ...programInput(),
+    negotiatedFeeCents: 2000,
+  });
+  await linkProgramSupply(db, operator, {
+    programId,
+    programVersion: 2,
+    supplyId: "credit-supply",
+    weekKey: "2030-01-07",
+  });
+  await assert.rejects(
+    approveGrowthProgramVersion(db, operator, {
+      programId,
+      programVersion: 2,
+      runId: "run-credit",
+      note: "This reduced fee cannot erase an already approved credit.",
+      attentionExceptionReason:
+        "The full fixed cohort receives the single paid featured placement.",
+    }),
+    /cannot be lower than credits/,
+  );
 });
 
 test("paid-load guidance requires an explicit operator review while the hard cap stays absolute", async () => {
@@ -505,12 +632,104 @@ test("paid-load guidance requires an explicit operator review while the hard cap
   assert.equal(snapshot.capacity_snapshot.guidanceExceeded, true);
 });
 
-test("paid featured protection catches nearby conflicts across different Market Cells", async () => {
+test("paid placements cannot exceed the backed target audience", async () => {
+  const programId = await createGrowthProgram(
+    db,
+    operator,
+    programInput("a", "m1", "a", "a-location", 151),
+  );
+  await pilotRun("run-audience", "m1", 200, 150);
+  await approvedSupply({
+    id: "audience-supply",
+    marketId: "m1",
+    organizationId: "a",
+    locationId: "a-location",
+    quantity: 151,
+  });
+  await db.query(
+    "insert into pilot_week_supplies(run_id,week_key,supply_id,committed_quantity,confirmed_by) values('run-audience','2030-01-07','audience-supply',151,'operator')",
+  );
+  await linkProgramSupply(db, operator, {
+    programId,
+    programVersion: 1,
+    supplyId: "audience-supply",
+    weekKey: "2030-01-07",
+  });
+  await assert.rejects(
+    approveGrowthProgramVersion(db, operator, {
+      programId,
+      programVersion: 1,
+      runId: "run-audience",
+      note: "Review the paid load against the audience that can receive it.",
+      attentionExceptionReason:
+        "An exception cannot create another member in the backed audience.",
+    }),
+    /exceed the backed pilot audience of 150/,
+  );
+});
+
+test("a frozen run sells paid attention only to its admitted cohort", async () => {
+  const programId = await createGrowthProgram(
+    db,
+    operator,
+    programInput("a", "m1", "a", "a-location", 3),
+  );
+  await pilotRun("run-frozen-audience", "m1", 5);
+  await approvedSupply({
+    id: "frozen-audience-supply",
+    marketId: "m1",
+    organizationId: "a",
+    locationId: "a-location",
+    quantity: 3,
+  });
+  await db.query(
+    "insert into pilot_week_supplies(run_id,week_key,supply_id,committed_quantity,confirmed_by) values('run-frozen-audience','2030-01-07','frozen-audience-supply',3,'operator')",
+  );
+  await linkProgramSupply(db, operator, {
+    programId,
+    programVersion: 1,
+    supplyId: "frozen-audience-supply",
+    weekKey: "2030-01-07",
+  });
+  await db.query(
+    "update pilot_runs set state='enrolling' where id='run-frozen-audience'",
+  );
+  for (const index of [1, 2]) {
+    await db.query("insert into customers(id,phone) values($1,$2)", [
+      `frozen-customer-${index}`,
+      `+1212555000${index}`,
+    ]);
+    await db.query(
+      "insert into uptick_members(id,customer_id,home_zip,market_id,state,verified_at,data_kind,age_confirmed_at) values($1,$2,'10583','m1','active',now(),'internal',now())",
+      [`frozen-member-${index}`, `frozen-customer-${index}`],
+    );
+    await db.query(
+      "insert into pilot_admissions(run_id,member_id,data_kind) values('run-frozen-audience',$1,'internal')",
+      [`frozen-member-${index}`],
+    );
+  }
+  await db.query(
+    "update pilot_runs set state='live' where id='run-frozen-audience'",
+  );
+  await assert.rejects(
+    approveGrowthProgramVersion(db, operator, {
+      programId,
+      programVersion: 1,
+      runId: "run-frozen-audience",
+      note: "Review paid placement count against the frozen admitted cohort.",
+      attentionExceptionReason:
+        "An exception cannot enlarge a cohort after its baseline is frozen.",
+    }),
+    /exceed the backed pilot audience of 2/,
+  );
+});
+
+test("existing paid protection catches a nearby candidate that requests no protection", async () => {
   const firstInput = {
     ...programInput("a", "m1", "a", "a-location", 20),
     protection: {
       protectedLocationId: "a-location",
-      competingCategory: "convenience store",
+      competingCategory: "coffee shop",
       radiusMiles: 1.5,
       startsOn: "2030-01-07",
       endsOn: "2030-01-13",
@@ -522,10 +741,7 @@ test("paid featured protection catches nearby conflicts across different Market 
   };
   const secondInput = {
     ...programInput("b", "m2", "b", "b-location", 20),
-    protection: {
-      ...firstInput.protection,
-      protectedLocationId: "b-location",
-    },
+    protection: null,
   };
   const first = await createGrowthProgram(db, operator, firstInput);
   const second = await createGrowthProgram(db, operator, secondInput);
