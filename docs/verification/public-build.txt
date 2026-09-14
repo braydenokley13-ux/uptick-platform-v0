@@ -1,0 +1,89 @@
+command: npm run build
+working_directory: /private/tmp/uptick-public-verify
+commit: e6174b72a598c5949b3680ada23ac313574e8530
+node: v26.3.1
+npm: 11.16.0
+next: 16.3.1
+
+> uptick-local@0.1.0 build
+> next build
+
+▲ Next.js 16.3.1 (Turbopack)
+✓ Running next.config.mjs took 9ms
+
+  Creating an optimized production build ...
+Turbopack build encountered 3 warnings:
+[next]/internal/font/google/geist_d633ac5f.module.css
+Warning: Error while requesting resource
+There was an issue establishing a connection while requesting https://fonts.googleapis.com/css2?family=Geist:wght@100..900&display=swap
+
+Import trace:
+  Server Component:
+    [next]/internal/font/google/geist_d633ac5f.module.css
+    [next]/internal/font/google/geist_d633ac5f.js
+    ./app/layout.tsx
+
+
+[next]/internal/font/google/geist_mono_86ff035a.module.css
+Warning: Error while requesting resource
+There was an issue establishing a connection while requesting https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&display=swap
+
+Import trace:
+  Server Component:
+    [next]/internal/font/google/geist_mono_86ff035a.module.css
+    [next]/internal/font/google/geist_mono_86ff035a.js
+    ./app/layout.tsx
+
+
+[next]/internal/font/google/newsreader_c026ac94.module.css
+Warning: Error while requesting resource
+There was an issue establishing a connection while requesting https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@1,400&display=swap
+
+Import trace:
+  Server Component:
+    [next]/internal/font/google/newsreader_c026ac94.module.css
+    [next]/internal/font/google/newsreader_c026ac94.js
+    ./app/layout.tsx
+
+
+
+> Build error occurred
+Error: Turbopack build failed with 3 errors:
+[next]/internal/font/google/geist_d633ac5f.module.css
+Error: next/font: error:
+Failed to fetch Geist from Google Fonts.
+If you are offline or behind a proxy, self-host the font with next/font/local, or set HTTP_PROXY/HTTPS_PROXY so Next.js can reach fonts.googleapis.com.
+
+Import trace:
+  Server Component:
+    [next]/internal/font/google/geist_d633ac5f.module.css
+    [next]/internal/font/google/geist_d633ac5f.js
+    ./app/layout.tsx
+
+
+[next]/internal/font/google/geist_mono_86ff035a.module.css
+Error: next/font: error:
+Failed to fetch Geist Mono from Google Fonts.
+If you are offline or behind a proxy, self-host the font with next/font/local, or set HTTP_PROXY/HTTPS_PROXY so Next.js can reach fonts.googleapis.com.
+
+Import trace:
+  Server Component:
+    [next]/internal/font/google/geist_mono_86ff035a.module.css
+    [next]/internal/font/google/geist_mono_86ff035a.js
+    ./app/layout.tsx
+
+
+[next]/internal/font/google/newsreader_c026ac94.module.css
+Error: next/font: error:
+Failed to fetch Newsreader from Google Fonts.
+If you are offline or behind a proxy, self-host the font with next/font/local, or set HTTP_PROXY/HTTPS_PROXY so Next.js can reach fonts.googleapis.com.
+
+Import trace:
+  Server Component:
+    [next]/internal/font/google/newsreader_c026ac94.module.css
+    [next]/internal/font/google/newsreader_c026ac94.js
+    ./app/layout.tsx
+
+
+    at ignore-listed frames
+exit_code: 1

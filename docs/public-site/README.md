@@ -12,6 +12,8 @@ This directory preserves the public-site copy alignment made in the temporary `u
 
 The bundle was verified with `git bundle verify`. It contains the alignment branch and records the public base commit as its prerequisite.
 
+The exact archived commit was reconstructed and verified on September 14, 2026 using a clean `npm ci`, full `tsc --noEmit`, and the production `npm run build`. All passed; the build generated all 15 static pages. The build required network access for its configured Google fonts. See [installation](../verification/public-npm-ci.txt), [TypeScript](../verification/public-typecheck.txt), [production build](../verification/public-build-network.txt), and [bundle verification](../verification/public-archive-verification-in-context.txt). The temporary checkout and dedicated dependency cache were removed after preserving this evidence. No push or publication occurred.
+
 To reconstruct in a checkout that contains the base commit:
 
 ```sh

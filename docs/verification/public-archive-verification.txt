@@ -1,0 +1,9 @@
+command: shasum -a 256 0001-Align-public-pilot-service-copy.patch upticklocal-pilot-service-alignment.bundle PILOT_POLICY_BLOCKERS.md
+78825dcbb6be8b0711fd270990a0b2781b0e39b781a731193c76c38b1086251e  0001-Align-public-pilot-service-copy.patch
+74fafbe195d79f5228d5af6974c7d38683a2dd31955a79fe0795044980552101  upticklocal-pilot-service-alignment.bundle
+6a227f50301d11b69a1807ee598494c939ef59489821f21f3b616490c4e35c77  PILOT_POLICY_BLOCKERS.md
+checksum_exit_code: 0
+command: git bundle verify upticklocal-pilot-service-alignment.bundle
+error: Repository lacks these prerequisite commits:
+error: 7b453a5f765bbb022f2e916dce0f4f0ea63e9717 
+bundle_verify_exit_code: 1

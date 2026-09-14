@@ -1,0 +1,11 @@
+command: npm ci --cache /private/tmp/uptick-public-npm-cache --no-audit --no-fund
+working_directory: /private/tmp/uptick-public-verify
+commit: e6174b72a598c5949b3680ada23ac313574e8530
+
+added 281 packages in 39s
+npm warn allow-scripts 1 package has install scripts not yet covered by allowScripts:
+npm warn allow-scripts   esbuild@0.28.1 (postinstall: node install.js)
+npm warn allow-scripts
+npm warn allow-scripts Run `npm approve-scripts --allow-scripts-pending` to review, or `npm approve-scripts <pkg>` to allow.
+
+exit_code: 0

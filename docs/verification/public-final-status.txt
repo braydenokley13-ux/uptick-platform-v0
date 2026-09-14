@@ -1,0 +1,28 @@
+public_verification_final_status
+working_directory: /private/tmp/uptick-public-verify
+command: git rev-parse HEAD
+e6174b72a598c5949b3680ada23ac313574e8530
+head_exit_code: 0
+command: git status --short
+git_status_exit_code: 0 (no paths above means clean)
+command: git diff --check 7b453a5f765bbb022f2e916dce0f4f0ea63e9717..e6174b72a598c5949b3680ada23ac313574e8530
+diff_check_exit_code: 0
+required_evidence_files:
+-rw-r--r--@ 1 braydenwhite  staff   541 Sep 13 23:06 /Users/braydenwhite/Desktop/uptick-platform-v0/docs/verification/public-archive-verification-in-context.txt
+-rw-r--r--@ 1 braydenwhite  staff   663 Sep 13 23:06 /Users/braydenwhite/Desktop/uptick-platform-v0/docs/verification/public-archive-verification.txt
+-rw-r--r--@ 1 braydenwhite  staff  1117 Sep 13 23:05 /Users/braydenwhite/Desktop/uptick-platform-v0/docs/verification/public-build-network.txt
+-rw-r--r--@ 1 braydenwhite  staff  3057 Sep 13 23:05 /Users/braydenwhite/Desktop/uptick-platform-v0/docs/verification/public-build.txt
+-rw-r--r--@ 1 braydenwhite  staff   797 Sep 13 23:06 /Users/braydenwhite/Desktop/uptick-platform-v0/docs/verification/public-npm-ci-initial-failure.txt
+-rw-r--r--@ 1 braydenwhite  staff   530 Sep 13 23:06 /Users/braydenwhite/Desktop/uptick-platform-v0/docs/verification/public-npm-ci.txt
+-rw-r--r--@ 1 braydenwhite  staff   202 Sep 13 23:05 /Users/braydenwhite/Desktop/uptick-platform-v0/docs/verification/public-typecheck.txt
+required_evidence_files_exit_code: 0
+evidence_sha256:
+2104bee7a1b67eca93d1f69c32109e030908902a85a102226b1a646c6c3bc03f  /Users/braydenwhite/Desktop/uptick-platform-v0/docs/verification/public-npm-ci.txt
+61243975e67e69330ed56e739193fdfeee3f2f92630b057b5fbe150ded1fba0e  /Users/braydenwhite/Desktop/uptick-platform-v0/docs/verification/public-npm-ci-initial-failure.txt
+9c0ebe808400a99e8bf8f550656a46b89bf80a860678b5112b92c639a89d3086  /Users/braydenwhite/Desktop/uptick-platform-v0/docs/verification/public-typecheck.txt
+f14fd1593886e6d371d23845c7c3b151b4d8ef81833bc99b3450401dd566171d  /Users/braydenwhite/Desktop/uptick-platform-v0/docs/verification/public-build.txt
+65503b577f9df7167e0f5cbc20179c666f7fd097a672c7ebe9be2e3b6f694820  /Users/braydenwhite/Desktop/uptick-platform-v0/docs/verification/public-build-network.txt
+581c688018459fee7ced240b2e38cb99b35792269f7ba1039640e250c7cb9543  /Users/braydenwhite/Desktop/uptick-platform-v0/docs/verification/public-archive-verification.txt
+25670bcb0dffb4bec31099e0390416c1a33e3112de8bcbe7b10c74c2844354a3  /Users/braydenwhite/Desktop/uptick-platform-v0/docs/verification/public-archive-verification-in-context.txt
+evidence_sha256_exit_code: 0
+overall_exit_code: 0
