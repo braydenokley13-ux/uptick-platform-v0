@@ -1,0 +1,10 @@
+{
+  "verified_at": "2026-09-14T03:26:34.988Z",
+  "project": "prj_ZHFEe3PL6RGJ1fmkLS0RZ1kC2Bjv",
+  "productionBranch": "claude/bundle-implementation-gdtawu",
+  "public_enrollment_gate": "false",
+  "write_accepted": true,
+  "protection": "sensitive",
+  "target": ["production", "preview"],
+  "existing_protection_preserved": true
+}

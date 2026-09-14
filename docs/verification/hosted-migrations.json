@@ -1,0 +1,44 @@
+{
+  "verified_at": "2026-09-14T03:39:20.655Z",
+  "project": "dmirmwzubafuzoxcporr",
+  "applied": [
+    "014_membership_service.sql",
+    "015_pilot_promises.sql",
+    "016_growth_programs.sql",
+    "017_pilot_operations.sql",
+    "018_runtime_safety.sql",
+    "019_growth_review_fixes.sql",
+    "020_frozen_pilot_cohorts.sql",
+    "021_membership_function_search_paths.sql"
+  ],
+  "application_backup": {
+    "tables": 65,
+    "rows": 31,
+    "restore": "PASS: all65 table counts and fingerprints match",
+    "scope": "public application schema; excludes Auth, Storage and provider PITR",
+    "private_location": ".data/commissioning/public-before-014.json",
+    "permissions": "0600",
+    "gitignored": true
+  },
+  "post_migration_preservation": {
+    "tablesCompared": 64,
+    "differences": [],
+    "allLegacyRowsPreserved": true
+  },
+  "schema": {
+    "public_tables": 97,
+    "tables_without_rls": 0,
+    "public_browser_policies": 0
+  },
+  "advisors": {
+    "function_search_path_warnings": 0,
+    "remaining_warning": "Leaked password protection disabled",
+    "remediation": "https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection"
+  },
+  "notes": [
+    "Initial014connectionfailure was checked against both migration ledgers and member_sessions absence before retrying.",
+    "No existing migration file was rewritten. Repository filenames were recorded in schema_migrations.",
+    "Exact PostgreSQL row text was preserved for backup to avoid JavaScript numeric normalization.",
+    "No Auth user or credential was modified."
+  ]
+}

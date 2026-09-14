@@ -1,0 +1,96 @@
+{
+  "verified_at": "2026-09-14T03:25:56.444Z",
+  "project": "prj_U1rgTJlWYnxdLOOu6wPppoa39W2c",
+  "gates": [
+    {
+      "key": "APP_URL",
+      "configured_value": "https://pilot.upticklocal.com",
+      "protection": "sensitive",
+      "prior_protection": "sensitive",
+      "target": ["production", "preview"],
+      "write_accepted": true,
+      "metadata_matches": true,
+      "secret_values_read": false
+    },
+    {
+      "key": "UPTICK_ENV",
+      "configured_value": "staging",
+      "protection": "sensitive",
+      "prior_protection": "sensitive",
+      "target": ["production"],
+      "write_accepted": true,
+      "metadata_matches": true,
+      "secret_values_read": false
+    },
+    {
+      "key": "UPTICK_LOCAL_MODE",
+      "configured_value": "false",
+      "protection": "sensitive",
+      "prior_protection": "sensitive",
+      "target": ["production", "preview"],
+      "write_accepted": true,
+      "metadata_matches": true,
+      "secret_values_read": false
+    },
+    {
+      "key": "PILOT_ENROLLMENT_ENABLED",
+      "configured_value": "false",
+      "protection": "sensitive",
+      "prior_protection": null,
+      "target": ["production"],
+      "write_accepted": true,
+      "metadata_matches": true,
+      "secret_values_read": false
+    },
+    {
+      "key": "PRODUCTION_DELIVERY_ENABLED",
+      "configured_value": "false",
+      "protection": "encrypted",
+      "prior_protection": "encrypted",
+      "target": ["production"],
+      "write_accepted": true,
+      "metadata_matches": true,
+      "secret_values_read": false
+    },
+    {
+      "key": "SMS_TRANSPORT",
+      "configured_value": "development",
+      "protection": "sensitive",
+      "prior_protection": "sensitive",
+      "target": ["production", "preview"],
+      "write_accepted": true,
+      "metadata_matches": true,
+      "secret_values_read": false
+    },
+    {
+      "key": "MESSAGING_APPROVED",
+      "configured_value": "false",
+      "protection": "sensitive",
+      "prior_protection": "sensitive",
+      "target": ["production", "preview"],
+      "write_accepted": true,
+      "metadata_matches": true,
+      "secret_values_read": false
+    },
+    {
+      "key": "LEGAL_APPROVED",
+      "configured_value": "false",
+      "protection": "sensitive",
+      "prior_protection": "sensitive",
+      "target": ["production", "preview"],
+      "write_accepted": true,
+      "metadata_matches": true,
+      "secret_values_read": false
+    },
+    {
+      "key": "OPERATOR_MFA_REQUIRED",
+      "configured_value": "false",
+      "protection": "sensitive",
+      "prior_protection": null,
+      "target": ["production"],
+      "write_accepted": true,
+      "metadata_matches": true,
+      "secret_values_read": false
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+PUBLIC GITHUB RELEASE PREPARATION: PASS
+
+Repository
+- Public repository: https://github.com/braydenokley13-ux/upticklocal
+- Default branch: main
+- Public main at comparison time: 7b453a5f765bbb022f2e916dce0f4f0ea63e9717
+- Archived branch base: 7b453a5f765bbb022f2e916dce0f4f0ea63e9717
+- Main divergence before push: none; public main was still the exact archived base.
+
+Review branch
+- Branch: codex/pilot-service-alignment
+- Head: e6174b72a598c5949b3680ada23ac313574e8530
+- Relationship to main: 0 commits behind, 1 commit ahead.
+- The bundle reconstructed the exact archived commit; no replacement or follow-up source commit was created.
+- git diff --check origin/main...codex/pilot-service-alignment exited 0.
+- Diff scope: 23 files, 1,146 insertions and 471 deletions.
+- Push completed successfully.
+
+Pull request
+- URL: https://github.com/braydenokley13-ux/upticklocal/pull/13
+- Title: Align public pilot service copy
+- State at final inspection: OPEN
+- Draft: no
+- Mergeability reported by GitHub: MERGEABLE
+- Base/head recorded by GitHub: 7b453a5f765bbb022f2e916dce0f4f0ea63e9717 / e6174b72a598c5949b3680ada23ac313574e8530
+- The PR description records the service-copy scope, the prior TypeScript and production-build verification, the Google-font network limitation, and the remaining enrollment/legal facts from docs/public-site/PILOT_POLICY_BLOCKERS.md.
+
+Checks and Vercel target
+- Vercel deployment status: SUCCESS ("Deployment has completed").
+- Vercel Preview Comments check: SUCCESS.
+- Linked Vercel project: brayden-whites-projects-9b00092f/upticklocal
+- Vercel deployment dashboard: https://vercel.com/brayden-whites-projects-9b00092f/upticklocal/CZxhEjZaDHhcg7ZUPyyP6vKrupeL
+- Branch preview: https://upticklocal-9bd3l0k07-brayden-whites-projects-9b00092f.vercel.app
+- GitHub deployment record: Preview, deployment 6429813055, commit e6174b72a598c5949b3680ada23ac313574e8530.
+- GitHub also reports the existing Production deployment for main commit 7b453a5f765bbb022f2e916dce0f4f0ea63e9717 at https://upticklocal-mqu4l30yt-brayden-whites-projects-9b00092f.vercel.app.
+- No .vercel metadata, vercel.json, or deployment workflow is committed in the public repository. The project identity above comes from GitHub's Vercel status and deployment records.
+
+Publication state
+- The branch push triggered the repository's configured automatic Vercel preview.
+- No production deployment or promotion was requested or performed in this work.
+- The pull request was not merged.
+- No environment variables were viewed or changed.
+- Public pilot enrollment must remain closed until the legal identity, notice address, policy procedures, enrollment workflow, inventory/location readiness, and production SMS requirements listed in the PR are finalized.
+
+Verification reuse and cleanup
+- The clean npm install, standalone TypeScript check, production build, and bundle-integrity checks were already completed for this exact head/base pair and are recorded in docs/verification/public-readiness.txt. They were not repeated because public main had not advanced.
+- The temporary clone was created only to reconstruct, compare, and push the exact archived commit.
+- /private/tmp/uptick-public-release and the temporary PR helper/body files were removed after the final GitHub and deployment inspection.

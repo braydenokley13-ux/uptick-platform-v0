@@ -1,0 +1,37 @@
+Hosted public backup restore rehearsal
+Run at: 2026-09-14T03:33:30Z
+Repository HEAD: 30254cdff4cb302d2d962b393cd1fbf67a16378a
+Command: bash scripts/verify-hosted-public-backup.sh
+
+RESULT: PASS
+
+The verifier accepted the expected hosted project identity and the exact sorted
+001_platform.sql through 013_member_experience.sql migration ledger. It created
+a fresh PostgreSQL 16 cluster under /tmp, enabled fsync and synchronous commit,
+disabled TCP listening, and connected only through that cluster's Unix socket.
+
+The verifier replayed only migrations 001-013. It then restored the PostgreSQL
+JSONB text captured for every row in all 65 public tables. Local trigger
+replication was disabled only inside the disposable restore transaction so that
+immutable-history triggers would not reject historical rows. No trigger was
+changed or disabled on the hosted project.
+
+All 65 restored table counts matched the snapshot. All 65 restored table MD5
+fingerprints matched the snapshot under UTC using:
+
+md5(coalesce(string_agg(to_jsonb(t)::text, E'\n'
+  order by to_jsonb(t)::text collate "C"), ''))
+
+This includes schema_migrations and every legacy public table and row represented
+in the snapshot. Captured row values and credentials were not printed to this
+evidence file. The snapshot remains mode 0600 under the gitignored
+.data/commissioning directory. The temporary PostgreSQL cluster was stopped and
+removed after the check.
+
+Scope and limitations:
+- This proves a local logical restore of the captured public schema rows against
+  repository migrations 001-013.
+- Supabase Auth and Storage are outside this public-schema snapshot.
+- This is not a Supabase provider backup, point-in-time recovery, or hosted
+  recovery test.
+- The verifier made no remote connection and did not touch the hosted project.
