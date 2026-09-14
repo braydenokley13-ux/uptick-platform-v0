@@ -1,0 +1,293 @@
+.growth-programs {
+  display: grid;
+  gap: 24px;
+  max-width: 1180px;
+  margin: 0 auto;
+}
+.gp-panel,
+.gp-card {
+  border: 1px solid #dfe4dd;
+  background: #fff;
+  border-radius: 18px;
+  padding: 28px;
+  box-shadow: 0 8px 30px rgba(31, 43, 34, 0.035);
+}
+.gp-panel > h2,
+.gp-card h2 {
+  margin: 6px 0 12px;
+}
+.gp-explainer,
+.gp-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+.gp-explainer > div {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  align-items: center;
+  padding: 20px;
+  border-radius: 14px;
+  background: #edf4e9;
+  color: #1c3a28;
+}
+.gp-explainer span {
+  grid-column: 2;
+  color: #61716c;
+  font-size: 13px;
+}
+.gp-card-head,
+.gp-actions,
+.gp-role-row,
+.gp-protection,
+.gp-free-promise {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.gp-card-head {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.gp-card-head .badge {
+  flex-shrink: 0;
+}
+.gp-facts {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin: 22px 0;
+}
+.gp-facts > div {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 9px;
+  align-items: center;
+  min-width: 0;
+  padding: 14px;
+  border-radius: 12px;
+  background: #f6f7f3;
+}
+.gp-facts span {
+  color: #68766e;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.gp-facts strong {
+  grid-column: 2;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+.gp-role-row {
+  flex-wrap: wrap;
+  color: #63726a;
+  font-size: 12px;
+}
+.gp-role-row span {
+  padding: 5px 9px;
+  border: 1px solid #dfe4dd;
+  border-radius: 99px;
+}
+.gp-callout,
+.gp-protection,
+.gp-free-promise {
+  margin: 18px 0;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #edf4e9;
+  color: #36523f;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.gp-callout {
+  display: grid;
+  gap: 4px;
+}
+.gp-free-promise p {
+  margin: 0;
+}
+.gp-protection {
+  background: #f5f1df;
+  color: #665b2f;
+}
+.gp-card details {
+  border-top: 1px solid #e5e8e2;
+  margin-top: 20px;
+  padding-top: 16px;
+  color: #5f6f65;
+  line-height: 1.65;
+}
+.gp-card details summary {
+  cursor: pointer;
+  color: #223a2a;
+  font-weight: 650;
+}
+.text-button {
+  border: 0;
+  background: transparent;
+  padding: 16px 0 0;
+  color: #1f6339;
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 650;
+}
+.gp-form {
+  display: grid;
+  gap: 18px;
+  margin-top: 22px;
+}
+.gp-form label,
+.gp-form fieldset {
+  display: grid;
+  gap: 8px;
+  color: #2d4033;
+  font-size: 13px;
+  font-weight: 650;
+}
+.gp-form fieldset {
+  border: 1px solid #dfe4dd;
+  border-radius: 13px;
+  padding: 16px;
+}
+.gp-form legend {
+  padding: 0 7px;
+}
+.gp-form input,
+.gp-form select,
+.gp-form textarea {
+  width: 100%;
+  border: 1px solid #ccd4cb;
+  border-radius: 9px;
+  padding: 11px 12px;
+  background: #fff;
+  color: #15251a;
+  font: inherit;
+  font-weight: 400;
+}
+.gp-form textarea {
+  resize: vertical;
+}
+.gp-form input:focus,
+.gp-form select:focus,
+.gp-form textarea:focus {
+  outline: 2px solid #9cc4a7;
+  outline-offset: 1px;
+}
+.gp-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+.gp-form-grid.three {
+  grid-template-columns: repeat(3, 1fr);
+}
+.gp-checks {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.gp-checks label,
+.gp-protection-toggle {
+  display: flex;
+  grid-template-columns: none;
+  align-items: center;
+  gap: 8px;
+}
+.gp-checks input,
+.gp-protection-toggle input {
+  width: auto;
+}
+.gp-weeks {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.gp-weeks > div {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #f6f7f3;
+}
+.gp-protection-fields {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  background: #faf8ee;
+  border-radius: 13px;
+}
+.gp-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+.gp-notice {
+  padding: 13px 15px;
+  margin: 0;
+  border-radius: 10px;
+  background: #e6f3e8;
+  color: #285d37;
+}
+.gp-list {
+  display: grid;
+  gap: 16px;
+}
+.gp-operator-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+.gp-operator-grid .gp-form {
+  align-content: start;
+  margin: 0;
+  padding: 18px;
+  border: 1px solid #dfe4dd;
+  border-radius: 13px;
+  background: #f8f9f6;
+}
+.gp-operator-grid h3 {
+  margin: 0;
+}
+.gp-card.compact {
+  padding: 22px;
+}
+.gp-card.compact > p {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.gp-card.compact .gp-facts {
+  grid-template-columns: repeat(3, 1fr);
+  margin-bottom: 8px;
+}
+@media (max-width: 900px) {
+  .gp-facts,
+  .gp-weeks {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 650px) {
+  .gp-panel,
+  .gp-card {
+    padding: 20px;
+  }
+  .gp-explainer,
+  .gp-metrics,
+  .gp-facts,
+  .gp-weeks,
+  .gp-form-grid,
+  .gp-form-grid.three,
+  .gp-card.compact .gp-facts {
+    grid-template-columns: 1fr;
+  }
+  .gp-operator-grid {
+    grid-template-columns: 1fr;
+  }
+  .gp-card-head {
+    gap: 8px;
+    flex-direction: column;
+  }
+}
