@@ -4,6 +4,7 @@ import { audit, authorize, type Actor } from "./domain";
 import { RequestError } from "./http";
 import { id } from "./security";
 import { loadPilotRun, pilotCapacity } from "./pilot-operations";
+import { marketWeekWindow } from "./network";
 
 export const programObjectives = [
   ["introduce_store", "Introduce the store"],
@@ -740,6 +741,7 @@ export async function approveGrowthProgramVersion(
       string,
       { planned: number; confirmed: number; fallback: number }
     > = {};
+    const reviewedAt = new Date();
     for (const week of weekPlans) {
       const weekKey = dateValue(week.week_key);
       if (
@@ -757,13 +759,23 @@ export async function approveGrowthProgramVersion(
           `Link approved execution supply for ${weekKey} before approval.`,
         );
       for (const supply of supplies) {
+        const stockConfirmedAt = supply.stock_confirmed_at
+          ? new Date(supply.stock_confirmed_at)
+          : null;
+        const weekEnd = marketWeekWindow(
+          new Date(`${weekKey}T12:00:00Z`),
+          run.timezone!,
+        ).end;
         const ready =
           supply.readiness_state === "ready" &&
           Boolean(supply.owner_approved_by?.trim()) &&
           Boolean(supply.primary_manager?.trim()) &&
           Boolean(supply.primary_contact?.trim()) &&
           Boolean(supply.backup_contact?.trim()) &&
-          Boolean(supply.stock_confirmed_at) &&
+          Boolean(stockConfirmedAt) &&
+          stockConfirmedAt!.getTime() <= reviewedAt.getTime() &&
+          reviewedAt.getTime() - stockConfirmedAt!.getTime() <=
+            72 * 60 * 60 * 1000 &&
           supply.exact_item_confirmed === true &&
           supply.staff_instructions_confirmed === true &&
           Boolean(supply.shifts_briefed_at) &&
@@ -771,7 +783,7 @@ export async function approveGrowthProgramVersion(
           Boolean(supply.qr_rehearsed_at) &&
           Boolean(supply.support_escalation?.trim()) &&
           Boolean(supply.valid_until) &&
-          dateNumber(supply.valid_until) >= dateNumber(weekKey) &&
+          new Date(supply.valid_until!).getTime() >= weekEnd.getTime() &&
           supply.active_staff_qr > 0;
         if (!ready)
           throw new RequestError(

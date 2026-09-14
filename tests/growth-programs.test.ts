@@ -582,6 +582,60 @@ test("an amended fee cannot fall below prior credits", async () => {
   );
 });
 
+test("approval requires recent stock evidence and readiness through the local week", async () => {
+  const programId = await createGrowthProgram(
+    db,
+    operator,
+    programInput("a", "m1", "a", "a-location", 20),
+  );
+  await pilotRun("run-readiness", "m1", 20);
+  await approvedSupply({
+    id: "readiness-supply",
+    marketId: "m1",
+    organizationId: "a",
+    locationId: "a-location",
+    quantity: 20,
+  });
+  await db.query(
+    "insert into pilot_week_supplies(run_id,week_key,supply_id,committed_quantity,confirmed_by) values('run-readiness','2030-01-07','readiness-supply',20,'operator')",
+  );
+  await linkProgramSupply(db, operator, {
+    programId,
+    programVersion: 1,
+    supplyId: "readiness-supply",
+    weekKey: "2030-01-07",
+  });
+  const approve = () =>
+    approveGrowthProgramVersion(db, operator, {
+      programId,
+      programVersion: 1,
+      runId: "run-readiness",
+      note: "Review current stock evidence and the complete local week window.",
+      attentionExceptionReason:
+        "The whole fixed cohort receives this single paid placement.",
+    });
+
+  await db.query(
+    "update destination_readiness set stock_confirmed_at=now()-interval '73 hours' where supply_id='readiness-supply'",
+  );
+  await assert.rejects(approve, /Destination readiness is incomplete/);
+
+  await db.query(
+    "update destination_readiness set stock_confirmed_at=now()+interval '1 minute' where supply_id='readiness-supply'",
+  );
+  await assert.rejects(approve, /Destination readiness is incomplete/);
+
+  await db.query(
+    "update destination_readiness set stock_confirmed_at=now(),valid_until='2030-01-14T04:59:59Z' where supply_id='readiness-supply'",
+  );
+  await assert.rejects(approve, /Destination readiness is incomplete/);
+
+  await db.query(
+    "update destination_readiness set valid_until='2030-01-14T05:00:00Z' where supply_id='readiness-supply'",
+  );
+  assert.ok(await approve());
+});
+
 test("paid-load guidance requires an explicit operator review while the hard cap stays absolute", async () => {
   const programId = await createGrowthProgram(
     db,

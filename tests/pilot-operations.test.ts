@@ -9,6 +9,7 @@ import {
   loadPilotRun,
   pilotCapacity,
   pilotScorecard,
+  partnerSummary,
   recordEconomicEntry,
   reverseEconomicEntry,
   savePartnerCommitment,
@@ -70,7 +71,7 @@ const input = {
   budget: 100,
 };
 const weeks = ["2030-01-07", "2030-01-14", "2030-01-21", "2030-01-28"];
-async function supply(sid: string) {
+async function supply(sid: string, quantity = 2) {
   await db.query(
     "insert into offers(id,organization_id,location_id,kind,state,title) values($1,'store','counter','drop','review','Beverage')",
     [sid],
@@ -80,23 +81,27 @@ async function supply(sid: string) {
     [sid],
   );
   await db.query(
-    "insert into network_drop_supplies(id,market_id,organization_id,location_id,offer_id,offer_version,state,starts_at,expires_at,inventory_policy,quantity,approved_by) values($1,'market','store','counter',$1,1,'approved','2030-01-01','2030-03-01','claim',2,'op')",
-    [sid],
+    "insert into network_drop_supplies(id,market_id,organization_id,location_id,offer_id,offer_version,state,starts_at,expires_at,inventory_policy,quantity,approved_by) values($1,'market','store','counter',$1,1,'approved','2030-01-01','2030-03-01','claim',$2,'op')",
+    [sid, quantity],
   );
   await db.query(
     "insert into pilot_supply_terms(supply_id,exact_item,item_sku,size_label,usable_hours,dependency_key,funder_organization_id,fulfiller_organization_id,data_kind,created_by) values($1,'Bottled beverage','BOTTLE','16 oz','7 AM to 7 PM','cold-stock','store','store','internal','op')",
     [sid],
   );
 }
-async function readyRun() {
-  const runId = await createPilotRun(db, actor, input);
+async function readyRun(count = 2) {
+  const runId = await createPilotRun(db, actor, {
+    ...input,
+    targetMembers: count,
+    hardCap: count,
+  });
   for (const [i, week] of weeks.entries()) {
-    await supply(`s${i}`);
+    await supply(`s${i}`, count);
     await commitPilotSupply(db, actor, {
       runId,
       weekKey: week,
       supplyId: `s${i}`,
-      quantity: 2,
+      quantity: count,
     });
   }
   await savePartnerCommitment(db, actor, {
@@ -189,6 +194,80 @@ test("concurrent admissions stop at capacity; optional SMS and internal data nev
     () => db.query("delete from pilot_admissions where run_id=$1", [runId]),
     /immutable|append.only/i,
   );
+});
+
+test("legacy and other-run redemptions do not inflate pilot or partner use", async () => {
+  const runId = await readyRun(10);
+  const memberIds: string[] = [];
+  for (let index = 1; index <= 10; index++) {
+    const memberId = await member(index);
+    memberIds.push(memberId);
+    assert.equal(
+      (await admitPilotMember(db, actor, { memberId })).state,
+      "admitted",
+    );
+  }
+  await db.query(
+    "insert into pilot_runs(id,market_id,name,starts_on,ends_on,state,data_kind,target_members,hard_cap,operator_owner,support_owner,backup_support_owner,created_by) values('other-run','market','Other run','2030-01-07','2030-02-04','draft','internal',10,10,'Operator','Support','Backup','op')",
+  );
+  await db.query(
+    "insert into weekly_releases(id,run_id,market_id,week_key,state,data_kind,member_count,reviewed_by,request_key,request_fingerprint) values('other-release','other-run','market',$1,'published','internal',10,'op','other-release-request','other-release-fingerprint')",
+    [weeks[1]],
+  );
+
+  for (const memberId of memberIds) {
+    const suffix = memberId.slice(1);
+    const [record] = await db.query<{ customer_id: string }>(
+      "select customer_id from uptick_members where id=$1",
+      [memberId],
+    );
+    for (const [kind, weekKey, supplyId] of [
+      ["legacy", weeks[0], "s0"],
+      ["other", weeks[1], "s1"],
+    ] as const) {
+      const allocationId = `${kind}-allocation-${suffix}`;
+      const claimId = `${kind}-claim-${suffix}`;
+      await db.query(
+        "insert into member_allocations(id,member_id,market_id,week_key) values($1,$2,'market',$3)",
+        [allocationId, memberId, weekKey],
+      );
+      await db.query(
+        "insert into allocation_options(allocation_id,supply_id,market_id,rank,reason) values($1,$2,'market',1,'{}')",
+        [allocationId, supplyId],
+      );
+      let grantId: string | null = null;
+      if (kind === "other") {
+        grantId = `other-grant-${suffix}`;
+        await db.query(
+          "insert into fulfillment_grants(id,release_id,allocation_id,member_id,market_id,week_key,supply_id,organization_id,location_id,offer_id,offer_version,member_snapshot,expires_at,data_kind,state,claimed_at,redeemed_at) values($1,'other-release',$2,$3,'market',$4,$5,'store','counter',$5,1,'{}','2030-02-04','internal','redeemed',now(),now())",
+          [grantId, allocationId, memberId, weekKey, supplyId],
+        );
+      }
+      await db.query(
+        "insert into claims(id,customer_id,organization_id,offer_id,offer_version,token_hash,token_encrypted,snapshot,state,redeemed_at) values($1,$2,'store',$3,1,$4,$4,'{}','redeemed',now())",
+        [claimId, record.customer_id, supplyId, `${kind}-token-${suffix}`],
+      );
+      await db.query(
+        "insert into member_claims(claim_id,member_id,customer_id,organization_id,supply_id,offer_id,allocation_id,grant_id) values($1,$2,$3,'store',$4,$4,$5,$6)",
+        [
+          claimId,
+          memberId,
+          record.customer_id,
+          supplyId,
+          allocationId,
+          grantId,
+        ],
+      );
+    }
+  }
+
+  const scorecard = await pilotScorecard(db, actor, runId);
+  assert.equal(scorecard.denominator, 10);
+  assert.equal(scorecard.firstUse, 0);
+  assert.equal(scorecard.repeatUse, 0);
+  const [partner] = await partnerSummary(db, actor, runId);
+  assert.equal(partner.verified_members, 10);
+  assert.equal(partner.retained_members, 0);
 });
 
 test("a fixed live cohort cannot reopen admissions after a pause", async () => {
