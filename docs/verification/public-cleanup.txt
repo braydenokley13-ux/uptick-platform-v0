@@ -1,0 +1,8 @@
+command: test ! -e /private/tmp/uptick-public-verify && test ! -e /private/tmp/uptick-public-npm-cache
+temporary_checkout_absent_exit_code: 0
+dedicated_npm_cache_absent_exit_code: 0
+command: test -s docs/public-site/upticklocal-pilot-service-alignment.bundle && test -s docs/public-site/0001-Align-public-pilot-service-copy.patch && test -s docs/verification/public-final-status.txt
+archive_bundle_preserved_exit_code: 0
+archive_patch_preserved_exit_code: 0
+final_status_log_preserved_exit_code: 0
+overall_exit_code: 0

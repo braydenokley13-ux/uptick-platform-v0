@@ -1,7 +1,7 @@
 import { after, before, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import { memoryDb, type DB } from "../src/lib/db";
-import { id, decrypt } from "../src/lib/security";
+import { id, decrypt, encrypt, hash, token } from "../src/lib/security";
 import {
   requestMemberAccess,
   confirmMemberAccess,
@@ -16,6 +16,7 @@ import {
   referralLanding,
   acceptReferral,
   acceptPendingReferral,
+  memberIncidentGrant,
   memberHome,
   prepareMembershipWeek,
 } from "../src/lib/member-experience";
@@ -25,6 +26,12 @@ import {
   queueMemberAccess,
 } from "../src/lib/member-messaging";
 import { createRedemptionPoint, redeemAtPoint } from "../src/lib/tap";
+import {
+  issueIncidentRecovery,
+  releaseWeeklyBenefits,
+  reportMemberFulfillmentIncident,
+} from "../src/lib/pilot-promise";
+import { seedSyntheticPilot } from "../scripts/verify-postgres-pilot";
 let db: DB,
   number = 0;
 before(async () => {
@@ -268,12 +275,12 @@ test("later referral handling cannot rewrite an allocation already shown to a me
   const after = await allocateMember(db, friend.member.id);
   assert.deepEqual(after, before);
 });
-test("scheduler pages progress past prepared members and no-supply cohorts", async () => {
+test("notification preparation pages through existing released allocations only", async () => {
   await supply();
   await join({ zip: "10001" });
   await join({ zip: "10001" });
   const available = [await join(), await join(), await join()];
-  assert.equal(await prepareMembershipWeek(db, 2), 0);
+  for (const member of available) await allocateMember(db, member.member.id);
   assert.equal(await prepareMembershipWeek(db, 2), 2);
   assert.equal(await prepareMembershipWeek(db, 2), 1);
   assert.equal(await prepareMembershipWeek(db, 2), 0);
@@ -283,14 +290,7 @@ test("scheduler pages progress past prepared members and no-supply cohorts", asy
       .length,
     3,
   );
-  assert.equal(
-    (
-      await db.query(
-        "select member_id from member_week_preparations where state='waiting_supply'",
-      )
-    ).length,
-    2,
-  );
+  assert.equal((await db.query("select * from member_allocations")).length, 3);
   assert.deepEqual(
     new Set(
       (
@@ -304,8 +304,8 @@ test("scheduler pages progress past prepared members and no-supply cohorts", asy
 });
 test("overlapping scheduler runs create one credential and message per member week atomically", async () => {
   await supply();
-  await join();
-  await join();
+  const members = [await join(), await join()];
+  for (const member of members) await allocateMember(db, member.member.id);
   const results = await Promise.all(
     Array.from({ length: 4 }, () => prepareMembershipWeek(db, 2)),
   );
@@ -340,14 +340,14 @@ test("overlapping scheduler runs create one credential and message per member we
 test("weekly preparation rechecks a choice made after allocation before creating a message or credential", async () => {
   await supply();
   const member = await join();
+  await allocateMember(db, member.member.id);
   let transactions = 0;
   const raced: DB = {
     ...db,
     transaction: async (fn) => {
-      const result = await db.transaction(fn);
       if (++transactions === 1)
         await claimMemberDrop(db, member.credential, "supply");
-      return result;
+      return db.transaction(fn);
     },
   };
   assert.equal(await prepareMembershipWeek(raced), 0);
@@ -359,31 +359,31 @@ test("weekly preparation rechecks a choice made after allocation before creating
   );
   assert.equal(await count("member_claims"), 1);
 });
-test("weekly preparation rechecks geographic relevance after allocation", async () => {
+test("weekly preparation keeps an issued allocation visible after geography changes", async () => {
   await supply();
   const member = await join();
+  await allocateMember(db, member.member.id);
   let transactions = 0;
   const raced: DB = {
     ...db,
     transaction: async (fn) => {
-      const result = await db.transaction(fn);
       if (++transactions === 1)
         await db.query(
           "update uptick_members set home_zip='99999',work_zip=null where id=$1",
           [member.member.id],
         );
-      return result;
+      return db.transaction(fn);
     },
   };
-  assert.equal(await prepareMembershipWeek(raced), 0);
-  assert.equal(await count("member_messages"), 0);
+  assert.equal(await prepareMembershipWeek(raced), 1);
+  assert.equal(await count("member_messages"), 1);
   assert.equal(
     (await db.query("select id from member_access where purpose='drop'"))
       .length,
-    0,
+    1,
   );
 });
-test("latest declined consent and disabled market locations cannot inflate current eligibility or coverage", async () => {
+test("declined promotional consent blocks notification without ending membership eligibility", async () => {
   await supply();
   const member = await join();
   assert.equal((await marketCoverage(db, "market")).coveredMembers, 1);
@@ -391,8 +391,8 @@ test("latest declined consent and disabled market locations cannot inflate curre
     "insert into member_consents(id,member_id,accepted,disclosure_version,disclosure,source_ui) values($1,$2,false,'test','Declined','test')",
     [id(), member.member.id],
   );
-  assert.equal((await eligibleDrops(db, member.member.id)).length, 0);
-  assert.equal((await marketCoverage(db, "market")).activeMembers, 0);
+  assert.equal((await eligibleDrops(db, member.member.id)).length, 1);
+  assert.equal((await marketCoverage(db, "market")).activeMembers, 1);
   assert.equal(await prepareMembershipWeek(db), 0);
   await join();
   await db.query("update market_locations set active=false");
@@ -401,7 +401,7 @@ test("latest declined consent and disabled market locations cannot inflate curre
   assert.equal(disabled.capacity, 0);
   assert.equal(disabled.coveredMembers, 0);
 });
-test("member history uses actual Tap evidence and remains available when membership texts pause", async () => {
+test("member history and issued allocation remain available when promotional texts stop", async () => {
   await supply();
   const member = await join();
   await allocateMember(db, member.member.id);
@@ -429,10 +429,11 @@ test("member history uses actual Tap evidence and remains available when members
     subscribed: false,
   });
   const home = await memberHome(db, member.credential);
-  assert.equal(home.current, null);
+  assert.ok(home.current?.allocation.id);
+  assert.equal(home.marketingSubscribed, false);
   assert.equal(home.history[0].state, "redeemed");
   assert.equal(home.saved?.id, pass.id);
-  assert.equal(home.shareableSupplyId, undefined);
+  assert.equal(home.shareableSupplyId, "supply");
 });
 test("the only saved pass remains on Your Uptick when it no longer appears in new-claim eligibility", async () => {
   await supply();
@@ -442,7 +443,7 @@ test("the only saved pass remains on Your Uptick when it no longer appears in ne
   assert.equal((await eligibleDrops(db, member.member.id)).length, 0);
   const home = await memberHome(db, member.credential);
   assert.ok(home.current?.allocation.id);
-  assert.equal(home.current?.options.length, 0);
+  assert.equal(home.current?.options.length, 1);
   assert.equal(home.saved?.id, pass.id);
   assert.equal(home.shareableSupplyId, "supply");
   await memberPreferences(db, member.credential, {
@@ -450,10 +451,81 @@ test("the only saved pass remains on Your Uptick when it no longer appears in ne
     workZip: "",
     subscribed: false,
   });
-  const paused = await memberHome(db, member.credential);
-  assert.equal(paused.current, null);
-  assert.equal(paused.saved?.id, pass.id);
-  assert.equal(paused.shareableSupplyId, undefined);
+  const unsubscribed = await memberHome(db, member.credential);
+  assert.ok(unsubscribed.current?.allocation.id);
+  assert.equal(unsubscribed.marketingSubscribed, false);
+  assert.equal(unsubscribed.saved?.id, pass.id);
+  assert.equal(unsubscribed.shareableSupplyId, "supply");
+});
+test("the selected member grant is exact and an earlier-week recovery keeps its original private pass", async () => {
+  const fixture = await seedSyntheticPilot(db, 2, "member-recovery");
+  await db.query(
+    "update destination_readiness set valid_until=now()+interval '34 days' where supply_id=$1",
+    [fixture.supplyId],
+  );
+  const released = await releaseWeeklyBenefits(db, fixture.actor, {
+    runId: fixture.runId,
+    marketId: fixture.marketId,
+    weekKey: fixture.weekKey,
+    dataKind: "synthetic",
+    requestKey: "member-recovery-release",
+    assignments: fixture.members.map((member) => ({
+      memberId: member.id,
+      supplyId: fixture.supplyId,
+    })),
+  });
+  const member = fixture.members[0];
+  const accessToken = token();
+  await db.query(
+    `insert into member_access(
+      id,member_id,token_hash,token_encrypted,purpose,expires_at,confirmed_at,
+      disclosure,home_zip,age_attested
+     ) values('member-recovery-access',$1,$2,$3,'access',now()+interval '30 days',now(),
+      'Synthetic member recovery test','10001',true)`,
+    [member.id, hash(accessToken), encrypt(accessToken)],
+  );
+  const claim = await claimMemberDrop(db, accessToken, fixture.supplyId);
+  const grant = released.grants.find((item) => item.member_id === member.id)!;
+  const otherGrant = released.grants.find(
+    (item) => item.member_id !== member.id,
+  )!;
+  assert.equal(await memberIncidentGrant(db, member.id, grant.id), grant.id);
+  await assert.rejects(
+    memberIncidentGrant(db, member.id, otherGrant.id),
+    /not attached to your membership/,
+  );
+  const incidentId = await reportMemberFulfillmentIncident(db, member.id, {
+    grantId: grant.id,
+    incidentType: "out_of_stock",
+    severity: "high",
+    occurredAt: new Date().toISOString(),
+    owner: "member-support",
+    note: "The exact issued item was unavailable.",
+    idempotencyKey: "member-recovery-incident",
+  });
+  const recoveryId = await issueIncidentRecovery(db, fixture.actor, {
+    incidentId,
+    remedyType: "same_counter",
+    fallbackId: fixture.fallbackId,
+    replacementSupplyId: null,
+    payerOrganizationId: fixture.actor.organizationId,
+    payerEvidence: "Synthetic fallback inventory is prepaid.",
+    expiresAt: new Date(Date.now() + 20 * 86400 * 1000).toISOString(),
+  });
+  const home = await memberHome(
+    db,
+    accessToken,
+    new Date(Date.now() + 8 * 86400 * 1000),
+  );
+  assert.equal(home.current, null);
+  assert.equal(home.outstandingRecoveries.length, 1);
+  assert.equal(home.outstandingRecoveries[0].id, recoveryId);
+  assert.equal(home.outstandingRecoveries[0].current_week, false);
+  assert.equal(home.outstandingRecoveries[0].week_key, fixture.weekKey);
+  assert.equal(
+    decrypt(home.outstandingRecoveries[0].token_encrypted),
+    decrypt(claim.token_encrypted),
+  );
 });
 test("dedicated sender separation is enforced in both directions at the database boundary", async () => {
   const service = `MG${"b".repeat(32)}`,

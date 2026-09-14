@@ -1,0 +1,40 @@
+PUBLIC SITE BUILD READINESS: PASS
+
+Source
+- Reconstructed commit: e6174b72a598c5949b3680ada23ac313574e8530
+- Required base commit: 7b453a5f765bbb022f2e916dce0f4f0ea63e9717
+- Reconstructed checkout was clean after verification.
+- git diff --check from base to alignment commit exited 0.
+
+Dependency install
+- npm ci used only /private/tmp/uptick-public-npm-cache.
+- The first sandboxed attempt failed because registry.npmjs.org DNS was unavailable.
+- The network-enabled retry installed 281 locked packages and exited 0.
+- npm emitted an allow-scripts warning for esbuild@0.28.1; it did not fail the install or build.
+
+Type checking
+- ./node_modules/.bin/tsc --noEmit exited 0 with no diagnostics.
+- Next.js also completed its TypeScript phase during the production build.
+
+Production build
+- npm run build exited 0 with Next.js 16.3.1 and Turbopack.
+- Compilation completed successfully.
+- Static generation completed 15/15 page-generation work items.
+- The final route table listed 14 static routes, including / and /_not-found.
+- A first sandboxed build attempt failed only because next/font could not reach Google Fonts.
+- The network-enabled retry fetched Geist, Geist Mono, and Newsreader and completed successfully.
+
+Archive integrity
+- The patch, bundle, and policy-blocker SHA-256 values match docs/public-site/README.md.
+- git bundle verify passed from the reconstructed public repository.
+- The bundle contains e6174b72a598c5949b3680ada23ac313574e8530 and requires 7b453a5f765bbb022f2e916dce0f4f0ea63e9717.
+- The operating pilot repository cannot verify the bundle by itself because it does not contain the required public base commit; that expected failed-context attempt is preserved separately.
+
+Cleanup
+- /private/tmp/uptick-public-verify was removed.
+- /private/tmp/uptick-public-npm-cache was removed.
+- The archived patch and bundle and all public verification logs remain preserved.
+
+Limitations
+- Production builds require outbound access to fonts.googleapis.com while app/layout.tsx uses next/font/google.
+- This bounded check covered deterministic install, standalone TypeScript validation, production compilation, static generation, archive integrity, and cleanup. It did not deploy the site or run a browser smoke test.

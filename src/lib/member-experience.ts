@@ -1,10 +1,9 @@
 import type { DB } from "./db";
-import { id, token, hash, encrypt } from "./security";
-import { weekKey } from "./domain";
+import { id, token, hash, encrypt, decrypt, maskPhone } from "./security";
+import { audit, authorize, weekKey, type Actor } from "./domain";
 import { RequestError } from "./http";
 import {
-  allocateMember,
-  eligibleDrops,
+  allocationView,
   memberAccess,
   demandEvent,
   supplySelect,
@@ -19,7 +18,49 @@ import {
 } from "./member-messaging";
 import { stagingRecipients, uptickEnvironment } from "./environment";
 
-export async function memberHome(db: DB, credential: string) {
+export type MemberOutstandingRecovery = {
+  id: string;
+  state: "issued";
+  expires_at: string;
+  issued_at: string;
+  member_snapshot: {
+    merchant?: string;
+    address?: string;
+    exact_item?: string;
+    size_label?: string;
+    usable_hours?: string;
+    instructions?: string;
+  };
+  original_claim_id: string;
+  original_grant_id: string;
+  token_encrypted: string;
+  week_key: string;
+  current_week: boolean;
+};
+
+export async function memberIncidentGrant(
+  db: DB,
+  memberId: string,
+  grantId: string,
+) {
+  const [grant] = await db.query<{ id: string }>(
+    "select id from fulfillment_grants where id=$1 and member_id=$2",
+    [grantId, memberId],
+  );
+  if (!grant)
+    throw new RequestError(
+      "This issued benefit is not attached to your membership.",
+      404,
+    );
+  return grant.id;
+}
+
+export async function memberHome(
+  db: DB,
+  credential: string,
+  asOf = new Date(),
+) {
+  const viewedAt = asOf.toISOString();
   const identity = await memberAccess(db, credential);
   if (!identity.access.confirmed_at)
     return {
@@ -28,23 +69,34 @@ export async function memberHome(db: DB, credential: string) {
       saved: null,
       shareableSupplyId: undefined,
       history: [],
+      outstandingRecoveries: [] as MemberOutstandingRecovery[],
       market: null,
+      marketingSubscribed: false,
+      marketingConsentAction: null,
+      admission: { state: "unavailable" as const },
     };
-  const [consent] = await db.query<{ accepted: boolean }>(
-    "select accepted from member_consents where member_id=$1 order by sequence desc limit 1",
+  const [consent] = await db.query<{
+    accepted: boolean;
+    consent_action: string;
+  }>(
+    "select accepted,consent_action from member_consents where member_id=$1 and consent_purpose='promotional_membership_sms' order by sequence desc limit 1",
     [identity.member.id],
   );
-  const allocated =
-    identity.member.state === "active" && consent?.accepted
-      ? await allocateMember(db, identity.member.id)
-      : null;
-  const eligible = new Set(
-    (await eligibleDrops(db, identity.member.id)).map((supply) => supply.id),
+  const [allocation] = await db.query<{
+    id: string;
+    member_id: string;
+    market_id: string;
+    week_key: string;
+    created_at: string;
+  }>(
+    `select a.* from member_allocations a join market_cells k on k.id=a.market_id
+     where a.member_id=$1 and a.week_key=to_char(date_trunc('week',$2::timestamptz at time zone k.timezone),'YYYY-MM-DD')
+     order by a.created_at desc limit 1`,
+    [identity.member.id, viewedAt],
   );
-  const options = (allocated?.options || []).filter((option) =>
-    eligible.has(option.id),
-  );
-  const current = allocated ? { ...allocated, options } : null;
+  // This is a read-only account view. Allocation/release is an operator action,
+  // and reserved supply remains visible even after unreserved stock is exhausted.
+  const current = allocation ? await allocationView(db, allocation) : null;
   const history = await db.query<{
     id: string;
     state: "active" | "redeemed" | "invalidated";
@@ -62,8 +114,25 @@ export async function memberHome(db: DB, credential: string) {
     method: string | null;
     current_week: boolean;
   }>(
-    `select c.*,mc.reserved_until,e.method,a.week_key=to_char(date_trunc('week',now() at time zone k.timezone),'YYYY-MM-DD') current_week from member_claims mc join claims c on c.id=mc.claim_id join member_allocations a on a.id=mc.allocation_id join market_cells k on k.id=a.market_id left join redemption_evidence e on e.claim_id=c.id where mc.member_id=$1 order by c.created_at desc,c.id desc limit 20`,
-    [identity.member.id],
+    `select c.*,mc.reserved_until,e.method,a.week_key=to_char(date_trunc('week',$2::timestamptz at time zone k.timezone),'YYYY-MM-DD') current_week from member_claims mc join claims c on c.id=mc.claim_id join member_allocations a on a.id=mc.allocation_id join market_cells k on k.id=a.market_id left join redemption_evidence e on e.claim_id=c.id where mc.member_id=$1 order by c.created_at desc,c.id desc limit 20`,
+    [identity.member.id, viewedAt],
+  );
+  // Recovery belongs to the original pass, even when that pass came from an
+  // earlier week. This authenticated account query intentionally returns the
+  // encrypted pass credential only to the server-rendered member page.
+  const outstandingRecoveries = await db.query<MemberOutstandingRecovery>(
+    `select r.id,r.state,r.expires_at,r.issued_at,r.member_snapshot,
+            r.original_claim_id,r.original_grant_id,c.token_encrypted,a.week_key,
+            a.week_key=to_char(date_trunc('week',$2::timestamptz at time zone k.timezone),'YYYY-MM-DD') current_week
+       from recovery_grants r
+       join member_claims mc on mc.claim_id=r.original_claim_id
+        and mc.member_id=r.member_id and mc.grant_id=r.original_grant_id
+       join claims c on c.id=mc.claim_id
+       join member_allocations a on a.id=mc.allocation_id
+       join market_cells k on k.id=a.market_id
+      where r.member_id=$1 and r.state='issued' and r.expires_at>$2::timestamptz
+      order by r.issued_at desc,r.id desc limit 10`,
+    [identity.member.id, viewedAt],
   );
   const [market] = await db.query<{
     name: string;
@@ -72,18 +141,179 @@ export async function memberHome(db: DB, credential: string) {
   }>("select name,timezone,state from market_cells where id=$1", [
     identity.member.market_id,
   ]);
+  const [admission] = await db.query<{
+    state: "admitted" | "waitlisted";
+    run_id: string;
+    run_name: string;
+  }>(
+    `select 'admitted'::text state,a.run_id,r.name run_name
+       from pilot_admissions a join pilot_runs r on r.id=a.run_id
+      where a.member_id=$1 and r.state<>'complete'
+     union all
+     select 'waitlisted'::text state,w.run_id,r.name run_name
+       from pilot_waitlist w join pilot_runs r on r.id=w.run_id
+      where w.member_id=$1 and r.state<>'complete'
+     order by state limit 1`,
+    [identity.member.id],
+  );
   const saved = history.find((claim) => claim.current_week) || null;
   const shareable = saved
-    ? allocated?.options.find((option) => option.offer_id === saved.offer_id)
-    : options[0];
+    ? current?.options.find((option) => option.offer_id === saved.offer_id)
+    : current?.options[0];
   return {
     ...identity,
     current,
     saved,
     shareableSupplyId: shareable?.shareable ? shareable.id : undefined,
     history,
+    outstandingRecoveries,
     market: market || null,
+    marketingSubscribed: consent?.accepted === true,
+    marketingConsentAction: consent?.consent_action || null,
+    admission: admission || { state: "unavailable" as const },
   };
+}
+
+export async function createMemberSupportRequest(
+  db: DB,
+  credential: string,
+  message?: string,
+) {
+  const { member } = await memberAccess(db, credential, true);
+  const [context] = await db.query<{
+    phone: string;
+    allocation_id: string | null;
+    claim_id: string | null;
+    week_key: string | null;
+  }>(
+    `select c.phone,a.id allocation_id,mc.claim_id,a.week_key
+       from uptick_members m join customers c on c.id=m.customer_id
+       left join member_allocations a on a.member_id=m.id
+       left join member_claims mc on mc.allocation_id=a.id
+      where m.id=$1 order by a.created_at desc limit 1`,
+    [member.id],
+  );
+  await db.query(
+    `insert into member_support_requests(id,member_id,origin,phone_encrypted,body_encrypted,context)
+     values($1,$2,'member_web',$3,$4,$5)`,
+    [
+      id(),
+      member.id,
+      context?.phone ? encrypt(context.phone) : null,
+      message ? encrypt(message) : null,
+      {
+        membershipState: member.state,
+        verified: !!member.verified_at,
+        allocationId: context?.allocation_id || null,
+        claimId: context?.claim_id || null,
+        weekKey: context?.week_key || null,
+      },
+    ],
+  );
+}
+
+export async function memberSupportQueue(db: DB, actor: Actor) {
+  authorize(actor, actor.organizationId, true);
+  const rows = await db.query<{
+    id: string;
+    member_id: string | null;
+    origin: string;
+    body_encrypted: string | null;
+    context: Record<string, unknown>;
+    state: string;
+    created_at: string;
+    phone: string | null;
+    membership_state: string | null;
+    verified_at: string | null;
+    marketing_consent: boolean | null;
+    message_state: string | null;
+    rendered_body_encrypted: string | null;
+    grant_id: string | null;
+    incident_id: string | null;
+    recovery_id: string | null;
+  }>(
+    `select q.*,c.phone,m.state membership_state,m.verified_at,
+      (select accepted from member_consents x where x.member_id=m.id and x.consent_purpose='promotional_membership_sms' order by x.sequence desc limit 1) marketing_consent,
+      (select mm.state from member_messages mm where mm.member_id=m.id order by mm.created_at desc limit 1) message_state,
+      (select mm.rendered_body_encrypted from member_messages mm where mm.member_id=m.id order by mm.created_at desc limit 1) rendered_body_encrypted,
+      (select g.id from fulfillment_grants g where g.member_id=m.id order by g.created_at desc limit 1) grant_id,
+      (select i.id from fulfillment_incidents i where i.member_id=m.id order by i.created_at desc limit 1) incident_id,
+      (select r.id from recovery_grants r where r.member_id=m.id order by r.issued_at desc limit 1) recovery_id
+      from member_support_requests q
+      left join uptick_members m on m.id=q.member_id
+      left join customers c on c.id=m.customer_id
+      where q.state in ('queued','working') order by q.created_at limit 100`,
+  );
+  const reveal = (value: string | null) => {
+    if (!value) return null;
+    try {
+      return decrypt(value);
+    } catch {
+      return "[Encrypted content could not be opened]";
+    }
+  };
+  const redactCredentials = (value: string | null) =>
+    value
+      ? value.replace(/\b[A-Za-z0-9_-]{43}\b/g, "[private credential redacted]")
+      : null;
+  return rows.map((row) => ({
+    id: row.id,
+    memberReference: row.member_id
+      ? `UP-${row.member_id.slice(-6).toUpperCase()}`
+      : null,
+    phoneHint: row.phone ? maskPhone(row.phone) : null,
+    origin: row.origin,
+    note: redactCredentials(reveal(row.body_encrypted)),
+    context: row.context,
+    state: row.state,
+    createdAt: row.created_at,
+    membership: {
+      state: row.membership_state,
+      verified: !!row.verified_at,
+      marketingConsent: row.marketing_consent === true,
+    },
+    latestMessage: {
+      state: row.message_state,
+      text: redactCredentials(reveal(row.rendered_body_encrypted)),
+      privateLinkRedacted: /\b[A-Za-z0-9_-]{43}\b/.test(
+        reveal(row.rendered_body_encrypted) || "",
+      ),
+    },
+    grantId: row.grant_id,
+    incidentId: row.incident_id,
+    recoveryId: row.recovery_id,
+  }));
+}
+
+export async function resolveMemberSupportRequest(
+  db: DB,
+  actor: Actor,
+  requestId: string,
+  resolution: string,
+) {
+  authorize(actor, actor.organizationId, true);
+  const note = resolution.trim();
+  if (note.length < 3 || note.length > 1000)
+    throw new RequestError(
+      "Record how the member support request was resolved.",
+    );
+  await db.transaction(async (tx) => {
+    const [request] = await tx.query<{ id: string; state: string }>(
+      "select id,state from member_support_requests where id=$1 for update",
+      [requestId],
+    );
+    if (!request)
+      throw new RequestError("Choose an existing member support request.", 404);
+    if (!["resolved", "closed"].includes(request.state))
+      await tx.query(
+        "update member_support_requests set state='resolved',resolved_at=now(),resolved_by=$2,resolution_encrypted=$3 where id=$1",
+        [request.id, actor.id, encrypt(note)],
+      );
+    await audit(tx, actor.id, null, "membership.support_resolved", request.id, {
+      priorState: request.state,
+      resolutionRecorded: true,
+    });
+  });
 }
 export async function shareUptick(
   db: DB,
@@ -100,16 +330,7 @@ export async function shareUptick(
       "select timezone from market_cells where id=$1 and state in ('pilot','live')",
       [member.market_id],
     );
-    const [consent] = await tx.query<{ accepted: boolean }>(
-      "select accepted from member_consents where member_id=$1 order by sequence desc limit 1",
-      [member.id],
-    );
-    if (
-      member.state !== "active" ||
-      !member.verified_at ||
-      !consent?.accepted ||
-      !market
-    )
+    if (member.state !== "active" || !member.verified_at || !market)
       throw new RequestError(
         "Your membership needs an active local market before inviting a friend.",
       );
@@ -231,11 +452,6 @@ export async function acceptReferral(
     );
     // Existing members may open a shared invitation, but are never counted as new acquisitions.
     if (!intent || member.state !== "active") return;
-    const [consent] = await tx.query<{ accepted: boolean }>(
-      "select accepted from member_consents where member_id=$1 order by sequence desc limit 1",
-      [member.id],
-    );
-    if (!consent?.accepted) return;
     await tx.query("select id from member_referrals where id=$1 for update", [
       intent.referral_id,
     ]);
@@ -305,14 +521,26 @@ export async function prepareMembershipWeek(db: DB, limit = 100) {
       ? stagingRecipients()
       : null;
   const members = await db.query<
-    Member & { timezone: string; week_key: string }
+    Member & { timezone: string; week_key: string; allocation_id: string }
   >(
-    `select m.*,k.timezone,to_char(date_trunc('week',now() at time zone k.timezone),'YYYY-MM-DD') week_key from uptick_members m join market_cells k on k.id=m.market_id join customers c on c.id=m.customer_id left join member_week_preparations p on p.member_id=m.id and p.week_key=to_char(date_trunc('week',now() at time zone k.timezone),'YYYY-MM-DD') where m.state='active' and m.verified_at is not null and k.state in ('pilot','live') and coalesce((select accepted from member_consents mc where mc.member_id=m.id order by mc.sequence desc limit 1),false) and ($2::text[] is null or c.phone=any($2::text[])) and not exists(select 1 from member_messages msg where msg.member_id=m.id and msg.purpose='drop' and msg.week_key=to_char(date_trunc('week',now() at time zone k.timezone),'YYYY-MM-DD')) and not exists(select 1 from member_claims chosen join member_allocations chosen_week on chosen_week.id=chosen.allocation_id where chosen.member_id=m.id and chosen_week.week_key=to_char(date_trunc('week',now() at time zone k.timezone),'YYYY-MM-DD')) and (p.next_attempt_at is null or p.next_attempt_at<=now()) order by p.attempted_at nulls first,m.created_at,m.id limit $1`,
+    `select m.*,k.timezone,a.week_key,a.id allocation_id
+       from member_allocations a
+       join uptick_members m on m.id=a.member_id
+       join market_cells k on k.id=a.market_id
+       join customers c on c.id=m.customer_id
+       left join member_week_preparations p on p.member_id=m.id and p.week_key=a.week_key
+      where a.week_key=to_char(date_trunc('week',now() at time zone k.timezone),'YYYY-MM-DD')
+        and m.state='active' and m.verified_at is not null
+        and coalesce((select accepted from member_consents mc where mc.member_id=m.id and mc.consent_purpose='promotional_membership_sms' order by mc.sequence desc limit 1),false)
+        and ($2::text[] is null or c.phone=any($2::text[]))
+        and not exists(select 1 from member_messages msg where msg.member_id=m.id and msg.purpose='drop' and msg.week_key=a.week_key)
+        and not exists(select 1 from member_claims chosen where chosen.allocation_id=a.id)
+        and (p.next_attempt_at is null or p.next_attempt_at<=now())
+      order by p.attempted_at nulls first,a.created_at,a.id limit $1`,
     [boundedLimit, recipients],
   );
   let prepared = 0;
   for (const candidate of members) {
-    const allocation = await allocateMember(db, candidate.id);
     const result = await db.transaction(async (tx) => {
       const [member] = await tx.query<Member>(
         "select * from uptick_members where id=$1 for update skip locked",
@@ -338,9 +566,22 @@ export async function prepareMembershipWeek(db: DB, limit = 100) {
           [member.id, candidate.week_key, state, messageId, reason],
         );
       const [consent] = await tx.query<{ accepted: boolean }>(
-        "select accepted from member_consents where member_id=$1 order by sequence desc limit 1",
+        "select accepted from member_consents where member_id=$1 and consent_purpose='promotional_membership_sms' order by sequence desc limit 1",
         [member.id],
       );
+      const [savedAllocation] = await tx.query<{
+        id: string;
+        member_id: string;
+        market_id: string;
+        week_key: string;
+        created_at: string;
+      }>(
+        "select * from member_allocations where id=$1 and member_id=$2 and week_key=$3",
+        [candidate.allocation_id, member.id, candidate.week_key],
+      );
+      const allocation = savedAllocation
+        ? await allocationView(tx, savedAllocation)
+        : null;
       if (
         member.state !== "active" ||
         !member.verified_at ||
@@ -350,8 +591,8 @@ export async function prepareMembershipWeek(db: DB, limit = 100) {
         await mark(
           allocation ? "blocked" : "waiting_supply",
           allocation
-            ? "Membership eligibility changed."
-            : "No eligible supply is available.",
+            ? "Messaging permission changed."
+            : "No released Uptick is available.",
         );
         return false;
       }
@@ -359,7 +600,7 @@ export async function prepareMembershipWeek(db: DB, limit = 100) {
         !allocation?.options.length ||
         allocation.allocation.week_key !== candidate.week_key
       ) {
-        await mark("waiting_supply", "No eligible supply is available.");
+        await mark("waiting_supply", "No released Uptick is available.");
         return false;
       }
       if (
@@ -376,21 +617,7 @@ export async function prepareMembershipWeek(db: DB, limit = 100) {
         );
         return false;
       }
-      // Eligibility may change between allocation and this queue transaction.
-      // Recheck geography, market state, consent, prior claims and inventory together.
-      const currentlyEligible = new Set(
-        (await eligibleDrops(tx, member.id)).map((supply) => supply.id),
-      );
-      const available = allocation.options.filter((option) =>
-        currentlyEligible.has(option.id),
-      );
-      if (!available.length) {
-        await mark(
-          "waiting_supply",
-          "The allocated choices currently have no available supply.",
-        );
-        return false;
-      }
+      const available = allocation.options;
       const expiry = new Date(
         Math.max(
           ...available.map((supply) => new Date(supply.expires_at).getTime()),
@@ -399,7 +626,7 @@ export async function prepareMembershipWeek(db: DB, limit = 100) {
       const privateToken = token(),
         accessId = id();
       await tx.query(
-        "insert into member_access(id,member_id,token_hash,token_encrypted,purpose,expires_at,disclosure,home_zip,work_zip) values($1,$2,$3,$4,'drop',$5,$6,$7,$8)",
+        "insert into member_access(id,member_id,token_hash,token_encrypted,purpose,expires_at,age_attested,disclosure,home_zip,work_zip) values($1,$2,$3,$4,'drop',$5,true,$6,$7,$8)",
         [
           accessId,
           member.id,

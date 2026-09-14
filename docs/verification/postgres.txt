@@ -1,0 +1,21 @@
+waiting for server to start.... done
+server started
+PASS: four simultaneously active independent PostgreSQL sessions.
+Applied migrations: 001_platform.sql, 002_product.sql, 003_operator.sql, 004_integrity.sql, 005_operator_fixes.sql, 006_claim_consent_choices.sql, 007_internal_testing.sql, 008_json_object_integrity.sql, 009_network.sql, 010_tap.sql, 011_membership_messaging.sql, 012_merchant_growth.sql, 013_member_experience.sql, 014_membership_service.sql, 015_pilot_promises.sql, 016_growth_programs.sql, 017_pilot_operations.sql, 018_runtime_safety.sql, 019_growth_review_fixes.sql, 020_frozen_pilot_cohorts.sql
+PASS: four concurrent duplicate claims produce one claim, one message, and one consent-choice record.
+PASS: four concurrent redemptions of one credential record exactly one redemption.
+PASS: competing claims for the final reserved pass admit one customer and fully roll back the other.
+PASS: competing passes for the final redemption produce one successful redemption.
+PASS: concurrent same-week approvals produce one broadcast and one approved-version record.
+PASS: concurrent same-phone claims retain separate merchant entitlements; domain and database reject cross-tenant writes.
+PASS: four members competing for one reserved network perk produce one entitlement and one reservation.
+PASS: concurrent weekly allocations and different merchant choices preserve one immutable allocation and one chosen Uptick.
+PASS: four separate network passes racing at a location QR consume the final redemption exactly once.
+PASS: secure NFC proof reuse across different offers permits one redemption; stale counters and wrong locations fail; fresh counters succeed with exact observed evidence.
+PASS: overlapping weekly schedulers create one access credential and message per member, then advance beyond the first page.
+PASS: six concurrent first-verified friends respect a five-join invitation cap without rolling back any valid membership.
+PASS: competing pending access links credit only the invitation attached to the exact first verification.
+PASS: a 200-member market uses six SQL round trips and cannot count 100 available items as more than 100 covered members.
+PASS: concurrent merchant and membership sender configuration cannot share one service or phone.
+PASS: 150 synthetic grants publish atomically across competing PostgreSQL sessions; claim and recovery keep one allocation, one claim and original evidence.
+ALL SEPARATE-SESSION POSTGRESQL CHECKS PASSED.

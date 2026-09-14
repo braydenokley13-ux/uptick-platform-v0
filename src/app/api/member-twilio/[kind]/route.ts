@@ -6,6 +6,13 @@ import {
 } from "@/lib/member-messaging";
 import { RequestError } from "@/lib/http";
 export const runtime = "nodejs";
+const xml = (value: string) =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ kind: string }> },
@@ -14,8 +21,8 @@ export async function POST(
     const { kind } = await params;
     const { fields, messageId } = await verifyMemberWebhook(request, kind);
     const db = await getDb();
-    if (kind === "inbound") await memberInbound(db, fields);
-    else
+    const inbound = kind === "inbound" ? await memberInbound(db, fields) : null;
+    if (kind !== "inbound")
       await memberMessageStatus(
         db,
         messageId,
@@ -23,7 +30,10 @@ export async function POST(
         fields.MessageStatus,
         fields.ErrorCode,
       );
-    return new Response('<?xml version="1.0" encoding="UTF-8"?><Response/>', {
+    const body = inbound
+      ? `<Response><Message>${xml(inbound.reply)}</Message></Response>`
+      : "<Response/>";
+    return new Response(`<?xml version="1.0" encoding="UTF-8"?>${body}`, {
       headers: { "Content-Type": "text/xml", "Cache-Control": "no-store" },
     });
   } catch (error) {

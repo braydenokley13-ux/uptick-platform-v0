@@ -38,6 +38,12 @@ function liteAdapter(client: PGlite): DB {
 }
 const globalDb = globalThis as unknown as { uptickDb?: Promise<DB> };
 export async function getDb() {
+  // This reused project is operated only from the canonical deployment. Preview
+  // builds may render static content but must not touch shared service records.
+  if (process.env.VERCEL_ENV === "preview")
+    throw Error(
+      "Shared pilot database access is disabled on preview deployments.",
+    );
   if (!globalDb.uptickDb)
     globalDb.uptickDb = (async () => {
       if (process.env.DATABASE_URL)

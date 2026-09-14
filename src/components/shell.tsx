@@ -1,47 +1,30 @@
 import Link from "next/link";
 import {
   LayoutDashboard,
-  Gift,
   ChartNoAxesCombined,
   Store,
   Radio,
   ClipboardCheck,
-  MessageSquare,
   Users,
-  History,
-  Plus,
   ArrowUpRight,
   LifeBuoy,
   ShieldCheck,
-  FlaskConical,
 } from "lucide-react";
 import { Brand, Badge } from "./ui";
 import { ActionButton } from "./forms";
 import type { Actor } from "@/lib/domain";
 import { localMode } from "@/lib/config";
 const merchantLinks = [
-  ["", "Home", LayoutDashboard],
-  ["plan", "Growth Plan", ClipboardCheck],
-  ["drops", "Your Drop", Gift],
-  ["audience", "Local demand", Users],
-  ["network", "Your network", Radio],
+  ["program", "Program", ClipboardCheck],
+  ["fulfillment", "Fulfillment", Store],
   ["results", "Results", ChartNoAxesCombined],
-  ["calendar", "Upcoming Drops", History],
 ] as const;
 const operatorLinks = [
-  ["network", "Network control", LayoutDashboard],
-  ["tap", "Uptick Tap", Radio],
-  ["", "Merchant operations", Store],
-  ["businesses", "Businesses", Store],
-  ["placements", "Placements & QR", Radio],
-  ["offers", "Offers", Gift],
-  ["review", "Review queue", ClipboardCheck],
-  ["messages", "Messages", MessageSquare],
-  ["customers", "Customers", Users],
-  ["audit", "Audit history", History],
-  ["onboarding", "Launch a merchant", Plus],
-  ["creatives", "Screen creative", Radio],
-  ["testing", "Internal testing", FlaskConical],
+  ["pilot", "Today", LayoutDashboard],
+  ["network/markets", "Market", Radio],
+  ["programs", "Programs", ClipboardCheck],
+  ["pilot/support", "Members & support", Users],
+  ["pilot/settings", "Settings", ShieldCheck],
 ] as const;
 export function Shell({
   actor,
@@ -81,12 +64,6 @@ export function Shell({
             ),
           )}
         </nav>
-        {!operator && (
-          <Link className="nav-create" href="/merchant/create">
-            <Plus size={17} />
-            Create a Drop
-          </Link>
-        )}
         <div className="sidebar-bottom">
           <div className="sidebar-note">
             <span className="mini-network" aria-hidden="true">

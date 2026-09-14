@@ -1,12 +1,10 @@
 import { getDb } from "../src/lib/db";
 import { seedNetwork } from "../src/lib/network-seed";
+import { assertLocalSeedEnvironment } from "../src/lib/seed-safety";
 try {
   process.loadEnvFile(".env.local");
 } catch {}
-if (process.env.UPTICK_LOCAL_MODE !== "true")
-  throw Error(
-    "Demo seed requires explicit local mode. Use operator setup for real businesses.",
-  );
+assertLocalSeedEnvironment();
 await seedNetwork(await getDb());
 console.log(
   "Illustrative pilot seeded. No customer activity or delivery metrics fabricated.",

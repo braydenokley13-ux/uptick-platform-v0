@@ -8,6 +8,9 @@ const routes = [
   "/api/merchant-growth",
   "/api/tap",
   "/api/acquisition-visit",
+  "/api/pilot-promise",
+  "/api/pilot-operations",
+  "/api/growth-programs",
 ];
 const publicRoutes = ["/api/member", "/api/tap", "/api/acquisition-visit"];
 const unknownCredential = () => randomBytes(32).toString("base64url");
@@ -140,7 +143,7 @@ test("public network APIs enforce JSON object bodies and actual byte limits", as
   }
 });
 
-test("joining cannot skip explicit membership consent or valid ZIP input", async ({
+test("joining cannot skip adult attestation or valid ZIP input", async ({
   request,
 }) => {
   const phone = "+12015550148";
@@ -175,7 +178,7 @@ test("unknown membership credentials cannot confirm, claim, share, change prefer
       data: {
         action,
         token,
-        acceptMembership: true,
+        acceptMarketing: false,
         homeZip: "10583",
         workZip: "",
         subscribed: true,
@@ -183,7 +186,10 @@ test("unknown membership credentials cannot confirm, claim, share, change prefer
         provider: "google",
       },
     });
-    await expectPrivateError(response, 401, [token, "untrusted-supply"]);
+    await expectPrivateError(response, action === "confirm" ? 404 : 401, [
+      token,
+      "untrusted-supply",
+    ]);
   }
   for (const action of ["pair", "pass-directions"]) {
     const response = await request.post("/api/member", {

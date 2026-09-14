@@ -112,7 +112,7 @@ test("explicit confirmed membership remains separate from all merchant subscript
     1,
   );
 });
-test("public repeat requests cannot overwrite verified geography, attribution or paused consent", async () => {
+test("public repeat requests cannot overwrite verified geography, attribution or promotional opt-out", async () => {
   const joined = await member();
   await memberPreferences(db, joined.credential, {
     homeZip: "10583",
@@ -127,11 +127,20 @@ test("public repeat requests cannot overwrite verified geography, attribution or
   const state = (await memberAccess(db, joined.credential, true)).member;
   assert.equal(state.home_zip, "10583");
   assert.equal(state.source_id, "source");
-  assert.equal(state.state, "paused");
+  assert.equal(state.state, "active");
+  assert.equal(
+    (
+      await db.query<{ accepted: boolean }>(
+        "select accepted from member_consents where member_id=$1 order by sequence desc limit 1",
+        [joined.member.id],
+      )
+    )[0].accepted,
+    false,
+  );
   await confirmMemberAccess(db, joined.credential, true);
   assert.equal(
     (await memberAccess(db, joined.credential)).member.state,
-    "paused",
+    "active",
   );
 });
 test("membership geography gates supply across markets and work ZIP can establish local eligibility", async () => {

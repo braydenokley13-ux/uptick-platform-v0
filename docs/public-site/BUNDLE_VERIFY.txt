@@ -1,0 +1,8 @@
+/Users/braydenwhite/Desktop/uptick-platform-v0/docs/public-site/upticklocal-pilot-service-alignment.bundle is okay
+The bundle contains this ref:
+e6174b72a598c5949b3680ada23ac313574e8530 refs/heads/codex/pilot-service-alignment
+The bundle requires this ref:
+7b453a5f765bbb022f2e916dce0f4f0ea63e9717
+The bundle uses this hash algorithm: sha1
+
+Recorded from `git bundle verify` in the public repository before the temporary clone was removed. Running the same command in the operating repository reports the expected missing prerequisite because that repository does not contain the public base commit.

@@ -70,12 +70,17 @@ export async function POST(request: Request) {
               .parse(data.nfc)
           : undefined,
       });
+      const recovery = "recovery" in result ? result.recovery : null;
       return Response.json(
         {
           redeemed: true,
-          reward: result.claim.snapshot.reward,
-          merchant: result.claim.snapshot.merchant,
-          redeemedAt: result.claim.redeemed_at,
+          reward:
+            recovery?.member_snapshot.exact_item ||
+            result.claim.snapshot.reward,
+          merchant:
+            recovery?.member_snapshot.merchant ||
+            result.claim.snapshot.merchant,
+          redeemedAt: recovery?.redeemed_at || result.claim.redeemed_at,
           timezone: result.claim.snapshot.timezone,
           evidence: result.evidence,
         },

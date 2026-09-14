@@ -4,6 +4,7 @@ import { Brand, Badge } from "./ui";
 import {
   ClaimUptick,
   InviteMember,
+  MemberHelp,
   MemberViewEvent,
   NavigationLinks,
   PairUptick,
@@ -77,12 +78,10 @@ export function PerkIllustration({
 }
 export function DropCard({
   supply,
-  token,
   alternative = false,
   available = true,
 }: {
   supply: Supply;
-  token: string;
   alternative?: boolean;
   available?: boolean;
 }) {
@@ -95,7 +94,7 @@ export function DropCard({
     timeZone: supply.timezone,
   });
   return (
-    <MemberViewEvent token={token} supplyId={supply.id}>
+    <MemberViewEvent supplyId={supply.id}>
       <article className={`member-drop ${alternative ? "alternative" : ""}`}>
         <div className="member-drop-top">
           <p className="eyebrow">
@@ -125,7 +124,7 @@ export function DropCard({
             <span>Limited quantity</span>
           )}
         </div>
-        <ClaimUptick token={token} supplyId={supply.id} disabled={!available} />
+        <ClaimUptick supplyId={supply.id} disabled={!available} />
         <details className="member-fine-details">
           <summary>The details</summary>
           <p>{supply.terms}</p>
@@ -150,7 +149,6 @@ export function DropCard({
             address={supply.address}
             latitude={supply.latitude}
             longitude={supply.longitude}
-            token={token}
             supplyId={supply.id}
           />
         )}
@@ -180,6 +178,10 @@ export async function NetworkPass({
     staff_gated: boolean;
   }>("select * from redemption_evidence where claim_id=$1", [claim.id]);
   const active = state === "active";
+  const grant = data.grant;
+  const recovery = data.recovery;
+  const recoveryActive =
+    recovery?.state === "issued" && new Date(recovery.expires_at) > new Date();
   return (
     <MemberFrame privateView>
       <div className="member-pass-heading">
@@ -191,14 +193,65 @@ export async function NetworkPass({
       >
         <div className="member-drop-top">
           <p className="eyebrow">{claim.snapshot.merchant}</p>
-          <Badge tone={state === "redeemed" || active ? "mint" : "neutral"}>
-            {state === "redeemed"
-              ? "Redeemed"
-              : active
-                ? "Ready to visit"
-                : state}
+          <Badge
+            tone={
+              state === "redeemed" || active || recoveryActive
+                ? "mint"
+                : "neutral"
+            }
+          >
+            {recoveryActive
+              ? "Recovery ready"
+              : state === "redeemed"
+                ? "Redeemed"
+                : active
+                  ? "Ready to visit"
+                  : state}
           </Badge>
         </div>
+        {recovery && (
+          <section className="member-tap-instructions">
+            <p className="eyebrow">BACKED RECOVERY</p>
+            <h2>
+              {recovery.member_snapshot.exact_item || "Your make-good"}
+              {recovery.member_snapshot.size_label
+                ? ` · ${recovery.member_snapshot.size_label}`
+                : ""}
+            </h2>
+            <p>
+              {recovery.member_snapshot.merchant}
+              {recovery.member_snapshot.address
+                ? ` · ${recovery.member_snapshot.address}`
+                : ""}
+            </p>
+            {recovery.member_snapshot.usable_hours && (
+              <p>{recovery.member_snapshot.usable_hours}</p>
+            )}
+            {recovery.member_snapshot.instructions && (
+              <p>{recovery.member_snapshot.instructions}</p>
+            )}
+            <p className="fine">
+              No purchase or member fee is required. The original redemption
+              record below remains unchanged.
+            </p>
+            {recoveryActive ? (
+              <>
+                <PairUptick token={token} />
+                {recovery.member_snapshot.address && (
+                  <NavigationLinks
+                    address={recovery.member_snapshot.address}
+                    passToken={token}
+                  />
+                )}
+              </>
+            ) : (
+              <p className="fine">
+                Recovery status:{" "}
+                {recovery.state === "redeemed" ? "completed" : "expired"}.
+              </p>
+            )}
+          </section>
+        )}
         {state === "redeemed" ? (
           <div className="member-redemption-success" role="status">
             <span>
@@ -263,7 +316,9 @@ export async function NetworkPass({
                   <ol>
                     <li>
                       {supply.verification_mode === "staff_tap"
-                        ? "Show the cashier your qualifying purchase."
+                        ? grant
+                          ? "Show the cashier this issued benefit and the exact promised item. No purchase is required."
+                          : "Show the cashier your qualifying purchase."
                         : "Head to the participating store."}
                     </li>
                     <li>
@@ -315,9 +370,11 @@ export async function NetworkPass({
           <summary>Offer terms</summary>
           <p>{claim.snapshot.terms}</p>
           <p>
-            {supply.inventory_policy === "redemption"
-              ? "Your pass does not reserve inventory. Available until the recorded redemption limit is reached."
-              : "This pass follows the reservation terms saved when you claimed."}
+            {grant
+              ? "This pilot benefit is backed by its issued fulfillment grant. Saving or opening this pass does not use another unit."
+              : supply.inventory_policy === "redemption"
+                ? "Your pass does not reserve inventory. Available until the recorded redemption limit is reached."
+                : "This pass follows the reservation terms saved when you claimed."}
           </p>
         </details>
         {active && (
@@ -329,12 +386,16 @@ export async function NetworkPass({
           />
         )}
       </article>
+      <MemberHelp
+        grantId={grant?.id || null}
+        recoveryState={recovery?.state || null}
+      />
       <div className="member-next-note">
         <p className="eyebrow">THERE’S MORE GOOD TO COME</p>
         <h3>Your next Uptick starts here.</h3>
         <p>
-          One local perk, chosen for you. Keep your private membership link for
-          your next Drop.
+          One local perk, chosen for you. Return to Your Uptick in this
+          signed-in browser for the next released benefit.
         </p>
         <Link className="text-link" href="/your-uptick">
           Back to Your Uptick
@@ -344,13 +405,7 @@ export async function NetworkPass({
     </MemberFrame>
   );
 }
-export function MemberInvite({
-  token,
-  supplyId,
-}: {
-  token: string;
-  supplyId?: string;
-}) {
+export function MemberInvite({ supplyId }: { supplyId?: string }) {
   return (
     <div className="member-invite">
       <div>
@@ -358,7 +413,7 @@ export function MemberInvite({
         <h3>Better with someone nearby.</h3>
         <p>Invite a friend to discover their own Uptick.</p>
       </div>
-      <InviteMember token={token} supplyId={supplyId} />
+      <InviteMember supplyId={supplyId} />
     </div>
   );
 }

@@ -32,11 +32,12 @@ export default async function PassPage({
         <main className="policy-page" id="main">
           <h1>Let’s find your pass.</h1>
           <p>
-            This private link isn’t valid. Open the complete pass link from your
-            Uptick text.
+            This private link isn’t valid. Open Your Uptick in a signed-in
+            browser, or use a one-use recovery code on the membership access
+            page.
           </p>
-          <Link className="text-link" href="/sms">
-            Get help →
+          <Link className="text-link" href="/your-uptick">
+            Open Your Uptick →
           </Link>
         </main>
         <Footer />
@@ -133,7 +134,7 @@ export default async function PassPage({
                     <p>
                       {state === "upcoming"
                         ? `Available from ${new Date(o.starts_at).toLocaleString("en-US", { timeZone: o.timezone })}.`
-                        : "Check your latest Uptick text for another offer, or visit support."}
+                        : "Open Your Uptick for current availability, recovery, and support."}
                     </p>
                   </div>
                 )}

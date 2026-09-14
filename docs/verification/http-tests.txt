@@ -1,0 +1,19 @@
+
+Running 12 tests using 1 worker
+
+(node:19664) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 tests/e2e/http.spec.ts:4:1 › mutation endpoints reject another site before any business action (111ms)
+  ✓   2 tests/e2e/http.spec.ts:15:1 › public actions require JSON and enforce the actual body limit (15ms)
+  ✓   3 tests/e2e/http.spec.ts:34:1 › private exports, QR downloads and operator changes need a signed-in role (14ms)
+  ✓   4 tests/e2e/http.spec.ts:48:1 › scheduler and provider callbacks reject unsigned requests (15ms)
+  ✓   5 tests/e2e/network-http.spec.ts:38:1 › network mutations reject missing, foreign and cross-site origins before any action (93ms)
+  ✓   6 tests/e2e/network-http.spec.ts:57:1 › member lookup, sender changes and dispatch require operator authentication (23ms)
+  ✓   7 tests/e2e/network-http.spec.ts:96:1 › Tap point management, simulation and redemption override require an operator (29ms)
+  ✓   8 tests/e2e/network-http.spec.ts:122:1 › public network APIs enforce JSON object bodies and actual byte limits (47ms)
+  ✓   9 tests/e2e/network-http.spec.ts:146:1 › joining cannot skip adult attestation or valid ZIP input (29ms)
+  ✓  10 tests/e2e/network-http.spec.ts:164:1 › unknown membership credentials cannot confirm, claim, share, change preferences or record engagement (35ms)
+  ✓  11 tests/e2e/network-http.spec.ts:200:1 › a public Tap URL cannot redeem without a private pass or by inventing its credentials (12ms)
+  ✓  12 tests/e2e/network-http.spec.ts:225:1 › unknown acquisition sources cannot record a visit or reveal source context (13ms)
+
+  12 passed (850ms)

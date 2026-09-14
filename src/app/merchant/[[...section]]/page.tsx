@@ -8,6 +8,9 @@ import { loadOfferMetadata } from "@/lib/product";
 import { merchantGrowth } from "@/lib/merchant-growth";
 import { MerchantGrowthView } from "@/components/merchant-growth";
 import "@/components/merchant-growth.css";
+import { growthProgramWorkspace } from "@/lib/growth-programs";
+import { GrowthPrograms } from "@/components/growth-programs";
+import "@/components/growth-programs.css";
 import { Shell } from "@/components/shell";
 import { PageHeading, ButtonLink, Location } from "@/components/ui";
 import { AnchorCard, SourcesTable, SourceDetail } from "@/components/dashboard";
@@ -43,10 +46,26 @@ export default async function Merchant({
       "calendar",
       "activity",
       "loop",
+      "program",
+      "fulfillment",
     ].includes(section)
   )
     notFound();
   const db = await getDb();
+  if (["", "program", "fulfillment", "results"].includes(section)) {
+    const growth = await growthProgramWorkspace(db, actor);
+    const growthSection = (section || "program") as
+      "program" | "fulfillment" | "results";
+    return (
+      <Shell
+        actor={{ ...actor, role: "merchant" }}
+        active={growthSection}
+        name={growth.organization.name}
+      >
+        <GrowthPrograms data={growth} section={growthSection} />
+      </Shell>
+    );
+  }
   if (
     section !== "create" &&
     section !== "anchor" &&

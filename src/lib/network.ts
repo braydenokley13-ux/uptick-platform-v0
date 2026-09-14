@@ -1,43 +1,12 @@
 import type { DB } from "./db";
-import {
-  audit,
-  getPass,
-  rateLimit,
-  weekKey,
-  type Claim,
-  type Snapshot,
-} from "./domain";
-import { id, token, hash, encrypt, normalizePhone } from "./security";
+import { audit, getPass, weekKey, type Claim, type Snapshot } from "./domain";
+import { id, token, hash, encrypt } from "./security";
 import { RequestError } from "./http";
+import { memberAccess, type Member } from "./membership-identity";
+import { demandEvent } from "./demand-events";
+export * from "./membership-identity";
+export { demandEvent } from "./demand-events";
 
-export const MEMBERSHIP_DISCLOSURE_VERSION = "uptick-membership-2026-09-v1";
-import { MEMBERSHIP_DISCLOSURE } from "./membership-copy";
-export { MEMBERSHIP_DISCLOSURE } from "./membership-copy";
-export type Member = {
-  id: string;
-  customer_id: string;
-  home_zip: string;
-  work_zip: string | null;
-  market_id: string | null;
-  source_id: string | null;
-  state: "pending" | "active" | "paused";
-  verified_at: string | null;
-  created_at: string;
-};
-export type Access = {
-  id: string;
-  member_id: string;
-  token_encrypted: string;
-  purpose: "access" | "drop";
-  expires_at: string;
-  confirmed_at: string | null;
-  consent_requested: boolean;
-  disclosure: string;
-  home_zip: string;
-  work_zip: string | null;
-  source_id: string | null;
-  created_at: string;
-};
 export type Supply = {
   id: string;
   market_id: string;
@@ -82,308 +51,32 @@ export type Allocation = {
   week_key: string;
   created_at: string;
 };
-export const supplySelect = `select s.*,o.title,v.qualification,v.reward,v.terms,g.name merchant,g.timezone,g.is_demo,l.address,l.latitude,l.longitude,ml.drive_minutes,p.customer_value,p.reward_cost from network_drop_supplies s join offers o on o.id=s.offer_id join offer_versions v on v.offer_id=s.offer_id and v.version=s.offer_version join organizations g on g.id=s.organization_id join locations l on l.id=s.location_id join market_locations ml on ml.market_id=s.market_id and ml.location_id=s.location_id left join offer_product_metadata p on p.offer_id=s.offer_id and p.version=s.offer_version`;
-const zip = (value: string) => {
-  if (!/^\d{5}$/.test(value))
-    throw new RequestError("Enter a five-digit ZIP code.");
-  return value;
+export type NetworkRecovery = {
+  id: string;
+  state: "issued" | "redeemed";
+  remedy_type: "same_counter" | "replacement_supply";
+  expires_at: string;
+  redeemed_at: string | null;
+  member_snapshot: {
+    merchant?: string;
+    address?: string;
+    exact_item?: string;
+    item_sku?: string;
+    size_label?: string;
+    usable_hours?: string;
+    instructions?: string;
+    required_spend?: number;
+    member_fee?: number;
+  };
 };
-export async function demandEvent(
-  db: DB,
-  input: {
-    kind: string;
-    memberId?: string | null;
-    marketId?: string | null;
-    organizationId?: string | null;
-    locationId?: string | null;
-    sourceId?: string | null;
-    supplyId?: string | null;
-    allocationId?: string | null;
-    claimId?: string | null;
-    detail?: object;
-    dedupKey?: string;
-    evidenceClass?: string;
-  },
-) {
-  await db.query(
-    `insert into demand_events(id,kind,member_id,market_id,organization_id,location_id,source_id,supply_id,allocation_id,claim_id,detail,dedup_key,evidence_class) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) on conflict(dedup_key) do nothing`,
-    [
-      id(),
-      input.kind,
-      input.memberId || null,
-      input.marketId || null,
-      input.organizationId || null,
-      input.locationId || null,
-      input.sourceId || null,
-      input.supplyId || null,
-      input.allocationId || null,
-      input.claimId || null,
-      input.detail || {},
-      input.dedupKey || null,
-      input.evidenceClass || "observed",
-    ],
-  );
-}
-export async function resolveMarket(
-  db: DB,
-  homeZip: string,
-  workZip: string | null,
-) {
-  const [market] = await db.query<{ id: string }>(
-    `select m.id from market_cells m join market_zips z on z.market_id=m.id where m.state in ('building','pilot','live') and (z.zip=$1 or z.zip=$2) order by case when z.zip=$1 then 0 else 1 end,m.slug limit 1`,
-    [homeZip, workZip],
-  );
-  return market?.id || null;
-}
-export async function acquisitionSource(db: DB, sourceToken: string) {
-  const [source] = await db.query<{
-    id: string;
-    name: string;
-    market_id: string;
-    partner_id: string | null;
-    partner: string | null;
-    market: string;
-    state: string;
-  }>(
-    `select s.*,p.name partner,m.name market from acquisition_sources s join market_cells m on m.id=s.market_id left join acquisition_partners p on p.id=s.partner_id where s.token=$1 and s.state='active' and m.state in ('building','pilot','live') and (p.id is null or p.state='active')`,
-    [sourceToken],
-  );
-  if (!source)
-    throw new RequestError(
-      "This Uptick invitation is not available right now.",
-      404,
-    );
-  return source;
-}
-export async function requestMemberAccess(
-  db: DB,
-  input: {
-    phone: string;
-    homeZip?: string;
-    workZip?: string;
-    sourceToken?: string;
-    referralToken?: string;
-    consentRequested: boolean;
-  },
-) {
-  const phone = normalizePhone(input.phone);
-  await rateLimit(db, `member-access:${hash(phone)}`, 6, 3600);
-  return db.transaction(async (tx) => {
-    const source = input.sourceToken
-      ? await acquisitionSource(tx, input.sourceToken)
-      : null;
-    const [customer] = await tx.query<{ id: string }>(
-      "insert into customers(id,phone) values($1,$2) on conflict(phone) do update set phone=excluded.phone returning id",
-      [id(), phone],
-    );
-    let [member] = await tx.query<Member>(
-      "select * from uptick_members where customer_id=$1 for update",
-      [customer.id],
-    );
-    if (!member && !input.homeZip)
-      throw new RequestError("Enter your home ZIP to join Uptick.");
-    const homeZip = zip(input.homeZip || member.home_zip),
-      workZip =
-        input.workZip === undefined
-          ? member?.work_zip || null
-          : input.workZip
-            ? zip(input.workZip)
-            : null;
-    if (!member) {
-      [member] = await tx.query<Member>(
-        "insert into uptick_members(id,customer_id,home_zip,work_zip,market_id,source_id) values($1,$2,$3,$4,$5,$6) returning *",
-        [
-          id(),
-          customer.id,
-          homeZip,
-          workZip,
-          await resolveMarket(tx, homeZip, workZip),
-          source?.id || null,
-        ],
-      );
-      await demandEvent(tx, {
-        kind: "membership_requested",
-        memberId: member.id,
-        marketId: member.market_id,
-        sourceId: member.source_id,
-        dedupKey: `requested:${member.id}`,
-      });
-    }
-    const credential = token();
-    const [access] = await tx.query<Access>(
-      `insert into member_access(id,member_id,token_hash,token_encrypted,expires_at,consent_requested,disclosure,home_zip,work_zip,source_id) values($1,$2,$3,$4,now()+interval '30 minutes',$5,$6,$7,$8,$9) returning *`,
-      [
-        id(),
-        member.id,
-        hash(credential),
-        encrypt(credential),
-        input.consentRequested,
-        MEMBERSHIP_DISCLOSURE,
-        homeZip,
-        workZip,
-        source?.id || null,
-      ],
-    );
-    // Referral credit must originate on this exact pre-verification access request.
-    // Invalid/expired invitations never prevent someone joining Uptick normally.
-    if (
-      input.referralToken &&
-      !member.verified_at &&
-      /^[A-Za-z0-9_-]{43}$/.test(input.referralToken)
-    ) {
-      const [referral] = await tx.query<{ id: string }>(
-        "select r.id from member_referrals r join market_cells k on k.id=r.market_id where r.public_token=$1 and r.expires_at>now() and r.member_id<>$2 and k.state in ('pilot','live')",
-        [input.referralToken, member.id],
-      );
-      if (referral)
-        await tx.query(
-          "insert into access_referral_intents(access_id,member_id,referral_id) values($1,$2,$3)",
-          [access.id, member.id, referral.id],
-        );
-    }
-    return { member, access, credential };
-  });
-}
-export async function memberAccess(
-  db: DB,
-  credential: string,
-  confirmed = false,
-) {
-  if (!/^[A-Za-z0-9_-]{43}$/.test(credential))
-    throw new RequestError("This private Uptick link is not valid.", 404);
-  const [access] = await db.query<Access>(
-    "select * from member_access where token_hash=$1 and expires_at>now()",
-    [hash(credential)],
-  );
-  if (!access || (confirmed && !access.confirmed_at))
-    throw new RequestError("Open your private Uptick link to continue.", 401);
-  const [member] = await db.query<Member>(
-    "select * from uptick_members where id=$1",
-    [access.member_id],
-  );
-  if (!member) throw new RequestError("This membership is unavailable.", 404);
-  return { access, member };
-}
-export async function confirmMemberAccess(
-  db: DB,
-  credential: string,
-  acceptMembership: boolean,
-) {
-  return db.transaction(async (tx) => {
-    const initial = await memberAccess(tx, credential);
-    await tx.query("select id from uptick_members where id=$1 for update", [
-      initial.member.id,
-    ]);
-    const { access, member } = await memberAccess(tx, credential);
-    if (access.confirmed_at) return member;
-    await tx.query(
-      "update member_access set confirmed_at=now(),expires_at=greatest(expires_at,now()+interval '30 days') where id=$1",
-      [access.id],
-    );
-    if (!member.verified_at)
-      await tx.query(
-        "insert into member_first_verifications(member_id,access_id) values($1,$2) on conflict(member_id) do nothing",
-        [member.id, access.id],
-      );
-    // A weekly message is not a new consent request. Reopening an old link cannot resubscribe.
-    const subscribe =
-      access.purpose === "access" &&
-      access.consent_requested &&
-      acceptMembership;
-    const marketId =
-      access.purpose === "access"
-        ? await resolveMarket(tx, access.home_zip, access.work_zip)
-        : member.market_id;
-    await tx.query(
-      `update uptick_members set verified_at=coalesce(verified_at,now()),home_zip=$2,work_zip=$3,market_id=$4,state=case when $5 then 'active' else state end,updated_at=now() where id=$1`,
-      [
-        member.id,
-        access.purpose === "access" ? access.home_zip : member.home_zip,
-        access.purpose === "access" ? access.work_zip : member.work_zip,
-        marketId,
-        subscribe,
-      ],
-    );
-    if (
-      access.purpose === "access" &&
-      access.consent_requested &&
-      (subscribe || member.state === "pending")
-    )
-      await recordMemberConsent(
-        tx,
-        member.id,
-        subscribe,
-        "private-membership-confirmation",
-        access.disclosure,
-      );
-    await demandEvent(tx, {
-      kind: subscribe ? "member_joined" : "member_access_confirmed",
-      memberId: member.id,
-      marketId,
-      sourceId: member.source_id,
-      dedupKey: subscribe ? `joined:${member.id}` : `access:${access.id}`,
-    });
-    return (
-      await tx.query<Member>("select * from uptick_members where id=$1", [
-        member.id,
-      ])
-    )[0];
-  });
-}
-export async function recordMemberConsent(
-  db: DB,
-  memberId: string,
-  accepted: boolean,
-  sourceUi: string,
-  disclosure = MEMBERSHIP_DISCLOSURE,
-) {
-  await db.query(
-    "insert into member_consents(id,member_id,accepted,disclosure_version,disclosure,source_ui) values($1,$2,$3,$4,$5,$6)",
-    [
-      id(),
-      memberId,
-      accepted,
-      MEMBERSHIP_DISCLOSURE_VERSION,
-      disclosure,
-      sourceUi,
-    ],
-  );
-}
-export async function memberPreferences(
-  db: DB,
-  credential: string,
-  input: { homeZip: string; workZip: string; subscribed: boolean },
-) {
-  return db.transaction(async (tx) => {
-    const { member } = await memberAccess(tx, credential, true);
-    await tx.query("select id from uptick_members where id=$1 for update", [
-      member.id,
-    ]);
-    const homeZip = zip(input.homeZip),
-      workZip = input.workZip ? zip(input.workZip) : null;
-    await tx.query(
-      `update uptick_members set home_zip=$2,work_zip=$3,market_id=$4,state=$5,updated_at=now() where id=$1`,
-      [
-        member.id,
-        homeZip,
-        workZip,
-        await resolveMarket(tx, homeZip, workZip),
-        input.subscribed ? "active" : "paused",
-      ],
-    );
-    await recordMemberConsent(
-      tx,
-      member.id,
-      input.subscribed,
-      "member-preferences",
-    );
-    await demandEvent(tx, {
-      kind: "member_preferences_saved",
-      memberId: member.id,
-      detail: { subscribed: input.subscribed },
-    });
-  });
-}
+export type NetworkGrant = {
+  id: string;
+  supply_id: string;
+  state: "issued" | "claimed" | "redeemed";
+  expires_at: string;
+  member_snapshot: Snapshot & Record<string, unknown>;
+};
+export const supplySelect = `select s.*,o.title,v.qualification,v.reward,v.terms,g.name merchant,g.timezone,g.is_demo,l.address,l.latitude,l.longitude,ml.drive_minutes,p.customer_value,p.reward_cost from network_drop_supplies s join offers o on o.id=s.offer_id join offer_versions v on v.offer_id=s.offer_id and v.version=s.offer_version join organizations g on g.id=s.organization_id join locations l on l.id=s.location_id join market_locations ml on ml.market_id=s.market_id and ml.location_id=s.location_id left join offer_product_metadata p on p.offer_id=s.offer_id and p.version=s.offer_version`;
 async function supplyUsages(db: DB, supplyIds: string[], at = new Date()) {
   if (!supplyIds.length) return new Map<string, SupplyUsage>();
   const rows = await db.query<{
@@ -393,9 +86,51 @@ async function supplyUsages(db: DB, supplyIds: string[], at = new Date()) {
     adjustment: number;
     claimed: number;
     redeemed: number;
-    reserved: number;
+    legacy_reserved: number;
+    grant_total: number;
+    grant_redeemed: number;
+    committed: number;
+    recoveries: number;
   }>(
-    `with adjustments as (select supply_id,sum(delta)::int adjustment from supply_adjustments where supply_id=any($1::text[]) group by supply_id), usage as (select mc.supply_id,count(*)::int claimed,count(*) filter(where c.state='redeemed')::int redeemed,count(*) filter(where c.state='active' and (mc.reserved_until is null or mc.reserved_until>$2) and (c.snapshot->>'expires_at')::timestamptz>$2)::int reserved from member_claims mc join claims c on c.id=mc.claim_id where mc.supply_id=any($1::text[]) group by mc.supply_id) select s.id,s.quantity,s.inventory_policy,coalesce(a.adjustment,0) adjustment,coalesce(u.claimed,0) claimed,coalesce(u.redeemed,0) redeemed,coalesce(u.reserved,0) reserved from network_drop_supplies s left join adjustments a on a.supply_id=s.id left join usage u on u.supply_id=s.id where s.id=any($1::text[])`,
+    `with adjustments as (
+       select supply_id,sum(delta)::int adjustment from supply_adjustments
+        where supply_id=any($1::text[]) group by supply_id
+     ), claim_usage as (
+       select mc.supply_id,count(*)::int claimed,
+        count(*) filter(where c.state='redeemed')::int redeemed,
+        count(*) filter(where mc.grant_id is null and c.state='active'
+          and (mc.reserved_until is null or mc.reserved_until>$2)
+          and (c.snapshot->>'expires_at')::timestamptz>$2)::int legacy_reserved
+       from member_claims mc join claims c on c.id=mc.claim_id
+       where mc.supply_id=any($1::text[]) group by mc.supply_id
+     ), grant_usage as (
+       select supply_id,
+        count(*) filter(where state='redeemed' or expires_at>$2)::int grant_total,
+        count(*) filter(where state='redeemed')::int grant_redeemed
+       from fulfillment_grants where supply_id=any($1::text[]) group by supply_id
+     ), commitments as (
+       select ws.supply_id,max(ws.committed_quantity)::int committed
+       from pilot_week_supplies ws join pilot_runs r on r.id=ws.run_id
+       where ws.supply_id=any($1::text[]) and r.state in ('enrolling','live','paused')
+       group by ws.supply_id
+     ), recovery_usage as (
+       select replacement_supply_id supply_id,count(*)::int recoveries
+       from recovery_grants where replacement_supply_id=any($1::text[])
+        and (state='redeemed' or expires_at>$2) group by replacement_supply_id
+     )
+     select s.id,s.quantity,s.inventory_policy,coalesce(a.adjustment,0) adjustment,
+      coalesce(cu.claimed,0) claimed,coalesce(cu.redeemed,0) redeemed,
+      coalesce(cu.legacy_reserved,0) legacy_reserved,
+      coalesce(gu.grant_total,0) grant_total,
+      coalesce(gu.grant_redeemed,0) grant_redeemed,
+      coalesce(cm.committed,0) committed,coalesce(ru.recoveries,0) recoveries
+     from network_drop_supplies s
+     left join adjustments a on a.supply_id=s.id
+     left join claim_usage cu on cu.supply_id=s.id
+     left join grant_usage gu on gu.supply_id=s.id
+     left join commitments cm on cm.supply_id=s.id
+     left join recovery_usage ru on ru.supply_id=s.id
+     where s.id=any($1::text[])`,
     [supplyIds, at.toISOString()],
   );
   return new Map(
@@ -404,9 +139,17 @@ async function supplyUsages(db: DB, supplyIds: string[], at = new Date()) {
         s.inventory_policy === "unlimited"
           ? null
           : Math.max(0, (s.quantity || 0) + s.adjustment);
-      const reserved = ["claim", "timed"].includes(s.inventory_policy)
-        ? s.reserved
+      const legacyReserved = ["claim", "timed"].includes(s.inventory_policy)
+        ? s.legacy_reserved
         : 0;
+      // Commitments and issued grants describe the same primary units. Taking
+      // their maximum prevents both under-counting an unpublished commitment
+      // and double-counting a grant after publication.
+      const pilotReserved = Math.max(
+        0,
+        Math.max(s.committed, s.grant_total) - s.grant_redeemed,
+      );
+      const reserved = legacyReserved + pilotReserved + s.recoveries;
       return [
         s.id,
         {
@@ -439,7 +182,7 @@ export async function supplyUsage(db: DB, supplyId: string, at = new Date()) {
 }
 export async function eligibleDrops(db: DB, memberId: string, at = new Date()) {
   const [member] = await db.query<Member>(
-    `select m.* from uptick_members m join market_cells k on k.id=m.market_id where m.id=$1 and m.state='active' and m.verified_at is not null and coalesce((select accepted from member_consents c where c.member_id=m.id order by c.sequence desc limit 1),false) and k.state in ('pilot','live') and exists(select 1 from market_zips z where z.market_id=k.id and (z.zip=m.home_zip or z.zip=m.work_zip))`,
+    `select m.* from uptick_members m join market_cells k on k.id=m.market_id where m.id=$1 and m.state='active' and m.verified_at is not null and k.state in ('pilot','live') and exists(select 1 from market_zips z where z.market_id=k.id and (z.zip=m.home_zip or z.zip=m.work_zip))`,
     [memberId],
   );
   if (!member) return [];
@@ -470,12 +213,48 @@ export async function allocationView(db: DB, allocation: Allocation) {
   }>("select * from allocation_options where allocation_id=$1", [
     allocation.id,
   ]);
+  const [grant] = await db.query<NetworkGrant>(
+    "select * from fulfillment_grants where allocation_id=$1",
+    [allocation.id],
+  );
+  const incidents = grant
+    ? await db.query(
+        "select * from fulfillment_incidents where grant_id=$1 order by occurred_at desc,id",
+        [grant.id],
+      )
+    : [];
+  const [recovery] = grant
+    ? await db.query<NetworkRecovery>(
+        `select r.* from recovery_grants r join fulfillment_incidents i on i.id=r.incident_id
+         where i.grant_id=$1 order by r.issued_at desc limit 1`,
+        [grant.id],
+      )
+    : [];
   return {
     allocation,
-    options: options.map((s) => ({
-      ...s,
-      ...reasons.find((r) => r.supply_id === s.id),
-    })),
+    options: options.map((s) => {
+      const promised = grant?.supply_id === s.id ? grant.member_snapshot : null;
+      return {
+        ...s,
+        ...(promised
+          ? {
+              qualification: promised.qualification,
+              reward: promised.reward,
+              terms: promised.terms,
+              starts_at: promised.starts_at,
+              expires_at: promised.expires_at,
+              address: promised.address,
+              timezone: promised.timezone,
+              quantity: promised.quantity,
+              is_demo: promised.is_demo,
+            }
+          : {}),
+        ...reasons.find((r) => r.supply_id === s.id),
+      };
+    }),
+    grant: grant || null,
+    incidents,
+    recovery: recovery || null,
   };
 }
 export async function allocateMember(
@@ -495,6 +274,9 @@ export async function allocateMember(
       [memberId, week],
     );
     if (existing) return allocationView(tx, existing);
+    // Real pilot benefits are published only by releaseWeeklyBenefits, which
+    // atomically creates the allocation and its inventory-backed grant.
+    if (member.data_kind === "real") return null;
     const eligible = await eligibleDrops(tx, memberId, at);
     if (!eligible.length) return null;
     const history = await tx.query<{ organization_id: string; n: number }>(
@@ -598,14 +380,48 @@ export async function claimMemberDrop(
         );
       return existing;
     }
-    if (
-      !(await eligibleDrops(tx, member.id, at)).some((s) => s.id === supplyId)
-    )
-      throw new RequestError(
-        "This Drop is no longer available. Your other choices may still be available.",
-      );
-    const usage = await supplyUsage(tx, supplyId, at);
-    if (usage.remaining !== null && usage.remaining < 1)
+    const [grant] = await tx.query<{
+      id: string;
+      member_id: string;
+      supply_id: string;
+      organization_id: string;
+      offer_id: string;
+      offer_version: number;
+      member_snapshot: Snapshot;
+      expires_at: string;
+      state: string;
+    }>("select * from fulfillment_grants where allocation_id=$1 for update", [
+      allocation.id,
+    ]);
+    if (grant) {
+      if (
+        grant.member_id !== member.id ||
+        grant.supply_id !== supply.id ||
+        grant.organization_id !== supply.organization_id ||
+        grant.offer_id !== supply.offer_id ||
+        grant.offer_version !== supply.offer_version
+      )
+        throw new RequestError(
+          "This week's fulfillment grant does not match the saved Uptick.",
+        );
+      if (grant.state !== "issued" || new Date(grant.expires_at) <= at)
+        throw new RequestError(
+          "This week's fulfillment grant is no longer claimable.",
+        );
+    } else {
+      if (member.data_kind === "real")
+        throw new RequestError(
+          "This real pilot benefit is missing its inventory-backed fulfillment grant.",
+        );
+      if (
+        !(await eligibleDrops(tx, member.id, at)).some((s) => s.id === supplyId)
+      )
+        throw new RequestError(
+          "This Drop is no longer available. Your other choices may still be available.",
+        );
+    }
+    const usage = grant ? null : await supplyUsage(tx, supplyId, at);
+    if (usage?.remaining !== null && usage && usage.remaining < 1)
       throw new RequestError("This Drop has reached its available quantity.");
     const pass = token(),
       claimId = id();
@@ -618,7 +434,7 @@ export async function claimMemberDrop(
             ),
           ).toISOString()
         : null;
-    const snapshot: Snapshot = {
+    const snapshot: Snapshot = grant?.member_snapshot || {
       merchant: supply.merchant,
       qualification: supply.qualification,
       reward: supply.reward,
@@ -633,7 +449,7 @@ export async function claimMemberDrop(
           : supply.inventory_policy === "redemption"
             ? "redemption"
             : "claim",
-      quantity: usage.quantity,
+      quantity: usage!.quantity,
       is_demo: supply.is_demo,
       origin: {
         network: true,
@@ -660,7 +476,7 @@ export async function claimMemberDrop(
       ],
     );
     await tx.query(
-      "insert into member_claims(claim_id,member_id,customer_id,organization_id,supply_id,offer_id,allocation_id,reserved_until) values($1,$2,$3,$4,$5,$6,$7,$8)",
+      "insert into member_claims(claim_id,member_id,customer_id,organization_id,supply_id,offer_id,allocation_id,reserved_until,grant_id) values($1,$2,$3,$4,$5,$6,$7,$8,$9)",
       [
         claimId,
         member.id,
@@ -670,8 +486,20 @@ export async function claimMemberDrop(
         supply.offer_id,
         allocation.id,
         reserveUntil,
+        grant?.id || null,
       ],
     );
+    if (grant)
+      await tx.query(
+        "update fulfillment_grants set state='claimed',claimed_at=now() where id=$1 and state='issued'",
+        [grant.id],
+      );
+    if (grant)
+      await tx.query(
+        `update recovery_grants set original_claim_id=$2
+         where original_grant_id=$1 and original_claim_id is null`,
+        [grant.id, claimId],
+      );
     await demandEvent(tx, {
       kind: "drop_claimed",
       memberId: member.id,
@@ -685,6 +513,8 @@ export async function claimMemberDrop(
       detail: {
         reservationUntil: reserveUntil,
         policy: supply.inventory_policy,
+        grantId: grant?.id || null,
+        consumesAdditionalInventory: false,
       },
       dedupKey: `claim:${claimId}`,
     });
@@ -743,7 +573,7 @@ export async function marketCoverage(
   );
   if (!market) throw new RequestError("Market not found.", 404);
   const members = await db.query<Member & { geographically_relevant: boolean }>(
-    "select m.*,exists(select 1 from market_zips z where z.market_id=m.market_id and (z.zip=m.home_zip or z.zip=m.work_zip)) geographically_relevant from uptick_members m where m.market_id=$1 and m.state='active' and m.verified_at is not null and coalesce((select accepted from member_consents c where c.member_id=m.id order by c.sequence desc limit 1),false)",
+    "select m.*,exists(select 1 from market_zips z where z.market_id=m.market_id and (z.zip=m.home_zip or z.zip=m.work_zip)) geographically_relevant from uptick_members m where m.market_id=$1 and m.state='active' and m.verified_at is not null",
     [marketId],
   );
   const window = marketWeekWindow(at, market.timezone);
@@ -908,5 +738,22 @@ export async function networkPass(db: DB, credential: string) {
   const [supply] = await db.query<Supply>(`${supplySelect} where s.id=$1`, [
     mapping.supply_id,
   ]);
-  return { claim, mapping, supply };
+  const [grant] = await db.query<NetworkGrant>(
+    "select * from fulfillment_grants where id=(select grant_id from member_claims where claim_id=$1)",
+    [claim.id],
+  );
+  const [recovery] = grant
+    ? await db.query<NetworkRecovery>(
+        `select r.* from recovery_grants r join fulfillment_incidents i on i.id=r.incident_id
+         where i.grant_id=$1 order by r.issued_at desc limit 1`,
+        [grant.id],
+      )
+    : [];
+  return {
+    claim,
+    mapping,
+    supply,
+    grant: grant || null,
+    recovery: recovery || null,
+  };
 }
