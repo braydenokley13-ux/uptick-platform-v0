@@ -2334,6 +2334,7 @@ export default async function OperatorPage({
     db = await getDb(),
     { section = [] } = await params,
     search = await searchParams;
+  if (!section.length) redirect("/operator/pilot");
   const current = section[0] || "",
     detail = section[1],
     data = await operatorOverview(db, actor);

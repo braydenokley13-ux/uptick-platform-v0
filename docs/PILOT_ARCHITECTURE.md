@@ -20,14 +20,14 @@ The implementation brief overrides the CEO package where they differ: target 150
 
 All migrations are forward-only using this repository's sequential numbered convention (the explicit brief overrides a skill's generic timestamp convention). No agent rewrites applied migrations. Root serializes Git commits.
 
-| Owner | Files and scope | Migration |
-| --- | --- | --- |
-| Root, before parallel edits | Extract identity into `membership-identity.ts` and events into `demand-events.ts`; retain network re-exports | none |
-| Membership (Sol) | `membership-identity.ts`, member sessions, membership copy, `member-messaging.ts`, `member-experience.ts`, member controls/pages, API member and member Twilio, related tests | 014 membership/consent/sessions |
-| Promise (Sol, extra reasoning) | `network.ts`, `network-operations.ts`, supply/readiness/grants/recovery modules, `tap.ts`, promise API, dedicated tests | 015 pilot promises |
-| Commercial (Sol) | New growth program module/API/components and merchant workspace only; dedicated tests | 016 Growth Programs |
-| Root | Pilot runs/admission/partner/economics/Today/reporting and shared integration | 017 pilot operations |
-| Later reliability/public squads | Jobs, seed safety, public alignment, isolated Postgres/restore and hosted commissioning | 018+ if needed |
+| Owner                           | Files and scope                                                                                                                                                               | Migration                       |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| Root, before parallel edits     | Extract identity into `membership-identity.ts` and events into `demand-events.ts`; retain network re-exports                                                                  | none                            |
+| Membership (Sol)                | `membership-identity.ts`, member sessions, membership copy, `member-messaging.ts`, `member-experience.ts`, member controls/pages, API member and member Twilio, related tests | 014 membership/consent/sessions |
+| Promise (Sol, extra reasoning)  | `network.ts`, `network-operations.ts`, supply/readiness/grants/recovery modules, `tap.ts`, promise API, dedicated tests                                                       | 015 pilot promises              |
+| Commercial (Sol)                | New growth program module/API/components and merchant workspace only; dedicated tests                                                                                         | 016 Growth Programs             |
+| Root                            | Pilot runs/admission/partner/economics/Today/reporting and shared integration                                                                                                 | 017 pilot operations            |
+| Later reliability/public squads | Jobs, seed safety, public alignment, isolated Postgres/restore and hosted commissioning                                                                                       | 018+ if needed                  |
 
 No two agents independently rewrite a shared core file. Cross-owner changes are requested through the root. Every module validates authorization server-side. UI mutations use same-origin POST and no-store responses. Read the installed Next.js guides before route/component edits.
 

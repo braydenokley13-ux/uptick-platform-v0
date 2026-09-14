@@ -19,7 +19,7 @@ export async function demandEvent(
   },
 ) {
   await db.query(
-    `insert into demand_events(id,kind,member_id,market_id,organization_id,location_id,source_id,supply_id,allocation_id,claim_id,detail,dedup_key,evidence_class) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) on conflict(dedup_key) do nothing`,
+    `insert into demand_events(id,kind,member_id,market_id,organization_id,location_id,source_id,supply_id,allocation_id,claim_id,detail,dedup_key,evidence_class,data_kind) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,coalesce((select data_kind from uptick_members where id=$3),(select data_kind from acquisition_sources where id=$7),(select data_kind from market_cells where id=$4),'internal')) on conflict(dedup_key) do nothing`,
     [
       id(),
       input.kind,
