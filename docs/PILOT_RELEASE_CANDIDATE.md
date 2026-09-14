@@ -2,6 +2,62 @@
 
 Prepared September 14, 2026. **Operating deployment and migrations approved and executed.** See [HOSTED_COMMISSIONING.md](HOSTED_COMMISSIONING.md) for the completed release and remaining authenticated/physical checks. This release enables an internal rehearsal; it does not authorize real enrollment, promotional sending or A2P submission.
 
+## September 14, 2026 pre-pilot repair campaign
+
+This section records the final pre-pilot software campaign and supersedes any
+earlier "all green" claim about the release path. It does not change the hosted
+or launch status below, which remains gated.
+
+**Branch `claude/keen-brown-wtdvht`, commit `0b68859`, base
+`b2562c4e83dc652478064ebd82e30bb2aced04f2`.**
+
+Six release-path defects were confirmed against current source and repaired,
+each with a regression test that fails without its fix:
+
+| Defect                       | Behaviour before                                                                                                                                                                                                                       | Behaviour now                                                                                                                                                           |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Time-dependent recovery test | The same-counter recovery test asserted a rejection using "three days from now" while the fixture's readiness ended one day after the current market week, so the expectation depended on the weekday and failed on a Monday.          | Expiry is judged against the readiness boundary the fixture persisted, with just-before, equal-to and just-after cases, plus fixed-instant week and DST boundary tests. |
+| Frozen cohort vs. geography  | The weekly release compared each member's current, mutable `market_id` to the release market, so one admitted member changing ZIP blocked the whole frozen cohort's committed week.                                                    | A frozen run identifies its obligations through `pilot_admissions`. Releases without a frozen run still resolve their audience by current market.                       |
+| Paid supply read as organic  | `programForSupply` filtered on the approved version inside the `WHERE` clause, so a link to a pending, unapproved or superseded Program version matched nothing and the supply was released as organic, losing commercial attribution. | Links are found first and validated after, so invalid commercial context is rejected instead of silently reclassified.                                                  |
+| Opposing lock order          | Program approval took the coordination singleton before the pilot run; the weekly release took them in the opposite order and could deadlock against it.                                                                               | The release takes the singleton first. The shared order is documented in [PILOT_ARCHITECTURE.md](PILOT_ARCHITECTURE.md).                                                |
+| QR readiness mismatch        | Program approval counted any active credential as staff QR readiness, so an NFC-only credential passed approval and then failed at release.                                                                                            | Approval requires `credential_type='qr'`, matching the release.                                                                                                         |
+| Terminal fallback exhaustion | Issuing a recovery wrote a terminal `exhausted` state derived from a capacity count, so an unused reservation that later expired left the fallback permanently unusable.                                                               | Availability is recomputed from redeemed grants and still-live reservations; the state is a recorded observation, not a withdrawal of approval.                         |
+
+Migration `022_suppression_reconciliation.sql` reconciles pre-014 sender-level
+STOP history into `member_global_suppressions`, so rotating a sender cannot
+resurrect a member who already stopped. It is forward-only and idempotent, never
+overwrites a newer global record, and resolves ambiguous ordering conservatively
+in favour of STOP. Migration 014 is not rewritten.
+
+One supplied finding was **not** a defect on current source: supply linked to a
+_terminated_ Program was already rejected. Its regression test is kept.
+
+### Verification actually run
+
+| Check                       | Command                                                             | Result                                                                                                                   |
+| --------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Unit/database suite         | `npm test`                                                          | 195 passed, 0 failed (baseline was 175 passed, 1 failed)                                                                 |
+| Lint                        | `npm run lint`                                                      | Passed                                                                                                                   |
+| Types                       | `npm run typecheck`                                                 | Passed                                                                                                                   |
+| Formatting                  | `npm run format:check`                                              | Passed                                                                                                                   |
+| Production build            | `npm run build`                                                     | Passed                                                                                                                   |
+| Separate-session PostgreSQL | `bash scripts/verify-postgres.sh` (isolated cluster, PostgreSQL 16) | All checks passed, including 150 synthetic grants under competing sessions and migration 022 applying on real PostgreSQL |
+| Lock order under contention | `scripts/verify-postgres-lock-order.ts`                             | The opposing order still deadlocks; the shared order serializes without deadlock across repeated interleavings           |
+
+Each regression test was also run against the unpatched source to confirm it
+fails there rather than passing vacuously.
+
+### Not run here, and why
+
+- Hosted/authenticated journeys on `pilot.upticklocal.com`: requires deployment
+  authorization not granted in this session. No remote push or deploy was made.
+- Real carrier messaging, A2P submission, real members, real SMS: deliberately
+  not performed. Enrollment and delivery stay closed.
+- Physical counter rehearsal and phone/camera capture: require the real store,
+  staff and device.
+- Browser end-to-end (`npm run test:e2e`) and backup/restore rehearsal against
+  hosted infrastructure: not executed in this session.
+
 ## Exact source and destination
 
 | Item                                 | Value                                                                                          |

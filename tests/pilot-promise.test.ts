@@ -231,57 +231,121 @@ test("an unclaimed failed grant can recover without recording a false original r
   }
 });
 
-test("same-counter recovery requires a current ready destination, active QR and coverage through its expiry", async () => {
-  for (const scenario of ["revoked-qr", "past-readiness"] as const) {
+// Recovery expiry is checked against the readiness boundary that the fixture
+// actually persisted (destination_readiness.valid_until), not against an
+// offset from "today". An offset from today made this test depend on the
+// weekday it ran on: the fixture's readiness ends one day after the current
+// market week, so "three days from now" fell inside the window early in the
+// week and outside it late in the week.
+async function seedRecoveryFixture(
+  db: Awaited<ReturnType<typeof memoryDb>>,
+  prefix: string,
+) {
+  const fixture = await seedSyntheticPilot(db, 1, prefix);
+  const published = await releaseWeeklyBenefits(db, fixture.actor, {
+    runId: fixture.runId,
+    marketId: fixture.marketId,
+    weekKey: fixture.weekKey,
+    dataKind: "synthetic",
+    requestKey: `${prefix}-release`,
+    assignments: [
+      { memberId: fixture.members[0].id, supplyId: fixture.supplyId },
+    ],
+  });
+  const incidentId = await reportMemberFulfillmentIncident(
+    db,
+    fixture.members[0].id,
+    {
+      grantId: published.grants[0].id,
+      incidentType: "out_of_stock",
+      severity: "high",
+      occurredAt: new Date().toISOString(),
+      owner: "Uptick member support",
+      note: "Readiness boundary regression fixture.",
+      idempotencyKey: `${prefix}-incident`,
+    },
+  );
+  const [readiness] = await db.query<{ valid_until: string | Date }>(
+    "select valid_until from destination_readiness where supply_id=$1",
+    [fixture.supplyId],
+  );
+  return {
+    fixture,
+    incidentId,
+    validUntil: new Date(readiness.valid_until).getTime(),
+  };
+}
+
+function recoveryRequest(
+  seeded: Awaited<ReturnType<typeof seedRecoveryFixture>>,
+  expiresAt: number,
+) {
+  return {
+    incidentId: seeded.incidentId,
+    remedyType: "same_counter" as const,
+    fallbackId: seeded.fixture.fallbackId,
+    replacementSupplyId: null,
+    payerOrganizationId: seeded.fixture.actor.organizationId,
+    payerEvidence: "Synthetic prepaid fallback inventory ledger.",
+    expiresAt: new Date(expiresAt).toISOString(),
+  };
+}
+
+test("same-counter recovery expiry is judged against the persisted readiness boundary, not the weekday", async () => {
+  // Just-before and equal-to the boundary are covered; just-after is not.
+  const probes = [
+    { name: "just-before", offset: -60000, allowed: true },
+    { name: "equal-to", offset: 0, allowed: true },
+    { name: "just-after", offset: 60000, allowed: false },
+  ] as const;
+  for (const probe of probes) {
     const db = await memoryDb();
     try {
-      const fixture = await seedSyntheticPilot(db, 1, scenario);
-      const published = await releaseWeeklyBenefits(db, fixture.actor, {
-        runId: fixture.runId,
-        marketId: fixture.marketId,
-        weekKey: fixture.weekKey,
-        dataKind: "synthetic",
-        requestKey: `${scenario}-release`,
-        assignments: [
-          { memberId: fixture.members[0].id, supplyId: fixture.supplyId },
-        ],
-      });
-      const incidentId = await reportMemberFulfillmentIncident(
-        db,
-        fixture.members[0].id,
-        {
-          grantId: published.grants[0].id,
-          incidentType: "out_of_stock",
-          severity: "high",
-          occurredAt: new Date().toISOString(),
-          owner: "Uptick member support",
-          note: "Readiness rejection regression fixture.",
-          idempotencyKey: `${scenario}-incident`,
-        },
-      );
-      if (scenario === "revoked-qr")
-        await db.query(
-          "update redemption_credentials set state='revoked',revoked_at=now() where public_token=$1",
-          [fixture.pointToken],
+      const seeded = await seedRecoveryFixture(db, `boundary-${probe.name}`);
+      const request = recoveryRequest(seeded, seeded.validUntil + probe.offset);
+      if (probe.allowed) {
+        await issueIncidentRecovery(db, seeded.fixture.actor, request);
+        assert.equal(
+          (await db.query("select * from recovery_grants")).length,
+          1,
+          `${probe.name} must remain inside the persisted readiness window`,
         );
-      await assert.rejects(
-        issueIncidentRecovery(db, fixture.actor, {
-          incidentId,
-          remedyType: "same_counter",
-          fallbackId: fixture.fallbackId,
-          replacementSupplyId: null,
-          payerOrganizationId: fixture.actor.organizationId,
-          payerEvidence: "Synthetic prepaid fallback inventory ledger.",
-          expiresAt: new Date(
-            Date.now() +
-              (scenario === "past-readiness" ? 3 * 86400000 : 3600000),
-          ).toISOString(),
-        }),
-        /not independently ready and funded/,
-      );
-      assert.equal((await db.query("select * from recovery_grants")).length, 0);
+      } else {
+        await assert.rejects(
+          issueIncidentRecovery(db, seeded.fixture.actor, request),
+          /not independently ready and funded/,
+          `${probe.name} must fall outside the persisted readiness window`,
+        );
+        assert.equal(
+          (await db.query("select * from recovery_grants")).length,
+          0,
+        );
+      }
     } finally {
       await db.close?.();
     }
+  }
+});
+
+test("same-counter recovery requires an active staff QR credential at the destination", async () => {
+  const db = await memoryDb();
+  try {
+    const seeded = await seedRecoveryFixture(db, "revoked-qr");
+    await db.query(
+      "update redemption_credentials set state='revoked',revoked_at=now() where public_token=$1",
+      [seeded.fixture.pointToken],
+    );
+    // Well inside the readiness window: only the revoked credential rejects it.
+    await assert.rejects(
+      issueIncidentRecovery(
+        db,
+        seeded.fixture.actor,
+        recoveryRequest(seeded, seeded.validUntil - 60000),
+      ),
+      /not independently ready and funded/,
+    );
+    assert.equal((await db.query("select * from recovery_grants")).length, 0);
+  } finally {
+    await db.close?.();
   }
 });

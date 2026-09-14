@@ -7,3 +7,10 @@ playwright-report/
 test-results/
 *.tsbuildinfo
 .DS_Store
+
+# Private founder artifacts (names, contacts, commercial notes, tailored documents)
+private/
+
+# Generated document build directories
+private/founder/_build_*
+__pycache__/

@@ -64,8 +64,7 @@ export default async function JoinPage({
           </p>
           <h1>
             A little free.
-            <br />A lot to
-            <br />
+            <br />A lot to <br />
             <em>look forward to.</em>
           </h1>
           <p className="member-lead">

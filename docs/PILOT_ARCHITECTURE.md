@@ -50,6 +50,33 @@ No two agents independently rewrite a shared core file. Cross-owner changes are 
 - Commercial approval accepts bounded capacity supported by stored commitments, not merchant-entered audience claims. Program versions are immutable; amendments do not rewrite issued grants. Root integrates attention checks with run/week records.
 - Historical compatibility exists for old records only. Real members cannot obtain unreserved benefits through old allocation paths. Read-only pages never issue new reservations.
 
+## Lock order
+
+Every operation that can touch both the Growth Program coordination singleton
+and a pilot run takes its row locks in exactly this order:
+
+1. `growth_program_coordination` (the global singleton)
+2. `pilot_runs`
+3. `market_cells`
+4. `growth_programs`
+5. `network_drop_supplies`, ascending by id
+6. `uptick_members`, ascending by id
+
+Program approval (`approveGrowthProgramVersion`) already followed this order.
+The weekly release (`releaseWeeklyBenefits`) took the pilot run first and the
+coordination singleton last, so an approval and a release running at the same
+time could each hold the lock the other needed next. The release now takes the
+coordination singleton at the top of its transaction.
+
+An operation that needs only a lower-numbered lock may still take it alone; the
+rule is that locks are never acquired in decreasing order. Adding a new shared
+operation means placing it in this list, not inventing a local order for it.
+
+`scripts/verify-postgres-lock-order.ts` proves this against separate PostgreSQL
+sessions. It deliberately also drives the old, opposing order and asserts that
+it still deadlocks, so the check keeps demonstrating the ordering rather than
+quietly passing if contention stops happening.
+
 ## Verification plan
 
 Baseline unit/database suite: 146 passed, 0 failed. Required candidate checks include migration replay, unit/request tests, real PostgreSQL concurrency (150 members, competing release workers, last unit), grant/claim accounting, STOP after queueing, recovery after digital redemption, duplicate remedies, protection/amendments, fixed denominators, data isolation, job restarts, signed callbacks, tenant boundaries, mobile browser flow and isolated backup restore. Report hosted/carrier/physical checks separately and never mark an unperformed check passed.
