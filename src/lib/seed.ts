@@ -1,6 +1,12 @@
 import type { DB } from "./db";
 import { saveDraft, type Actor } from "./domain";
+import {
+  assertLocalSeedEnvironment,
+  assertNoRealPilotData,
+} from "./seed-safety";
 export async function seed(db: DB) {
+  assertLocalSeedEnvironment();
+  await assertNoRealPilotData(db);
   if ((await db.query("select id from organizations where id='joes'")).length)
     return;
   await db.transaction(async (tx) => {

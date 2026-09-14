@@ -1,9 +1,8 @@
 import { getDb } from "@/lib/db";
-import { dispatch, expandDueBroadcasts } from "@/lib/messaging";
-import { prepareMembershipWeek } from "@/lib/member-experience";
 import { dispatchMemberMessages } from "@/lib/member-messaging";
 import { equal } from "@/lib/security";
 import { apiError } from "@/lib/http";
+import { runScheduledJob } from "@/lib/scheduled-jobs";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 export async function GET(req: Request) {
@@ -17,14 +16,12 @@ export async function GET(req: Request) {
     return new Response("Unauthorized", { status: 401 });
   try {
     const db = await getDb();
-    await expandDueBroadcasts(db);
-    const processed = await dispatch(db, 10);
-    const membershipPrepared = await prepareMembershipWeek(db, 100);
-    const membershipProcessed = await dispatchMemberMessages(db, 20);
-    return Response.json(
-      { processed, membershipPrepared, membershipProcessed },
-      { headers: { "Cache-Control": "no-store" } },
+    // Two provider requests, each with a 15-second timeout, fit comfortably
+    // within this route's 60-second budget. Preparation has a separate route.
+    const result = await runScheduledJob(db, "membership_dispatch", () =>
+      dispatchMemberMessages(db, 2),
     );
+    return Response.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return apiError(error);
   }

@@ -63,8 +63,7 @@ export async function POST(request: Request) {
         await seed(db);
         await setSession(`local-${data.mode}`);
         return NextResponse.json({
-          redirect:
-            data.mode === "operator" ? "/operator/network" : "/merchant",
+          redirect: data.mode === "operator" ? "/operator/pilot" : "/merchant",
         });
       }
       const email = z.email().parse(data.email);
@@ -97,10 +96,38 @@ export async function POST(request: Request) {
       );
       if (!member)
         throw Error("Your account has not been assigned business access.");
-      await setSession(auth.user.id, auth.session.access_token);
+      let accessToken = auth.session.access_token;
+      if (
+        member.role === "operator" &&
+        process.env.OPERATOR_MFA_REQUIRED === "true"
+      ) {
+        const { data: factors, error: factorError } =
+          await client.auth.mfa.listFactors();
+        const factor = factors?.totp.find((f) => f.status === "verified");
+        if (factorError || !factor)
+          throw new RequestError(
+            "Enroll and verify an authenticator for this operator account before enabling pilot access.",
+            403,
+          );
+        const code = z
+          .string()
+          .regex(/^\d{6}$/, "Enter the six-digit code from your authenticator.")
+          .parse(data.mfaCode);
+        const { data: verified, error: mfaError } =
+          await client.auth.mfa.challengeAndVerify({
+            factorId: factor.id,
+            code,
+          });
+        if (mfaError || !verified)
+          throw new RequestError(
+            "Authenticator verification failed. Check the current code.",
+            401,
+          );
+        accessToken = verified.access_token;
+      }
+      await setSession(auth.user.id, accessToken);
       return NextResponse.json({
-        redirect:
-          member.role === "operator" ? "/operator/network" : "/merchant",
+        redirect: member.role === "operator" ? "/operator/pilot" : "/merchant",
       });
     }
     if (action === "logout") {

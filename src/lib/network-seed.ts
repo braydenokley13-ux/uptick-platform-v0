@@ -4,9 +4,15 @@ import { localMode } from "./config";
 import { token, id } from "./security";
 import { marketWeekWindow } from "./network";
 import { audit } from "./domain";
+import {
+  assertLocalSeedEnvironment,
+  assertNoRealPilotData,
+} from "./seed-safety";
 
 // An explicit local rehearsal fixture. No members, claims, messages, or redemptions are invented.
 export async function seedNetwork(db: DB) {
+  assertLocalSeedEnvironment();
+  await assertNoRealPilotData(db);
   if (!localMode())
     throw Error(
       "The sample Market Cell can only be seeded in explicit local development.",

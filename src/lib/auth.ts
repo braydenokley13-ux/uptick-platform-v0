@@ -64,10 +64,22 @@ async function verifiedSession(): Promise<Session | null> {
         process.env.SUPABASE_ANON_KEY,
         { auth: { persistSession: false } },
       );
-      const { data, error } = await supabase.auth.getUser(
-        decrypt(session.accessToken),
-      );
+      const accessToken = decrypt(session.accessToken);
+      const { data, error } = await supabase.auth.getUser(accessToken);
       if (error || data.user?.id !== session.userId) return null;
+      // Decode only after the provider has validated the signed token. A
+      // revoked provider session must not remain usable until JWT expiry.
+      const claims = JSON.parse(
+        Buffer.from(accessToken.split(".")[1], "base64url").toString(),
+      );
+      if (typeof claims.session_id !== "string") return null;
+      const [active] = await (
+        await getDb()
+      ).query(
+        "select id from auth.sessions where id=$1::uuid and user_id=$2::uuid",
+        [claims.session_id, session.userId],
+      );
+      if (!active) return null;
     }
     return session;
   } catch {
@@ -91,6 +103,20 @@ export async function getActor(): Promise<Actor | null> {
       "select * from memberships where user_id=$1 order by role desc limit 1",
       [session.userId],
     );
+    if (
+      member?.role === "operator" &&
+      !localMode() &&
+      process.env.OPERATOR_MFA_REQUIRED === "true"
+    ) {
+      if (!session.accessToken) return null;
+      const claims = JSON.parse(
+        Buffer.from(
+          decrypt(session.accessToken).split(".")[1],
+          "base64url",
+        ).toString(),
+      );
+      if (claims.aal !== "aal2") return null;
+    }
     return member
       ? {
           id: member.user_id,

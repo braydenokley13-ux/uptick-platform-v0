@@ -95,6 +95,7 @@ export function LoginForm({ local }: { local: boolean }) {
         action: "login",
         email: f.get("email"),
         password: f.get("password"),
+        mfaCode: f.get("mfaCode"),
       });
       router.push(r.redirect);
     } catch (e) {
@@ -123,6 +124,16 @@ export function LoginForm({ local }: { local: boolean }) {
             type="password"
             name="password"
             autoComplete="current-password"
+          />
+        </label>
+        <label>
+          Authenticator code (operators with MFA)
+          <input
+            name="mfaCode"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            pattern="[0-9]{6}"
+            maxLength={6}
           />
         </label>
         {error && (
