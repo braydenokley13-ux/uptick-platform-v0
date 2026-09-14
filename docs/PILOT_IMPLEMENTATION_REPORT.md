@@ -12,7 +12,7 @@ Operators have Today, pilot run/admission controls, four-week supply commitments
 
 One-time access links exchange into revocable browser sessions. Recovery codes provide a non-SMS return path. STOP suppresses promotional delivery across sender changes while preserving membership and grants; START does not create consent. HELP and ordinary inbound messages reach protected support records. The scheduler separates bounded preparation from dispatch and records interruption/failure/success.
 
-The public copy alignment is merged through public-site PR #13 and preserved as a patch and verified Git bundle. Its public production publication remains pending the specific approval requested after automatic review. The operating platform is merged through PR #2, with commissioning follow-ups on main. Real enrollment and promotional launch remain closed. No A2P campaign was submitted or real promotion sent.
+The public copy alignment is merged through public-site PR #13 and preserved as a patch and verified Git bundle. The user subsequently approved public production publication; the branch was switched to main and the exact merged source deployed. The operating platform is merged through PR #2, with commissioning follow-ups on main. Real enrollment and promotional launch remain closed. No A2P campaign was submitted or real promotion sent.
 
 ## 2. Architecture decisions
 
@@ -71,32 +71,32 @@ The reviewed local schema has 97 public tables. No new permissive browser RLS po
 
 “Complete” here describes the candidate's implementation and stated local verification; it does not substitute for deployment or physical commissioning.
 
-| P0 area                                                  | Status                             | Evidence or remaining condition                                                                           |
-| -------------------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Adult membership independent of promotional SMS          | Complete                           | Domain and HTTP join/confirmation checks; optional box unchecked                                          |
-| STOP/START/sender rotation semantics                     | Complete                           | Suppression/consent and callback regressions pass                                                         |
-| Private web session, revocation and recovery codes       | Complete locally                   | Hosted provider revocation/MFA rehearsal remains open                                                     |
-| One backed featured benefit/member/week                  | Complete                           | 150-grant PostgreSQL release race; exact cohort transaction                                               |
-| Finite inventory and protected reservations              | Complete                           | Final-unit/concurrent claim/adjustment checks                                                             |
-| Current destination readiness and independent fallback   | Complete in software               | Actual manager/staff/stock evidence still required                                                        |
-| Incident before/after redemption and one backed recovery | Complete                           | Domain plus real HTTP before/after recovery, duplicate checks                                             |
-| Correct old-pass help and old-week recovery visibility   | Complete                           | Member experience regressions and reviewed UI                                                             |
-| Versioned negotiated Growth Program                      | Complete                           | 10 focused tests; fees/credits/ceilings/protection guards                                                 |
-| Organic suppliers independent of paid Program            | Complete                           | Proposal path and reporting distinction                                                                   |
-| Fixed four-week admissions and data separation           | Complete                           | Eight operations tests, freeze and contaminated-numerator regressions                                     |
-| Partner distribution accountability                      | Complete in software               | Real partner must execute and supply evidence                                                             |
-| Separate economics and labor                             | Complete                           | Append-only entries, idempotency/reversal, separate Program fee/credits                                   |
-| Actionable Today and support                             | Complete locally                   | Browser operator release and HTTP post-recovery Today rendering                                           |
-| Bounded observable scheduler                             | Complete and observed hosted       | Both registered Vercel jobs succeeded; zero messages processed                                            |
-| Deny-by-default RLS/search paths/session controls        | Partially complete                 | Hosted RLS/search paths verified; MFA, leaked-password protection and independent review remain           |
-| Isolated backup/restore                                  | Complete locally                   | Durable local dump/restore, 150 grants, 15 table fingerprints                                             |
-| Hosted backup/PITR recovery                              | Externally blocked                 | Entitlement, actual restore points and provider recovery time not verified                                |
-| Public company/story consistency                         | Complete copy; publication pending | Public PR #13 merged; production branch/publication approval remains pending                              |
-| Legal entity/address/contact and policy approval         | Externally blocked                 | Founder/legal facts missing; exact email spelling still awaiting confirmation                             |
-| Canonical hosted release and authenticated smoke tests   | Partially complete                 | Canonical deployment READY; 17 hosted boundary checks pass; positive authenticated journey remains        |
-| Carrier/campaign/live promotional delivery               | Externally blocked                 | No campaign submission or real promotional send performed                                                 |
-| Mobile device and physical counter rehearsal             | Partially complete                 | Browser journey passes; in-app viewport override ignored, real phone/camera/counter sign-off still needed |
-| Portals, POS, Stripe, native app, ML, broad verticals    | Intentionally deferred             | Outside the locked P0 scope                                                                               |
+| P0 area                                                  | Status                       | Evidence or remaining condition                                                                           |
+| -------------------------------------------------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Adult membership independent of promotional SMS          | Complete                     | Domain and HTTP join/confirmation checks; optional box unchecked                                          |
+| STOP/START/sender rotation semantics                     | Complete                     | Suppression/consent and callback regressions pass                                                         |
+| Private web session, revocation and recovery codes       | Complete locally             | Hosted provider revocation/MFA rehearsal remains open                                                     |
+| One backed featured benefit/member/week                  | Complete                     | 150-grant PostgreSQL release race; exact cohort transaction                                               |
+| Finite inventory and protected reservations              | Complete                     | Final-unit/concurrent claim/adjustment checks                                                             |
+| Current destination readiness and independent fallback   | Complete in software         | Actual manager/staff/stock evidence still required                                                        |
+| Incident before/after redemption and one backed recovery | Complete                     | Domain plus real HTTP before/after recovery, duplicate checks                                             |
+| Correct old-pass help and old-week recovery visibility   | Complete                     | Member experience regressions and reviewed UI                                                             |
+| Versioned negotiated Growth Program                      | Complete                     | 10 focused tests; fees/credits/ceilings/protection guards                                                 |
+| Organic suppliers independent of paid Program            | Complete                     | Proposal path and reporting distinction                                                                   |
+| Fixed four-week admissions and data separation           | Complete                     | Eight operations tests, freeze and contaminated-numerator regressions                                     |
+| Partner distribution accountability                      | Complete in software         | Real partner must execute and supply evidence                                                             |
+| Separate economics and labor                             | Complete                     | Append-only entries, idempotency/reversal, separate Program fee/credits                                   |
+| Actionable Today and support                             | Complete locally             | Browser operator release and HTTP post-recovery Today rendering                                           |
+| Bounded observable scheduler                             | Complete and observed hosted | Both registered Vercel jobs succeeded; zero messages processed                                            |
+| Deny-by-default RLS/search paths/session controls        | Partially complete           | Hosted RLS/search paths verified; MFA, leaked-password protection and independent review remain           |
+| Isolated backup/restore                                  | Complete locally             | Durable local dump/restore, 150 grants, 15 table fingerprints                                             |
+| Hosted backup/PITR recovery                              | Externally blocked           | Entitlement, actual restore points and provider recovery time not verified                                |
+| Public company/story consistency                         | Copy published               | Public PR #13 merged and live; seven public checks passed with enrollment closed                          |
+| Legal entity/address/contact and policy approval         | Externally blocked           | Founder/legal facts missing; exact email spelling still awaiting confirmation                             |
+| Canonical hosted release and authenticated smoke tests   | Partially complete           | Canonical deployment READY; 17 hosted boundary checks pass; positive authenticated journey remains        |
+| Carrier/campaign/live promotional delivery               | Externally blocked           | No campaign submission or real promotional send performed                                                 |
+| Mobile device and physical counter rehearsal             | Partially complete           | Browser journey passes; in-app viewport override ignored, real phone/camera/counter sign-off still needed |
+| Portals, POS, Stripe, native app, ML, broad verticals    | Intentionally deferred       | Outside the locked P0 scope                                                                               |
 
 ## 6. Test ledger
 
@@ -142,13 +142,13 @@ Commissioning after explicit user approval on September 14, 2026:
 - All 64 non-ledger legacy application tables retained their pre-migration counts and fingerprints. No pilot member, release, grant or member message was created by commissioning.
 - A protected public-data snapshot was restored into an isolated local PostgreSQL database. Auth, Storage and provider PITR/backup entitlement are outside that snapshot and remain unverified.
 - Both scheduler routes are registered on the canonical deployment. Actual job outcomes and hosted HTTP evidence are recorded in [HOSTED_COMMISSIONING.md](HOSTED_COMMISSIONING.md).
-- Public-site PR #13 is merged at `6e6f135a44c0ab63b89abecfd6f1d82272bfa253`. Its production branch/publication change is awaiting the specifically requested approval.
+- Public-site PR #13 is merged at `6e6f135a44c0ab63b89abecfd6f1d82272bfa253`. The user specifically approved its production branch/publication change; main is selected and the merged source deployed.
 
 The exact source, migration checksums, destinations and gates are recorded in [PILOT_RELEASE_CANDIDATE.md](PILOT_RELEASE_CANDIDATE.md). Settings remain `UPTICK_ENV=staging`, simulated SMS, closed enrollment and closed production delivery. Existing protected environment-variable types were preserved.
 
 ## 8. Genuine remaining real-pilot blockers
 
-1. **Complete authenticated hosted commissioning and public publication.** The operating deployment, migrations and anonymous checks are complete. Existing operator credentials and a real internal member session are still needed for the positive hosted journey. The public-site production approval question remains pending.
+1. **Complete authenticated hosted commissioning.** The operating deployment, migrations and anonymous checks are complete. Existing operator credentials and a real internal member session are still needed for the positive hosted journey. Public production publication has received its specific approval.
 2. **Supply legal identity and contact facts.** Legal entity and business notice address remain missing. The founder replied `iwhite@upticklocla.com`; a clarification about that spelling is pending. Existing `iwhite@upticklocal.com` copy was preserved pending confirmation, and no working mailbox test is claimed.
 3. **Commission operator access and recovery.** Enroll/test MFA, verify provider-session revocation, confirm an accountable backup operator, resolve leaked-password protection and record separately managed secrets/recovery ownership.
 4. **Verify hosted recovery.** Record the real backup/PITR plan, restore points and restore procedure; reconcile post-backup commitments and STOP events as described in the recovery runbook.
@@ -156,7 +156,7 @@ The exact source, migration checksums, destinations and gates are recorded in [P
 6. **Complete carrier readiness before promotional delivery.** Campaign/number approvals and the real monitored support path remain external. Membership entitlement is already independent of marketing consent.
 7. **Complete an independent hosted security review.** Existing defensive regression checks passed; the blocked delegated review is not a security sign-off.
 
-The user explicitly approved the operating deployment and database work after reviewing the committed candidate. During commissioning, automatic review rejected changing protected settings to plain text; their original protections were preserved instead. It also rejected a combined production-branch change. The operating branch update subsequently passed after main contained the verified release and the database was ready. The public branch/publication change remains pending specific approval; it was not bypassed.
+The user explicitly approved the operating deployment and database work after reviewing the committed candidate. During commissioning, automatic review rejected changing protected settings to plain text; their original protections were preserved instead. It also rejected a combined production-branch change. The operating branch update subsequently passed after main contained the verified release and the database was ready. The user subsequently supplied the specific public approval, and the branch/publication actions passed review.
 
 ## 9. Rehearsal result
 

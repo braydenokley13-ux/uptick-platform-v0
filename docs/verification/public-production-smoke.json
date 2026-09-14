@@ -1,0 +1,48 @@
+{
+  "checked_at": "2026-09-14T04:03:35.379Z",
+  "deployment": "dpl_55oBSR1wwNYxpN6DAtDrLtPgLr7T",
+  "source": "6e6f135a44c0ab63b89abecfd6f1d82272bfa253",
+  "method": "Read-only HTTP GET; no enrollment or email submitted",
+  "checks": [
+    {
+      "path": "/",
+      "status": 200,
+      "pass": true
+    },
+    {
+      "path": "/membership",
+      "status": 200,
+      "pass": true,
+      "closed": true,
+      "inquiry": true,
+      "join_action_present": false
+    },
+    {
+      "path": "/growth",
+      "status": 200,
+      "pass": true
+    },
+    {
+      "path": "/privacy",
+      "status": 200,
+      "pass": true
+    },
+    {
+      "path": "/terms",
+      "status": 200,
+      "pass": true
+    },
+    {
+      "path": "/sms",
+      "status": 200,
+      "pass": true
+    },
+    {
+      "path": "https://www.upticklocal.com",
+      "status": 200,
+      "location": null,
+      "pass": true
+    }
+  ],
+  "result": "PASS"
+}

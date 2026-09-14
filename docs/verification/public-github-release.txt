@@ -1,4 +1,4 @@
-PUBLIC GITHUB RELEASE: MERGED; PRODUCTION PUBLICATION PENDING
+PUBLIC GITHUB RELEASE: MERGED AND LIVE; ENROLLMENT CLOSED
 
 Current state verified after commissioning
 - Pull request: https://github.com/braydenokley13-ux/upticklocal/pull/13
@@ -6,10 +6,10 @@ Current state verified after commissioning
 - Merge commit and current main: 6e6f135a44c0ab63b89abecfd6f1d82272bfa253.
 - Source branch: codex/pilot-service-alignment at e6174b72a598c5949b3680ada23ac313574e8530.
 - Public Vercel project: prj_ZHFEe3PL6RGJ1fmkLS0RZ1kC2Bjv.
-- Production branch remains claude/bundle-implementation-gdtawu.
+- Production branch was changed to main after specific user approval.
 - NEXT_PUBLIC_UPTICK_PILOT_ENROLLMENT_OPEN=false was written with sensitive protection to production and preview; see public-hosted-gate.json.
-- Automatic review requires specific approval to switch the public production branch to main and publish the merged source. That approval question remains pending.
-- No public production deployment/promotion was requested after the merge.
+- The user supplied specific approval to switch production to main and publish the exact merged source; automatic review accepted both operations.
+- Production deployment: dpl_55oBSR1wwNYxpN6DAtDrLtPgLr7T. See public-production-deployment.json and public-production-smoke.json for completion evidence.
 
 Historical pre-merge preparation record follows. Its OPEN/unchanged-main and
 no-environment-write statements describe the earlier preparation stage only;
