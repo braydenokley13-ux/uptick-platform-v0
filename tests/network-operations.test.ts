@@ -462,6 +462,7 @@ test("membership message operations require operator access and return a masked 
     consentRequested: true,
   });
   await confirmMemberAccess(db, joined.credential, true);
+  await allocateMarket(db, operator, marketId);
   assert.equal(await prepareMembershipMessages(db, operator), 1);
   assert.equal(await prepareMembershipMessages(db, operator), 0);
   let data = await membershipMessagingOperations(db, operator);

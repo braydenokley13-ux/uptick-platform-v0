@@ -57,6 +57,33 @@ export type TapEvidence = {
   transaction_verified: boolean;
   created_at: string;
 };
+type RecoveryGrant = {
+  id: string;
+  incident_id: string;
+  original_claim_id: string;
+  remedy_type: "same_counter" | "replacement_supply";
+  target_organization_id: string;
+  target_location_id: string;
+  replacement_supply_id: string | null;
+  member_snapshot: {
+    merchant?: string;
+    address?: string;
+    exact_item?: string;
+    size_label?: string;
+    usable_hours?: string;
+    instructions?: string;
+  };
+  expires_at: string;
+  state: "issued" | "redeemed";
+  redeemed_at: string | null;
+};
+type RecoveryEvidence = {
+  method: "qr" | "secure_nfc" | "operator_override";
+  verification_level: number;
+  staff_gated: boolean;
+  transaction_verified: boolean;
+  created_at: string;
+};
 
 function validatePointPolicy(
   point: TapPoint | undefined,
@@ -302,9 +329,20 @@ export async function tapPassView(
     "select s.*,mc.reserved_until from member_claims mc join network_drop_supplies s on s.id=mc.supply_id where mc.claim_id=$1",
     [claim.id],
   );
+  const [recovery] = await db.query<RecoveryGrant>(
+    `select r.* from recovery_grants r
+     where r.original_claim_id=$1 order by r.issued_at desc limit 1`,
+    [claim.id],
+  );
+  const recoveryAvailable =
+    recovery?.state === "issued" && new Date(recovery.expires_at) > at;
+  const recoveryDestination = recoveryAvailable || recovery?.state === "redeemed";
   const matches =
-    claim.organization_id === point.organization_id &&
-    offer?.location_id === point.location_id;
+    recoveryDestination
+      ? recovery.target_organization_id === point.organization_id &&
+        recovery.target_location_id === point.location_id
+      : claim.organization_id === point.organization_id &&
+        offer?.location_id === point.location_id;
   let state = passState(claim, at);
   if (
     state === "active" &&
@@ -335,7 +373,33 @@ export async function tapPassView(
           [claim.id],
         )
       : [];
-  return { claim, matches, state, blockedReason, evidence: evidence || null };
+  const [recoveryEvidence] = recovery
+    ? await db.query<RecoveryEvidence>(
+        "select * from recovery_redemptions where recovery_grant_id=$1",
+        [recovery.id],
+      )
+    : [];
+  const recoveryState = recovery
+    ? recovery.state === "redeemed"
+      ? "redeemed"
+      : recoveryAvailable
+        ? "available"
+        : "expired"
+    : null;
+  return {
+    claim,
+    matches,
+    state: recoveryAvailable
+      ? "recovery_available"
+      : recovery?.state === "issued"
+        ? "recovery_expired"
+        : state,
+    blockedReason: recovery ? null : blockedReason,
+    evidence: evidence || null,
+    recovery: recovery || null,
+    recoveryState,
+    recoveryEvidence: recoveryEvidence || null,
+  };
 }
 
 async function lockedClaim(db: DB, privateToken: string) {
@@ -349,7 +413,115 @@ async function lockedClaim(db: DB, privateToken: string) {
     [initial.id],
   );
   const claim = await getPass(db, privateToken);
-  return { claim, offer, supply };
+  const [recovery] = await db.query<RecoveryGrant>(
+    `select * from recovery_grants where original_claim_id=$1
+     order by issued_at desc limit 1 for update`,
+    [claim.id],
+  );
+  return { claim, offer, supply, recovery };
+}
+
+async function finishRecovery(
+  db: DB,
+  context: Awaited<ReturnType<typeof lockedClaim>>,
+  verification: {
+    pointId?: string;
+    credentialId?: string;
+    method: "qr" | "secure_nfc" | "operator_override";
+    level: number;
+    counter?: number;
+    actor?: string;
+    reason?: string;
+  },
+) {
+  const { claim, recovery } = context;
+  if (!recovery)
+    throw new RequestError("This pass does not have an issued recovery.");
+  const [existing] = await db.query<RecoveryEvidence>(
+    "select * from recovery_redemptions where recovery_grant_id=$1",
+    [recovery.id],
+  );
+  if (recovery.state === "redeemed")
+    return { claim, recovery, evidence: existing || null, repeated: true };
+  if (!["active", "redeemed"].includes(claim.state))
+    throw new RequestError("This original pass can no longer use its recovery.");
+  if (new Date(recovery.expires_at) <= new Date())
+    throw new RequestError("This recovery has expired. Contact Uptick support.");
+  const [evidence] = await db.query<RecoveryEvidence>(
+    `insert into recovery_redemptions(
+      id,recovery_grant_id,original_claim_id,point_id,credential_id,method,
+      verification_level,staff_gated,nfc_counter,actor,reason
+     ) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning *`,
+    [
+      id(),
+      recovery.id,
+      claim.id,
+      verification.pointId || null,
+      verification.credentialId || null,
+      verification.method,
+      verification.level,
+      verification.method !== "operator_override",
+      verification.counter ?? null,
+      verification.actor || "member",
+      verification.reason || null,
+    ],
+  );
+  const [updated] = await db.query<RecoveryGrant>(
+    "update recovery_grants set state='redeemed',redeemed_at=now() where id=$1 and state='issued' returning *",
+    [recovery.id],
+  );
+  const [closedClaim] =
+    claim.state === "active"
+      ? await db.query<Claim>(
+          "update claims set state='invalidated' where id=$1 and state='active' returning *",
+          [claim.id],
+        )
+      : [claim];
+  await db.query(
+    "update fulfillment_incidents set state='resolved',resolution='Recovery redeemed at the promised destination.' where id=$1",
+    [recovery.incident_id],
+  );
+  await audit(
+    db,
+    verification.actor || "member",
+    recovery.target_organization_id,
+    "pilot.recovery_redeemed",
+    recovery.id,
+    {
+      originalClaimId: claim.id,
+      method: verification.method,
+      pointId: verification.pointId || null,
+      transactionVerified: false,
+    },
+  );
+  await db.query(
+    `insert into demand_events(
+      id,member_id,market_id,organization_id,location_id,source_id,supply_id,
+      allocation_id,claim_id,kind,evidence_class,detail,dedup_key
+     ) select $1,g.member_id,g.market_id,$2,$3,m.source_id,
+      coalesce(r.replacement_supply_id,g.supply_id),g.allocation_id,$4,
+      'recovery_redeemed','observed',$5,$6
+     from recovery_grants r join fulfillment_grants g on g.id=r.original_grant_id
+     join uptick_members m on m.id=g.member_id where r.id=$7
+     on conflict(dedup_key) do nothing`,
+    [
+      id(),
+      recovery.target_organization_id,
+      recovery.target_location_id,
+      claim.id,
+      {
+        method: verification.method,
+        verificationLevel: verification.level,
+        originalHistoryPreserved: true,
+        originalDigitalRedemptionPreserved: claim.state === "redeemed",
+        countsAsWeeklyBenefit: false,
+        countsAsPaidPlacement: false,
+      },
+      `recovery-redemption:${recovery.id}`,
+      recovery.id,
+    ],
+  );
+  return { claim: closedClaim, recovery: updated, evidence, repeated: false };
 }
 
 async function finishRedemption(
@@ -365,13 +537,17 @@ async function finishRedemption(
     reason?: string;
   },
 ) {
-  const { claim, supply, offer } = context;
+  const { claim, supply, offer, recovery } = context;
   const [existing] = await db.query<TapEvidence>(
     "select * from redemption_evidence where claim_id=$1",
     [claim.id],
   );
   if (claim.state === "redeemed")
     return { claim, evidence: existing || null, repeated: true };
+  if (recovery)
+    throw new RequestError(
+      "This pass now carries a backed recovery and cannot redeem the original item.",
+    );
   if (passState(claim) !== "active")
     throw new RequestError(
       "This pass cannot be redeemed. Check its status and dates.",
@@ -472,6 +648,13 @@ async function finishRedemption(
         claim.id,
       ],
     );
+  await db.query(
+    `update fulfillment_grants set state='redeemed',
+      claimed_at=coalesce(claimed_at,now()),redeemed_at=now()
+     where id=(select grant_id from member_claims where claim_id=$1)
+      and state in ('issued','claimed')`,
+    [claim.id],
+  );
   return { claim: updated, evidence, repeated: false };
 }
 
@@ -482,8 +665,16 @@ export async function redeemAtPoint(
 ) {
   return db.transaction(async (tx) => {
     const context = await lockedClaim(tx, privateToken);
-    const { claim, supply, offer } = context;
+    const { claim, supply, offer, recovery } = context;
+    const recoveryAvailable =
+      recovery?.state === "issued" &&
+      new Date(recovery.expires_at) > new Date();
+    const recoveryPath = recoveryAvailable || recovery?.state === "redeemed";
     if (input.selfConfirm) {
+      if (recovery)
+        throw new RequestError(
+          "Use the staffed Uptick Tap for this backed recovery.",
+        );
       if (
         !supply ||
         supply.verification_mode !== "self_confirm" ||
@@ -516,16 +707,21 @@ export async function redeemAtPoint(
       "select * from redemption_credentials where public_token=$1 for update",
       [input.pointToken],
     );
-    const policy = supply?.verification_mode || "staff_tap";
+    const policy = recoveryPath ? "staff_tap" : supply?.verification_mode || "staff_tap";
     validatePointPolicy(
       point,
       credential,
-      claim.organization_id,
-      offer.location_id,
+      recoveryPath ? recovery!.target_organization_id : claim.organization_id,
+      recoveryPath ? recovery!.target_location_id : offer.location_id,
       policy,
     );
     // An already completed pass returns its original evidence; it cannot consume a second counter.
-    if (claim.state === "redeemed")
+    if (recovery?.state === "redeemed")
+      return finishRecovery(tx, context, {
+        method: credential.credential_type,
+        level: credential.credential_type === "secure_nfc" ? 2 : 1,
+      });
+    if (claim.state === "redeemed" && !recoveryPath)
       return finishRedemption(tx, context, {
         method: credential.credential_type,
         level: credential.credential_type === "secure_nfc" ? 2 : 1,
@@ -548,13 +744,21 @@ export async function redeemAtPoint(
       throw new RequestError(
         "A QR fallback cannot be represented as secure NFC.",
       );
-    const result = await finishRedemption(tx, context, {
-      method: credential.credential_type,
-      level: credential.credential_type === "secure_nfc" ? 2 : 1,
-      pointId: point.id,
-      credentialId: credential.id,
-      counter,
-    });
+    const result = recoveryAvailable
+      ? await finishRecovery(tx, context, {
+          method: credential.credential_type,
+          level: credential.credential_type === "secure_nfc" ? 2 : 1,
+          pointId: point.id,
+          credentialId: credential.id,
+          counter,
+        })
+      : await finishRedemption(tx, context, {
+          method: credential.credential_type,
+          level: credential.credential_type === "secure_nfc" ? 2 : 1,
+          pointId: point.id,
+          credentialId: credential.id,
+          counter,
+        });
     await tx.query(
       "update redemption_credentials set last_validated_at=now(),last_counter=case when $2::integer is null then last_counter else $2 end where id=$1",
       [credential.id, counter ?? null],
@@ -573,13 +777,27 @@ export async function operatorOverride(
     throw new RequestError("Explain the exception in at least 12 characters.");
   return db.transaction(async (tx) => {
     const context = await lockedClaim(tx, privateToken);
-    authorize(actor, context.claim.organization_id, true);
-    return finishRedemption(tx, context, {
+    const recoveryAvailable =
+      context.recovery?.state === "issued" &&
+      new Date(context.recovery.expires_at) > new Date();
+    const recoveryPath =
+      recoveryAvailable || context.recovery?.state === "redeemed";
+    authorize(
+      actor,
+      recoveryPath
+        ? context.recovery!.target_organization_id
+        : context.claim.organization_id,
+      true,
+    );
+    const verification = {
       method: "operator_override",
       level: 0,
       actor: actor.id,
       reason: reason.trim(),
-    });
+    } as const;
+    return recoveryPath
+      ? finishRecovery(tx, context, verification)
+      : finishRedemption(tx, context, verification);
   });
 }
 

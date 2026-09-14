@@ -324,7 +324,12 @@ export async function verifyNetworkPostgres(db: DB) {
   );
   await reset();
   await supply();
-  await Promise.all(Array.from({ length: 4 }, () => joinedMember()));
+  const recurringMembers = await Promise.all(
+    Array.from({ length: 4 }, () => joinedMember()),
+  );
+  await Promise.all(
+    recurringMembers.map((member) => allocateMember(db, member.member.id)),
+  );
   const prepared = await Promise.all(
     Array.from({ length: 4 }, () => prepareMembershipWeek(db, 2)),
   );

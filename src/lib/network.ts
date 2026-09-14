@@ -51,6 +51,31 @@ export type Allocation = {
   week_key: string;
   created_at: string;
 };
+export type NetworkRecovery = {
+  id: string;
+  state: "issued" | "redeemed";
+  remedy_type: "same_counter" | "replacement_supply";
+  expires_at: string;
+  redeemed_at: string | null;
+  member_snapshot: {
+    merchant?: string;
+    address?: string;
+    exact_item?: string;
+    item_sku?: string;
+    size_label?: string;
+    usable_hours?: string;
+    instructions?: string;
+    required_spend?: number;
+    member_fee?: number;
+  };
+};
+export type NetworkGrant = {
+  id: string;
+  supply_id: string;
+  state: "issued" | "claimed" | "redeemed";
+  expires_at: string;
+  member_snapshot: Snapshot & Record<string, unknown>;
+};
 export const supplySelect = `select s.*,o.title,v.qualification,v.reward,v.terms,g.name merchant,g.timezone,g.is_demo,l.address,l.latitude,l.longitude,ml.drive_minutes,p.customer_value,p.reward_cost from network_drop_supplies s join offers o on o.id=s.offer_id join offer_versions v on v.offer_id=s.offer_id and v.version=s.offer_version join organizations g on g.id=s.organization_id join locations l on l.id=s.location_id join market_locations ml on ml.market_id=s.market_id and ml.location_id=s.location_id left join offer_product_metadata p on p.offer_id=s.offer_id and p.version=s.offer_version`;
 async function supplyUsages(db: DB, supplyIds: string[], at = new Date()) {
   if (!supplyIds.length) return new Map<string, SupplyUsage>();
@@ -61,9 +86,51 @@ async function supplyUsages(db: DB, supplyIds: string[], at = new Date()) {
     adjustment: number;
     claimed: number;
     redeemed: number;
-    reserved: number;
+    legacy_reserved: number;
+    grant_total: number;
+    grant_redeemed: number;
+    committed: number;
+    recoveries: number;
   }>(
-    `with adjustments as (select supply_id,sum(delta)::int adjustment from supply_adjustments where supply_id=any($1::text[]) group by supply_id), usage as (select mc.supply_id,count(*)::int claimed,count(*) filter(where c.state='redeemed')::int redeemed,count(*) filter(where c.state='active' and (mc.reserved_until is null or mc.reserved_until>$2) and (c.snapshot->>'expires_at')::timestamptz>$2)::int reserved from member_claims mc join claims c on c.id=mc.claim_id where mc.supply_id=any($1::text[]) group by mc.supply_id) select s.id,s.quantity,s.inventory_policy,coalesce(a.adjustment,0) adjustment,coalesce(u.claimed,0) claimed,coalesce(u.redeemed,0) redeemed,coalesce(u.reserved,0) reserved from network_drop_supplies s left join adjustments a on a.supply_id=s.id left join usage u on u.supply_id=s.id where s.id=any($1::text[])`,
+    `with adjustments as (
+       select supply_id,sum(delta)::int adjustment from supply_adjustments
+        where supply_id=any($1::text[]) group by supply_id
+     ), claim_usage as (
+       select mc.supply_id,count(*)::int claimed,
+        count(*) filter(where c.state='redeemed')::int redeemed,
+        count(*) filter(where mc.grant_id is null and c.state='active'
+          and (mc.reserved_until is null or mc.reserved_until>$2)
+          and (c.snapshot->>'expires_at')::timestamptz>$2)::int legacy_reserved
+       from member_claims mc join claims c on c.id=mc.claim_id
+       where mc.supply_id=any($1::text[]) group by mc.supply_id
+     ), grant_usage as (
+       select supply_id,
+        count(*) filter(where state='redeemed' or expires_at>$2)::int grant_total,
+        count(*) filter(where state='redeemed')::int grant_redeemed
+       from fulfillment_grants where supply_id=any($1::text[]) group by supply_id
+     ), commitments as (
+       select ws.supply_id,max(ws.committed_quantity)::int committed
+       from pilot_week_supplies ws join pilot_runs r on r.id=ws.run_id
+       where ws.supply_id=any($1::text[]) and r.state in ('enrolling','live','paused')
+       group by ws.supply_id
+     ), recovery_usage as (
+       select replacement_supply_id supply_id,count(*)::int recoveries
+       from recovery_grants where replacement_supply_id=any($1::text[])
+        and (state='redeemed' or expires_at>$2) group by replacement_supply_id
+     )
+     select s.id,s.quantity,s.inventory_policy,coalesce(a.adjustment,0) adjustment,
+      coalesce(cu.claimed,0) claimed,coalesce(cu.redeemed,0) redeemed,
+      coalesce(cu.legacy_reserved,0) legacy_reserved,
+      coalesce(gu.grant_total,0) grant_total,
+      coalesce(gu.grant_redeemed,0) grant_redeemed,
+      coalesce(cm.committed,0) committed,coalesce(ru.recoveries,0) recoveries
+     from network_drop_supplies s
+     left join adjustments a on a.supply_id=s.id
+     left join claim_usage cu on cu.supply_id=s.id
+     left join grant_usage gu on gu.supply_id=s.id
+     left join commitments cm on cm.supply_id=s.id
+     left join recovery_usage ru on ru.supply_id=s.id
+     where s.id=any($1::text[])`,
     [supplyIds, at.toISOString()],
   );
   return new Map(
@@ -72,9 +139,17 @@ async function supplyUsages(db: DB, supplyIds: string[], at = new Date()) {
         s.inventory_policy === "unlimited"
           ? null
           : Math.max(0, (s.quantity || 0) + s.adjustment);
-      const reserved = ["claim", "timed"].includes(s.inventory_policy)
-        ? s.reserved
+      const legacyReserved = ["claim", "timed"].includes(s.inventory_policy)
+        ? s.legacy_reserved
         : 0;
+      // Commitments and issued grants describe the same primary units. Taking
+      // their maximum prevents both under-counting an unpublished commitment
+      // and double-counting a grant after publication.
+      const pilotReserved = Math.max(
+        0,
+        Math.max(s.committed, s.grant_total) - s.grant_redeemed,
+      );
+      const reserved = legacyReserved + pilotReserved + s.recoveries;
       return [
         s.id,
         {
@@ -107,7 +182,7 @@ export async function supplyUsage(db: DB, supplyId: string, at = new Date()) {
 }
 export async function eligibleDrops(db: DB, memberId: string, at = new Date()) {
   const [member] = await db.query<Member>(
-    `select m.* from uptick_members m join market_cells k on k.id=m.market_id where m.id=$1 and m.state='active' and m.verified_at is not null and coalesce((select accepted from member_consents c where c.member_id=m.id order by c.sequence desc limit 1),false) and k.state in ('pilot','live') and exists(select 1 from market_zips z where z.market_id=k.id and (z.zip=m.home_zip or z.zip=m.work_zip))`,
+    `select m.* from uptick_members m join market_cells k on k.id=m.market_id where m.id=$1 and m.state='active' and m.verified_at is not null and k.state in ('pilot','live') and exists(select 1 from market_zips z where z.market_id=k.id and (z.zip=m.home_zip or z.zip=m.work_zip))`,
     [memberId],
   );
   if (!member) return [];
@@ -138,12 +213,48 @@ export async function allocationView(db: DB, allocation: Allocation) {
   }>("select * from allocation_options where allocation_id=$1", [
     allocation.id,
   ]);
+  const [grant] = await db.query<NetworkGrant>(
+    "select * from fulfillment_grants where allocation_id=$1",
+    [allocation.id],
+  );
+  const incidents = grant
+    ? await db.query(
+        "select * from fulfillment_incidents where grant_id=$1 order by occurred_at desc,id",
+        [grant.id],
+      )
+    : [];
+  const [recovery] = grant
+    ? await db.query<NetworkRecovery>(
+        `select r.* from recovery_grants r join fulfillment_incidents i on i.id=r.incident_id
+         where i.grant_id=$1 order by r.issued_at desc limit 1`,
+        [grant.id],
+      )
+    : [];
   return {
     allocation,
-    options: options.map((s) => ({
-      ...s,
-      ...reasons.find((r) => r.supply_id === s.id),
-    })),
+    options: options.map((s) => {
+      const promised = grant?.supply_id === s.id ? grant.member_snapshot : null;
+      return {
+        ...s,
+        ...(promised
+          ? {
+              qualification: promised.qualification,
+              reward: promised.reward,
+              terms: promised.terms,
+              starts_at: promised.starts_at,
+              expires_at: promised.expires_at,
+              address: promised.address,
+              timezone: promised.timezone,
+              quantity: promised.quantity,
+              is_demo: promised.is_demo,
+            }
+          : {}),
+        ...reasons.find((r) => r.supply_id === s.id),
+      };
+    }),
+    grant: grant || null,
+    incidents,
+    recovery: recovery || null,
   };
 }
 export async function allocateMember(
@@ -163,6 +274,9 @@ export async function allocateMember(
       [memberId, week],
     );
     if (existing) return allocationView(tx, existing);
+    // Real pilot benefits are published only by releaseWeeklyBenefits, which
+    // atomically creates the allocation and its inventory-backed grant.
+    if (member.data_kind === "real") return null;
     const eligible = await eligibleDrops(tx, memberId, at);
     if (!eligible.length) return null;
     const history = await tx.query<{ organization_id: string; n: number }>(
@@ -266,14 +380,45 @@ export async function claimMemberDrop(
         );
       return existing;
     }
-    if (
-      !(await eligibleDrops(tx, member.id, at)).some((s) => s.id === supplyId)
-    )
-      throw new RequestError(
-        "This Drop is no longer available. Your other choices may still be available.",
-      );
-    const usage = await supplyUsage(tx, supplyId, at);
-    if (usage.remaining !== null && usage.remaining < 1)
+    const [grant] = await tx.query<{
+      id: string;
+      member_id: string;
+      supply_id: string;
+      organization_id: string;
+      offer_id: string;
+      offer_version: number;
+      member_snapshot: Snapshot;
+      expires_at: string;
+      state: string;
+    }>(
+      "select * from fulfillment_grants where allocation_id=$1 for update",
+      [allocation.id],
+    );
+    if (grant) {
+      if (
+        grant.member_id !== member.id ||
+        grant.supply_id !== supply.id ||
+        grant.organization_id !== supply.organization_id ||
+        grant.offer_id !== supply.offer_id ||
+        grant.offer_version !== supply.offer_version
+      )
+        throw new RequestError("This week's fulfillment grant does not match the saved Uptick.");
+      if (grant.state !== "issued" || new Date(grant.expires_at) <= at)
+        throw new RequestError("This week's fulfillment grant is no longer claimable.");
+    } else {
+      if (member.data_kind === "real")
+        throw new RequestError(
+          "This real pilot benefit is missing its inventory-backed fulfillment grant.",
+        );
+      if (
+        !(await eligibleDrops(tx, member.id, at)).some((s) => s.id === supplyId)
+      )
+        throw new RequestError(
+          "This Drop is no longer available. Your other choices may still be available.",
+        );
+    }
+    const usage = grant ? null : await supplyUsage(tx, supplyId, at);
+    if (usage?.remaining !== null && usage && usage.remaining < 1)
       throw new RequestError("This Drop has reached its available quantity.");
     const pass = token(),
       claimId = id();
@@ -286,7 +431,7 @@ export async function claimMemberDrop(
             ),
           ).toISOString()
         : null;
-    const snapshot: Snapshot = {
+    const snapshot: Snapshot = grant?.member_snapshot || {
       merchant: supply.merchant,
       qualification: supply.qualification,
       reward: supply.reward,
@@ -301,7 +446,7 @@ export async function claimMemberDrop(
           : supply.inventory_policy === "redemption"
             ? "redemption"
             : "claim",
-      quantity: usage.quantity,
+      quantity: usage!.quantity,
       is_demo: supply.is_demo,
       origin: {
         network: true,
@@ -328,7 +473,7 @@ export async function claimMemberDrop(
       ],
     );
     await tx.query(
-      "insert into member_claims(claim_id,member_id,customer_id,organization_id,supply_id,offer_id,allocation_id,reserved_until) values($1,$2,$3,$4,$5,$6,$7,$8)",
+      "insert into member_claims(claim_id,member_id,customer_id,organization_id,supply_id,offer_id,allocation_id,reserved_until,grant_id) values($1,$2,$3,$4,$5,$6,$7,$8,$9)",
       [
         claimId,
         member.id,
@@ -338,8 +483,20 @@ export async function claimMemberDrop(
         supply.offer_id,
         allocation.id,
         reserveUntil,
+        grant?.id || null,
       ],
     );
+    if (grant)
+      await tx.query(
+        "update fulfillment_grants set state='claimed',claimed_at=now() where id=$1 and state='issued'",
+        [grant.id],
+      );
+    if (grant)
+      await tx.query(
+        `update recovery_grants set original_claim_id=$2
+         where original_grant_id=$1 and original_claim_id is null`,
+        [grant.id, claimId],
+      );
     await demandEvent(tx, {
       kind: "drop_claimed",
       memberId: member.id,
@@ -353,6 +510,8 @@ export async function claimMemberDrop(
       detail: {
         reservationUntil: reserveUntil,
         policy: supply.inventory_policy,
+        grantId: grant?.id || null,
+        consumesAdditionalInventory: false,
       },
       dedupKey: `claim:${claimId}`,
     });
@@ -411,7 +570,7 @@ export async function marketCoverage(
   );
   if (!market) throw new RequestError("Market not found.", 404);
   const members = await db.query<Member & { geographically_relevant: boolean }>(
-    "select m.*,exists(select 1 from market_zips z where z.market_id=m.market_id and (z.zip=m.home_zip or z.zip=m.work_zip)) geographically_relevant from uptick_members m where m.market_id=$1 and m.state='active' and m.verified_at is not null and coalesce((select accepted from member_consents c where c.member_id=m.id order by c.sequence desc limit 1),false)",
+    "select m.*,exists(select 1 from market_zips z where z.market_id=m.market_id and (z.zip=m.home_zip or z.zip=m.work_zip)) geographically_relevant from uptick_members m where m.market_id=$1 and m.state='active' and m.verified_at is not null",
     [marketId],
   );
   const window = marketWeekWindow(at, market.timezone);
@@ -576,5 +735,16 @@ export async function networkPass(db: DB, credential: string) {
   const [supply] = await db.query<Supply>(`${supplySelect} where s.id=$1`, [
     mapping.supply_id,
   ]);
-  return { claim, mapping, supply };
+  const [grant] = await db.query<NetworkGrant>(
+    "select * from fulfillment_grants where id=(select grant_id from member_claims where claim_id=$1)",
+    [claim.id],
+  );
+  const [recovery] = grant
+    ? await db.query<NetworkRecovery>(
+        `select r.* from recovery_grants r join fulfillment_incidents i on i.id=r.incident_id
+         where i.grant_id=$1 order by r.issued_at desc limit 1`,
+        [grant.id],
+      )
+    : [];
+  return { claim, mapping, supply, grant: grant || null, recovery: recovery || null };
 }

@@ -583,7 +583,7 @@ export async function adjustSupply(db: DB, actor: Actor, raw: unknown) {
       usage.quantity + data.delta < 1
     )
       throw new RequestError(
-        "Inventory cannot fall below redeemed items and active reservations.",
+        "Inventory cannot fall below redeemed items, pilot commitments, issued grants, recoveries and active reservations.",
       );
     if (
       supply.spend_cap !== null &&
@@ -696,7 +696,7 @@ export async function allocateMarket(db: DB, actor: Actor, marketId: string) {
   if (!market) throw new RequestError("Market not found.");
   const week = weekKey(new Date(), market.timezone);
   const members = await db.query<{ id: string }>(
-    `select m.id from uptick_members m where m.market_id=$1 and m.state='active' and m.verified_at is not null and (select accepted from member_consents c where c.member_id=m.id order by c.sequence desc limit 1)=true and not exists(select 1 from member_allocations a where a.member_id=m.id and a.week_key=$2) order by m.created_at limit 250`,
+    `select m.id from uptick_members m where m.market_id=$1 and m.state='active' and m.verified_at is not null and m.data_kind<>'real' and not exists(select 1 from member_allocations a where a.member_id=m.id and a.week_key=$2) order by m.created_at limit 250`,
     [marketId, week],
   );
   let allocated = 0,

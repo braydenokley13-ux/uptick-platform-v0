@@ -12,12 +12,14 @@ import {
   type Actor,
 } from "../src/lib/domain";
 import { verifyNetworkPostgres } from "./verify-postgres-network";
+import { verifyPilotPostgres } from "./verify-postgres-pilot";
 import { decrypt } from "../src/lib/security";
 process.env.UPTICK_ENV = "development";
 process.env.UPTICK_LOCAL_MODE = "true";
 process.env.APP_URL = "http://localhost:3000";
 process.env.SMS_TRANSPORT = "development";
 delete process.env.VERCEL;
+delete process.env.DATABASE_URL;
 const root = await realpath(process.argv[2] || "");
 const tempRoot = await realpath("/tmp");
 if (
@@ -242,6 +244,7 @@ try {
     "PASS: concurrent same-phone claims retain separate merchant entitlements; domain and database reject cross-tenant writes.",
   );
   await verifyNetworkPostgres(db);
+  await verifyPilotPostgres(db);
   console.log("ALL SEPARATE-SESSION POSTGRESQL CHECKS PASSED.");
 } finally {
   await sql.end({ timeout: 5 });
