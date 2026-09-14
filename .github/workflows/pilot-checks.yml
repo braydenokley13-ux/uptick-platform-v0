@@ -1,0 +1,36 @@
+name: Pilot service checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: pilot-checks-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      UPTICK_ENV: development
+      UPTICK_LOCAL_MODE: "true"
+      APP_URL: http://localhost:3000
+      SMS_TRANSPORT: development
+      PILOT_ENROLLMENT_ENABLED: "false"
+      LOCAL_DATABASE_PATH: .data/ci-rehearsal
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - name: Add local PostgreSQL binaries
+        run: echo "$(pg_config --bindir)" >> "$GITHUB_PATH"
+      - run: bash scripts/verify-postgres.sh
+      - run: bash scripts/rehearse-restore.sh
+      - run: npm run test:e2e
+      - run: npm run build

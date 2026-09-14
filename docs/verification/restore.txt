@@ -1,0 +1,27 @@
+waiting for server to start.... done
+server started
+PASS: 150 synthetic grants publish atomically across competing PostgreSQL sessions; claim and recovery keep one allocation, one claim and original evidence.
+{
+  "result": "PASS",
+  "method": "isolated local logical dump/restore; fsync enabled; TCP disabled",
+  "restoreMilliseconds": 973,
+  "verifiedTables": [
+    "schema_migrations",
+    "pilot_runs",
+    "pilot_admissions",
+    "pilot_week_supplies",
+    "weekly_releases",
+    "fulfillment_grants",
+    "member_claims",
+    "claims",
+    "fulfillment_incidents",
+    "recovery_grants",
+    "recovery_redemptions",
+    "member_consents",
+    "member_global_suppressions",
+    "member_messages",
+    "member_message_events"
+  ],
+  "grants": 150,
+  "realProjectTouched": false
+}

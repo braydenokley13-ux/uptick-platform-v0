@@ -14,7 +14,19 @@ The implementation brief overrides the CEO package where they differ: target 150
 6. `growth_programs` and immutable `growth_program_versions` record buyer, dated objective, negotiated fee, benefit ceiling, planned placements, evaluation and narrowly scoped paid-featured protection. `program_supply_links` attach execution to an approved version. Organic supply needs no program. Payment never bypasses readiness or supply.
 7. `pilot_runs` are four-week operating records above Market Cells. `pilot_admissions` freeze the evaluation cohort. Admission capacity cannot exceed 200 or the smallest confirmed weekly capacity. `partner_commitments` record actual planned/completed distribution. `economic_entries` and `labor_entries` keep revenue, expense, exposure, liquidity and retail value separate.
 8. New pilot records carry `data_kind` (`real`, `internal`, `demo`, `synthetic`). Existing uncertain records default to `internal`; no automatic promotion to real. Real reporting uses the fixed real admitted cohort. Seed utilities fail closed against hosted or real records.
-9. Preserve deny-by-default RLS, signed callbacks, tenant checks, immutable commitments and uncertainty-safe messaging. Jobs are bounded and observable; legacy outbound is disabled unless explicitly enabled. Live consent flow is built before A2P submission.
+9. Preserve deny-by-default RLS, signed callbacks, tenant checks, immutable commitments and uncertainty-safe messaging. Jobs are bounded and observable; the scheduler no longer runs legacy outbound work. Live consent flow is built before A2P submission.
+
+## Refinements from independent review
+
+- A cohort freezes permanently when the run first becomes live. A paused live run can resume but cannot return to enrollment. Migration 020 enforces this in the database as well as the application.
+- Every paid version has a placement category. Existing protections apply even if the new buyer requests no protection. Commercial capacity uses the backed target before freeze and actual admitted cohort after freeze.
+- Amendments cannot rewrite any Program with issued grants. This deliberately conservative pilot rule avoids reselling attention already delivered; a richer prospective-only amendment engine is deferred.
+- The same supply can carry forward between unissued versions of one Program/week, while serialized validation prevents reuse by other Programs/weeks. Credit references are idempotent.
+- Recovery is available before claim, before redemption, or after digital redemption. A later claim binds a pre-issued remedy exactly once. A fulfilled remedy invalidates an unredeemed original without fabricating an original redemption; already recorded original evidence remains intact.
+- Incident forms carry the exact grant shown on the pass. Outstanding older-week recovery appears independently of the current allocation.
+- Pilot and partner use metrics follow grants issued by the selected run and matching classification. Legacy and other-run redemptions do not enter the numerator.
+- Preview builds cannot access the reused shared pilot database. Local synthetic verification and canonical hosted commissioning remain distinct.
+- Initial commercial approval and each weekly release require current stock evidence; a future-dated confirmation is never evidence of completed work. Readiness must cover the full promised period.
 
 ## Migration and file ownership
 

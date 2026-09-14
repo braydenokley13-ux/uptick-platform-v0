@@ -1,0 +1,4 @@
+PASS HTTP: competing release requests return one complete 3-member release.
+PASS HTTP: before original redemption, exact-pass incident and backed recovery are idempotent.
+PASS HTTP: after original redemption, exact-pass incident and backed recovery are idempotent.
+PASS HTTP: operator Today renders after recovery; real project untouched; no real SMS.
