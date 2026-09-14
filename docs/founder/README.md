@@ -45,3 +45,36 @@ names, contacts and commercial terms. Override the destination with
 - A configured member cap is never described as an existing audience.
 - No invented price, no claimed legal review, no launch date before the gates in
   `docs/PILOT_RELEASE_CANDIDATE.md` are actually closed.
+
+## Fonts
+
+The documents use the product's own typefaces so they read as the same brand:
+**Newsreader** for display type and **Geist** for body text, with the warm canvas
+ground, marine, mint and amber values taken from `src/app/globals.css`.
+
+Both families ship with the app in `node_modules/@fontsource/`, as `.woff2` only.
+To render the PDFs exactly, convert the faces you need to TrueType and install
+them, then rebuild:
+
+```bash
+pip install fonttools brotli
+python3 - <<'PY'
+from fontTools.ttLib import TTFont
+import os
+src, out = "node_modules/@fontsource", "/usr/local/share/fonts/uptick"
+os.makedirs(out, exist_ok=True)
+for fam, key in [("newsreader", "latin-400-normal"), ("newsreader", "latin-400-italic"),
+                 ("newsreader", "latin-600-normal"), ("newsreader", "latin-700-normal"),
+                 ("geist-sans", "latin-400-normal"), ("geist-sans", "latin-500-normal"),
+                 ("geist-sans", "latin-600-normal"), ("geist-sans", "latin-700-normal")]:
+    f = TTFont(f"{src}/{fam}/files/{fam}-{key}.woff2"); f.flavor = None
+    f.save(f"{out}/{fam}-{key}.ttf")
+PY
+fc-cache -f
+```
+
+The Newsreader faces are published under the family name `Newsreader 16pt`; the
+documents reference plain `Newsreader`, so rename the family in the `name` table
+(IDs 1, 4, 6 and 16) after converting, or install the family from Google Fonts
+instead. Without these fonts installed, Word and LibreOffice substitute a default
+serif and sans — the layout still holds, but the type will not match the product.
