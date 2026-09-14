@@ -1,7 +1,7 @@
 import { after, before, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import { memoryDb, type DB } from "../src/lib/db";
-import { id, decrypt } from "../src/lib/security";
+import { id, decrypt, encrypt, hash, token } from "../src/lib/security";
 import {
   requestMemberAccess,
   confirmMemberAccess,
@@ -16,6 +16,7 @@ import {
   referralLanding,
   acceptReferral,
   acceptPendingReferral,
+  memberIncidentGrant,
   memberHome,
   prepareMembershipWeek,
 } from "../src/lib/member-experience";
@@ -25,6 +26,12 @@ import {
   queueMemberAccess,
 } from "../src/lib/member-messaging";
 import { createRedemptionPoint, redeemAtPoint } from "../src/lib/tap";
+import {
+  issueIncidentRecovery,
+  releaseWeeklyBenefits,
+  reportMemberFulfillmentIncident,
+} from "../src/lib/pilot-promise";
+import { seedSyntheticPilot } from "../scripts/verify-postgres-pilot";
 let db: DB,
   number = 0;
 before(async () => {
@@ -449,6 +456,76 @@ test("the only saved pass remains on Your Uptick when it no longer appears in ne
   assert.equal(unsubscribed.marketingSubscribed, false);
   assert.equal(unsubscribed.saved?.id, pass.id);
   assert.equal(unsubscribed.shareableSupplyId, "supply");
+});
+test("the selected member grant is exact and an earlier-week recovery keeps its original private pass", async () => {
+  const fixture = await seedSyntheticPilot(db, 2, "member-recovery");
+  await db.query(
+    "update destination_readiness set valid_until=now()+interval '34 days' where supply_id=$1",
+    [fixture.supplyId],
+  );
+  const released = await releaseWeeklyBenefits(db, fixture.actor, {
+    runId: fixture.runId,
+    marketId: fixture.marketId,
+    weekKey: fixture.weekKey,
+    dataKind: "synthetic",
+    requestKey: "member-recovery-release",
+    assignments: fixture.members.map((member) => ({
+      memberId: member.id,
+      supplyId: fixture.supplyId,
+    })),
+  });
+  const member = fixture.members[0];
+  const accessToken = token();
+  await db.query(
+    `insert into member_access(
+      id,member_id,token_hash,token_encrypted,purpose,expires_at,confirmed_at,
+      disclosure,home_zip,age_attested
+     ) values('member-recovery-access',$1,$2,$3,'access',now()+interval '30 days',now(),
+      'Synthetic member recovery test','10001',true)`,
+    [member.id, hash(accessToken), encrypt(accessToken)],
+  );
+  const claim = await claimMemberDrop(db, accessToken, fixture.supplyId);
+  const grant = released.grants.find((item) => item.member_id === member.id)!;
+  const otherGrant = released.grants.find(
+    (item) => item.member_id !== member.id,
+  )!;
+  assert.equal(await memberIncidentGrant(db, member.id, grant.id), grant.id);
+  await assert.rejects(
+    memberIncidentGrant(db, member.id, otherGrant.id),
+    /not attached to your membership/,
+  );
+  const incidentId = await reportMemberFulfillmentIncident(db, member.id, {
+    grantId: grant.id,
+    incidentType: "out_of_stock",
+    severity: "high",
+    occurredAt: new Date().toISOString(),
+    owner: "member-support",
+    note: "The exact issued item was unavailable.",
+    idempotencyKey: "member-recovery-incident",
+  });
+  const recoveryId = await issueIncidentRecovery(db, fixture.actor, {
+    incidentId,
+    remedyType: "same_counter",
+    fallbackId: fixture.fallbackId,
+    replacementSupplyId: null,
+    payerOrganizationId: fixture.actor.organizationId,
+    payerEvidence: "Synthetic fallback inventory is prepaid.",
+    expiresAt: new Date(Date.now() + 20 * 86400 * 1000).toISOString(),
+  });
+  const home = await memberHome(
+    db,
+    accessToken,
+    new Date(Date.now() + 8 * 86400 * 1000),
+  );
+  assert.equal(home.current, null);
+  assert.equal(home.outstandingRecoveries.length, 1);
+  assert.equal(home.outstandingRecoveries[0].id, recoveryId);
+  assert.equal(home.outstandingRecoveries[0].current_week, false);
+  assert.equal(home.outstandingRecoveries[0].week_key, fixture.weekKey);
+  assert.equal(
+    decrypt(home.outstandingRecoveries[0].token_encrypted),
+    decrypt(claim.token_encrypted),
+  );
 });
 test("dedicated sender separation is enforced in both directions at the database boundary", async () => {
   const service = `MG${"b".repeat(32)}`,

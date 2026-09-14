@@ -37,6 +37,7 @@ export default async function YourUptick({
   const current = data.current as
     | (NonNullable<typeof data.current> & {
         grant?: {
+          id: string;
           state: string;
           expires_at?: string;
           member_snapshot?: { reward?: string; terms?: string };
@@ -44,11 +45,30 @@ export default async function YourUptick({
         recovery?: {
           state: string;
           expires_at?: string;
-          member_snapshot?: { reward?: string; terms?: string };
+          member_snapshot?: {
+            merchant?: string;
+            address?: string;
+            exact_item?: string;
+            size_label?: string;
+            usable_hours?: string;
+            instructions?: string;
+          };
         } | null;
       })
     | null;
   const saved = data.saved;
+  const currentRecoveryPass = current?.recovery
+    ? data.outstandingRecoveries.find(
+        (recovery) => recovery.id === current.recovery?.id,
+      )
+    : null;
+  const earlierRecoveries = data.outstandingRecoveries.filter(
+    (recovery) => !recovery.current_week,
+  );
+  const currentRecoveryStatus =
+    current?.recovery?.state === "issued" && !currentRecoveryPass
+      ? "expired"
+      : current?.recovery?.state;
 
   return (
     <MemberFrame privateView>
@@ -146,19 +166,77 @@ export default async function YourUptick({
             <p>Your free membership stays active with or without texts.</p>
           </header>
 
-          {current?.recovery && current.recovery.state !== "redeemed" && (
+          {earlierRecoveries.length > 0 && (
+            <section className="member-saved">
+              <p className="eyebrow">EARLIER UPTICK RECOVERY</p>
+              <h2>Your outstanding make-good is still ready.</h2>
+              <p>
+                A recovery stays connected to the original week and private
+                pass. It does not replace this week’s benefit.
+              </p>
+              {earlierRecoveries.map((recovery) => (
+                <div key={recovery.id} className="member-history-row">
+                  <span className="member-round-icon">
+                    <Clock3 size={20} />
+                  </span>
+                  <div>
+                    <strong>
+                      {recovery.member_snapshot.exact_item || "Backed recovery"}
+                    </strong>
+                    <p>
+                      {recovery.member_snapshot.merchant ||
+                        "Participating location"}
+                    </p>
+                    <small>
+                      Original week {recovery.week_key} · no purchase or member
+                      fee required
+                    </small>
+                  </div>
+                  <Link
+                    href={`/p/${decrypt(recovery.token_encrypted)}`}
+                    aria-label={`Open recovery pass for ${recovery.member_snapshot.exact_item || "your make-good"}`}
+                  >
+                    <ArrowUpRight size={17} />
+                  </Link>
+                </div>
+              ))}
+            </section>
+          )}
+
+          {current?.recovery && (
             <section className="member-saved">
               <p className="eyebrow">UPTICK RECOVERY</p>
               <h2>
-                {current.recovery.member_snapshot?.reward ||
+                {current.recovery.member_snapshot?.exact_item ||
                   "Your make-good is ready"}
               </h2>
+              <p>
+                {current.recovery.member_snapshot?.merchant}
+                {current.recovery.member_snapshot?.address
+                  ? ` · ${current.recovery.member_snapshot.address}`
+                  : ""}
+              </p>
               <p>
                 This recovery preserves the original week and does not replace
                 or erase its history.
               </p>
-              {current.recovery.member_snapshot?.terms && (
-                <p>{current.recovery.member_snapshot.terms}</p>
+              {current.recovery.member_snapshot?.usable_hours && (
+                <p>{current.recovery.member_snapshot.usable_hours}</p>
+              )}
+              {current.recovery.member_snapshot?.instructions && (
+                <p>{current.recovery.member_snapshot.instructions}</p>
+              )}
+              <p className="fine">
+                Status: {currentRecoveryStatus}. No purchase or member fee is
+                required.
+              </p>
+              {currentRecoveryPass && current.recovery.state === "issued" && (
+                <Link
+                  href={`/p/${decrypt(currentRecoveryPass.token_encrypted)}`}
+                  className="button"
+                >
+                  Open my recovery pass <ArrowUpRight size={16} />
+                </Link>
               )}
             </section>
           )}
@@ -213,7 +291,10 @@ export default async function YourUptick({
             </div>
           )}
 
-          <MemberHelp />
+          <MemberHelp
+            grantId={current?.grant?.id || null}
+            recoveryState={currentRecoveryStatus || null}
+          />
           {data.admission.state === "admitted" &&
             ["pilot", "live"].includes(data.market?.state || "") && (
               <MemberInvite supplyId={data.shareableSupplyId} />

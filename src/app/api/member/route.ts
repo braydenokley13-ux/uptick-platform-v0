@@ -31,6 +31,7 @@ import {
   shareUptick,
   acceptPendingReferral,
   createMemberSupportRequest,
+  memberIncidentGrant,
   memberSupportQueue,
   resolveMemberSupportRequest,
 } from "@/lib/member-experience";
@@ -42,6 +43,7 @@ import {
   replaceMemberRecoveryCodes,
   revokeMemberSession,
 } from "@/lib/member-session";
+import { reportMemberFulfillmentIncident } from "@/lib/pilot-promise";
 export const runtime = "nodejs";
 const credentialSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
 async function setMemberSessionCookie(value: string) {
@@ -69,6 +71,7 @@ export async function POST(request: Request) {
           "pass-directions",
           "share",
           "help",
+          "incident",
           "recovery-codes",
           "recover",
           "signout",
@@ -237,6 +240,49 @@ export async function POST(request: Request) {
       return reply({
         ok: true,
         message: "Your help request is in the Uptick support queue.",
+      });
+    }
+    if (action === "incident") {
+      const grantId = await memberIncidentGrant(
+        db,
+        member.id,
+        z.string().min(1).max(80).parse(data.grantId),
+      );
+      const incidentType = z
+        .enum([
+          "out_of_stock",
+          "staff_refusal",
+          "unexpected_closure",
+          "incorrect_terms",
+          "qr_failure",
+          "redemption_failure",
+          "messaging_issue",
+          "member_complaint",
+          "inventory_mismatch",
+          "other",
+        ])
+        .parse(data.incidentType);
+      const incidentId = await reportMemberFulfillmentIncident(db, member.id, {
+        grantId,
+        incidentType,
+        severity: [
+          "out_of_stock",
+          "staff_refusal",
+          "unexpected_closure",
+          "redemption_failure",
+        ].includes(incidentType)
+          ? "high"
+          : "medium",
+        occurredAt: new Date().toISOString(),
+        owner: "Uptick member support",
+        note: z.string().trim().max(2000).default("").parse(data.message),
+        idempotencyKey: z.string().min(8).max(200).parse(data.idempotencyKey),
+      });
+      return reply({
+        ok: true,
+        incidentId,
+        message:
+          "Your fulfillment incident is recorded. Uptick support can attach a backed recovery to this same pass.",
       });
     }
     if (action === "preferences") {

@@ -18,7 +18,49 @@ import {
 } from "./member-messaging";
 import { stagingRecipients, uptickEnvironment } from "./environment";
 
-export async function memberHome(db: DB, credential: string) {
+export type MemberOutstandingRecovery = {
+  id: string;
+  state: "issued";
+  expires_at: string;
+  issued_at: string;
+  member_snapshot: {
+    merchant?: string;
+    address?: string;
+    exact_item?: string;
+    size_label?: string;
+    usable_hours?: string;
+    instructions?: string;
+  };
+  original_claim_id: string;
+  original_grant_id: string;
+  token_encrypted: string;
+  week_key: string;
+  current_week: boolean;
+};
+
+export async function memberIncidentGrant(
+  db: DB,
+  memberId: string,
+  grantId: string,
+) {
+  const [grant] = await db.query<{ id: string }>(
+    "select id from fulfillment_grants where id=$1 and member_id=$2",
+    [grantId, memberId],
+  );
+  if (!grant)
+    throw new RequestError(
+      "This issued benefit is not attached to your membership.",
+      404,
+    );
+  return grant.id;
+}
+
+export async function memberHome(
+  db: DB,
+  credential: string,
+  asOf = new Date(),
+) {
+  const viewedAt = asOf.toISOString();
   const identity = await memberAccess(db, credential);
   if (!identity.access.confirmed_at)
     return {
@@ -27,6 +69,7 @@ export async function memberHome(db: DB, credential: string) {
       saved: null,
       shareableSupplyId: undefined,
       history: [],
+      outstandingRecoveries: [] as MemberOutstandingRecovery[],
       market: null,
       marketingSubscribed: false,
       marketingConsentAction: null,
@@ -47,9 +90,9 @@ export async function memberHome(db: DB, credential: string) {
     created_at: string;
   }>(
     `select a.* from member_allocations a join market_cells k on k.id=a.market_id
-     where a.member_id=$1 and a.week_key=to_char(date_trunc('week',now() at time zone k.timezone),'YYYY-MM-DD')
+     where a.member_id=$1 and a.week_key=to_char(date_trunc('week',$2::timestamptz at time zone k.timezone),'YYYY-MM-DD')
      order by a.created_at desc limit 1`,
-    [identity.member.id],
+    [identity.member.id, viewedAt],
   );
   // This is a read-only account view. Allocation/release is an operator action,
   // and reserved supply remains visible even after unreserved stock is exhausted.
@@ -71,8 +114,25 @@ export async function memberHome(db: DB, credential: string) {
     method: string | null;
     current_week: boolean;
   }>(
-    `select c.*,mc.reserved_until,e.method,a.week_key=to_char(date_trunc('week',now() at time zone k.timezone),'YYYY-MM-DD') current_week from member_claims mc join claims c on c.id=mc.claim_id join member_allocations a on a.id=mc.allocation_id join market_cells k on k.id=a.market_id left join redemption_evidence e on e.claim_id=c.id where mc.member_id=$1 order by c.created_at desc,c.id desc limit 20`,
-    [identity.member.id],
+    `select c.*,mc.reserved_until,e.method,a.week_key=to_char(date_trunc('week',$2::timestamptz at time zone k.timezone),'YYYY-MM-DD') current_week from member_claims mc join claims c on c.id=mc.claim_id join member_allocations a on a.id=mc.allocation_id join market_cells k on k.id=a.market_id left join redemption_evidence e on e.claim_id=c.id where mc.member_id=$1 order by c.created_at desc,c.id desc limit 20`,
+    [identity.member.id, viewedAt],
+  );
+  // Recovery belongs to the original pass, even when that pass came from an
+  // earlier week. This authenticated account query intentionally returns the
+  // encrypted pass credential only to the server-rendered member page.
+  const outstandingRecoveries = await db.query<MemberOutstandingRecovery>(
+    `select r.id,r.state,r.expires_at,r.issued_at,r.member_snapshot,
+            r.original_claim_id,r.original_grant_id,c.token_encrypted,a.week_key,
+            a.week_key=to_char(date_trunc('week',$2::timestamptz at time zone k.timezone),'YYYY-MM-DD') current_week
+       from recovery_grants r
+       join member_claims mc on mc.claim_id=r.original_claim_id
+        and mc.member_id=r.member_id and mc.grant_id=r.original_grant_id
+       join claims c on c.id=mc.claim_id
+       join member_allocations a on a.id=mc.allocation_id
+       join market_cells k on k.id=a.market_id
+      where r.member_id=$1 and r.state='issued' and r.expires_at>$2::timestamptz
+      order by r.issued_at desc,r.id desc limit 10`,
+    [identity.member.id, viewedAt],
   );
   const [market] = await db.query<{
     name: string;
@@ -106,6 +166,7 @@ export async function memberHome(db: DB, credential: string) {
     saved,
     shareableSupplyId: shareable?.shareable ? shareable.id : undefined,
     history,
+    outstandingRecoveries,
     market: market || null,
     marketingSubscribed: consent?.accepted === true,
     marketingConsentAction: consent?.consent_action || null,

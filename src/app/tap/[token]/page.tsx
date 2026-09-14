@@ -34,8 +34,8 @@ export default async function TapPage({
           <p className="eyebrow">UPTICK TAP</p>
           <h1>Let’s find the right sign.</h1>
           <p>{error.message}</p>
-          <Link href="/sms" className="text-link">
-            Get help →
+          <Link href="/your-uptick" className="text-link">
+            Open Your Uptick →
           </Link>
         </main>
         <Footer />
@@ -96,11 +96,19 @@ export default async function TapPage({
               <>
                 <h2>Open your private pass first.</h2>
                 <p>
-                  Open the pass in your latest Uptick text on this phone, choose
-                  it for your visit, then tap or scan this sign again.
+                  Open Your Uptick in the signed-in browser on this phone.
+                  Choose the issued benefit or an outstanding recovery, open its
+                  private pass, then tap or scan this sign again.
                 </p>
-                <Link href="/join" className="button secondary">
-                  Find Uptick membership
+                <Link href="/your-uptick" className="button secondary">
+                  Open Your Uptick
+                </Link>
+                <p className="fine-print">
+                  Signed out? Use a one-use recovery code on the membership
+                  access page.
+                </p>
+                <Link href="/join" className="text-link">
+                  Use a recovery code →
                 </Link>
               </>
             ) : !selected?.matches ? (
@@ -114,6 +122,49 @@ export default async function TapPage({
                   Your current pass: {claim.snapshot.merchant} ·{" "}
                   {claim.snapshot.address}
                 </p>
+              </>
+            ) : selected.recoveryState === "redeemed" && selected.recovery ? (
+              <TapReceipt
+                record={{
+                  reward:
+                    selected.recovery.member_snapshot.exact_item ||
+                    "Backed recovery",
+                  merchant:
+                    selected.recovery.member_snapshot.merchant ||
+                    point.merchant,
+                  redeemedAt: selected.recovery.redeemed_at,
+                  timezone: claim.snapshot.timezone,
+                  evidence: selected.recoveryEvidence,
+                }}
+              />
+            ) : selected.state === "recovery_available" && selected.recovery ? (
+              <>
+                <p className="eyebrow">YOUR BACKED RECOVERY</p>
+                <h2>
+                  {selected.recovery.member_snapshot.exact_item ||
+                    "Your make-good"}
+                </h2>
+                <p>
+                  {selected.recovery.member_snapshot.merchant || point.merchant}
+                  {selected.recovery.member_snapshot.address
+                    ? ` · ${selected.recovery.member_snapshot.address}`
+                    : ""}
+                </p>
+                {selected.recovery.member_snapshot.usable_hours && (
+                  <p>{selected.recovery.member_snapshot.usable_hours}</p>
+                )}
+                {selected.recovery.member_snapshot.instructions && (
+                  <p>{selected.recovery.member_snapshot.instructions}</p>
+                )}
+                <p className="fine-print">
+                  This uses the same private pass and keeps the original
+                  redemption evidence. No purchase or member fee is required.
+                </p>
+                <TapRedeemButton
+                  key={selected.recovery.id}
+                  pointToken={token}
+                  nfc={nfc}
+                />
               </>
             ) : selected.state === "redeemed" ? (
               <TapReceipt
@@ -156,9 +207,9 @@ export default async function TapPage({
                 <p>{claim.snapshot.qualification}</p>
                 {point.exposure === "staff" && (
                   <p className="fine-print">
-                    Let the cashier check the qualifying condition before you
-                    confirm. Uptick records use of this counter’s credential; it
-                    does not digitally verify a purchase.
+                    {claim.snapshot.origin.pilot === true
+                      ? "Let the cashier check the exact free item shown on this pass before you confirm. Uptick records use of this counter’s credential; no purchase or member fee is required."
+                      : "Let the cashier check the qualifying condition before you confirm. Uptick records use of this counter’s credential; it does not digitally verify a purchase."}
                   </p>
                 )}
                 <TapRedeemButton key={claim.id} pointToken={token} nfc={nfc} />
@@ -167,7 +218,7 @@ export default async function TapPage({
           </div>
         </article>
         <div className="pass-links">
-          <Link href="/sms">Help with your pass</Link>
+          <Link href="/your-uptick">Open Your Uptick &amp; get help</Link>
         </div>
       </main>
       <Footer />

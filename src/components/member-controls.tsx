@@ -582,9 +582,17 @@ export function MemberAccountControls() {
   );
 }
 
-export function MemberHelp() {
+export function MemberHelp({
+  grantId = null,
+  recoveryState = null,
+}: {
+  grantId?: string | null;
+  recoveryState?: string | null;
+}) {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const incidentKey = useRef<string | null>(null);
+  const incidentAvailable = Boolean(grantId);
   return (
     <details className="member-fine-details">
       <summary>Get help with this Uptick</summary>
@@ -592,15 +600,24 @@ export function MemberHelp() {
         className="member-join-form"
         onSubmit={async (event) => {
           event.preventDefault();
-          const form = new FormData(event.currentTarget);
+          const formElement = event.currentTarget;
+          const form = new FormData(formElement);
           setBusy(true);
           try {
             const result = await action({
-              action: "help",
+              action: incidentAvailable ? "incident" : "help",
+              grantId: incidentAvailable ? grantId : undefined,
+              incidentType: incidentAvailable
+                ? form.get("incidentType")
+                : undefined,
+              idempotencyKey: incidentAvailable
+                ? (incidentKey.current ||= crypto.randomUUID())
+                : undefined,
               message: form.get("message") || undefined,
             });
             setMessage(result.message || "Your request is queued.");
-            event.currentTarget.reset();
+            incidentKey.current = null;
+            formElement.reset();
           } catch (error) {
             setMessage(error instanceof Error ? error.message : "Try again.");
           } finally {
@@ -609,15 +626,50 @@ export function MemberHelp() {
         }}
       >
         <p>
-          Uptick already attaches your membership and current benefit context.
-          Add a short note if it helps.
+          Uptick attaches your membership and current benefit context. A
+          fulfillment report keeps the original pass history and lets support
+          attach a capacity-backed recovery to that same pass.
         </p>
+        {recoveryState && (
+          <p className="fine">
+            Recovery status: {recoveryState.replaceAll("_", " ")}.
+          </p>
+        )}
+        {incidentAvailable && (
+          <label>
+            What failed?
+            <select name="incidentType" defaultValue="out_of_stock">
+              <option value="out_of_stock">
+                Promised item was out of stock
+              </option>
+              <option value="staff_refusal">Staff could not honor it</option>
+              <option value="unexpected_closure">
+                The location was unexpectedly closed
+              </option>
+              <option value="incorrect_terms">
+                The counter used different terms
+              </option>
+              <option value="qr_failure">The QR did not work</option>
+              <option value="redemption_failure">
+                The screen redeemed, but fulfillment failed
+              </option>
+              <option value="inventory_mismatch">
+                The available item did not match
+              </option>
+              <option value="other">Something else</option>
+            </select>
+          </label>
+        )}
         <label>
           What happened? <small>optional</small>
           <textarea name="message" maxLength={2000} />
         </label>
         <button className="button secondary" disabled={busy}>
-          {busy ? "Sending…" : "Send to Uptick support"}
+          {busy
+            ? "Sending…"
+            : incidentAvailable
+              ? "Report fulfillment problem"
+              : "Send to Uptick support"}
         </button>
         {message && <p role="status">{message}</p>}
       </form>
