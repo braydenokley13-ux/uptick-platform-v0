@@ -1,0 +1,2762 @@
+From e6174b72a598c5949b3680ada23ac313574e8530 Mon Sep 17 00:00:00 2001
+From: Brayden White <braydenwhite@Braydens-MacBook-Air.local>
+Date: Sun, 13 Sep 2026 22:27:28 -0400
+Subject: [PATCH] Align public pilot service copy
+
+---
+ README.md                         |   8 +-
+ app/advertise/page.tsx            |  14 +-
+ app/growth/page.tsx               | 178 ++++++++++++---------
+ app/host/page.tsx                 |  25 ++-
+ app/layout.tsx                    |  43 +++--
+ app/membership/page.tsx           | 150 +++++++++++++-----
+ app/network/page.tsx              |  83 +++++++---
+ app/partners/page.tsx             |  10 +-
+ app/privacy/page.tsx              | 226 +++++++++++++++++++--------
+ app/sms/page.tsx                  |  81 ++++++----
+ app/terms/page.tsx                | 210 +++++++++++++++++--------
+ components/LegalDocument.tsx      |  24 ++-
+ components/MembershipCta.tsx      |  23 ++-
+ components/SiteFooter.tsx         |  17 +-
+ components/home/ClaimUI.tsx       |  40 ++---
+ components/home/DropMessage.tsx   |  12 +-
+ components/home/GrowthChapter.tsx |  81 ++++++----
+ components/home/ModesChapter.tsx  |  45 ++++--
+ components/home/OfferPass.tsx     |  36 ++++-
+ components/home/ScreenFace.tsx    |   8 +-
+ docs/PILOT_POLICY_BLOCKERS.md     |  26 ++++
+ lib/content.ts                    | 250 +++++++++++++++++++++++-------
+ lib/program.ts                    |  27 +++-
+ 23 files changed, 1146 insertions(+), 471 deletions(-)
+ create mode 100644 docs/PILOT_POLICY_BLOCKERS.md
+
+diff --git a/README.md b/README.md
+index 434a553..d3ff686 100644
+--- a/README.md
++++ b/README.md
+@@ -19,7 +19,7 @@ npx tsc --noEmit
+ 
+ ## Copy
+ 
+-`lib/content.ts` is the single source for every claim the site makes: the promise, the worked Growth example (Monthly Anchor + Uptick Drop), the three consent choices, the four ways, Uptick Suite, the proof section and the finale. Nothing on the site should state a customer, a number or a result that is not literally true; the example businesses (Joe's Market, Ridge Physical Therapy, Northside Roofing) are labelled as examples. In particular: no search-ranking promise, no invented statistic, no website build promised as a Suite deliverable, and no causal claim that the Anchor or the Drop produces a result — each is described by the job it does. Uptick Suite is delivered with JBCI, the editorial partner; `SUITE.partner` is the one place that relationship is worded, and it appears in the homepage Suite chapter, on `/suite` and in the footer.
++`lib/content.ts` is the single source for the repeated product claims on the site: the promise, the worked Growth example, member access and SMS choice, the ways to use the network, Uptick Suite, the proof section and the finale. Growth is a negotiated four-week managed program; screens are optional. Nothing on the site should state a customer, number or result that is not literally true. The example businesses (Joe's Market, Ridge Physical Therapy, Northside Roofing) are labelled as examples. Uptick Suite is delivered with JBCI, the editorial partner; `SUITE.partner` is the one place that relationship is worded, and it appears in the homepage Suite chapter, on `/suite` and in the footer.
+ 
+ ## How the homepage is built
+ 
+@@ -27,7 +27,7 @@ npx tsc --noEmit
+ - `lib/three/` — the architectural model. `engine.ts` renders on demand (no animation loop; the renderer sleeps when nothing changes), measures a quality tier at load, and draws one static shadow map. `world.ts` is the block, `unit.ts` the screen, `shots.ts` the camera choreography.
+ - `components/home/ScreenMatch.tsx` — the DOM surface the 3D screen hands over to at the end of the stage.
+ - `components/home/ModesChapter.tsx` + `BlockPlan.tsx` — one network, three ways to use it: a site-plan drawing of the same street that lights differently for Host, Advertise and Growth.
+-- `components/home/GrowthChapter.tsx` — the Monthly Anchor (on the screen) beside the Uptick Drop (on the phone), then claim → visit and redeem → report. `ClaimUI.tsx` holds the three separate consent choices; `OfferPass.tsx` is the redeem flow.
++- `components/home/GrowthChapter.tsx` — a worked view of an optional screen placement, a featured member benefit, web access, redemption and observed results. `ClaimUI.tsx` shows optional SMS without a merchant list; `OfferPass.tsx` is the redeem flow.
+ - `components/home/SuiteChapter.tsx` — one conversation becoming six content surfaces.
+ - `components/home/ProofChapter.tsx` — real photography from the counters the screens sit on (`public/photos/`). Captions state exactly what the hardware in the photo is.
+ - `components/home/FinaleChapter.tsx` / `MobileFinale.tsx` + `Doors.tsx` — the closing beat over the model and the four doors.
+@@ -69,7 +69,7 @@ npm run film:lookdev -- --pos -2.5,-19.5,5.2 --target 6,10.5,2.8 --lens 29 --out
+ 
+ Renders use a local Chromium: `FILM_CHROME=/path/to/chrome-headless-shell` (defaults to Playwright's in the remote environment).
+ 
+-## The delivered film — *The Weekly Drop*
++## The delivered film — _The Weekly Drop_
+ 
+ The finished Uptick Growth commercial: 56.00 s, 1,344 frames, 1920×1080, 24 fps.
+ It sells one thing — Uptick puts screens in the local businesses around a
+@@ -79,7 +79,7 @@ free.
+ 
+ Every picture is photographic; no Blender plate appears in the master. Every
+ product surface is drawn in Remotion so the copy is exact: the screen at the car
+-wash, the fuel receipt, and four phone states. The car wash screen is *projected*
++wash, the fuel receipt, and four phone states. The car wash screen is _projected_
+ onto a real blank sign panel in the plate with a homography, so it takes that
+ panel's own perspective and defocus rather than being pasted on flat.
+ 
+diff --git a/app/advertise/page.tsx b/app/advertise/page.tsx
+index c106fa3..a01785a 100644
+--- a/app/advertise/page.tsx
++++ b/app/advertise/page.tsx
+@@ -49,10 +49,14 @@ export default function AdvertisePage() {
+       <header className="page__head">
+         <p className="mono-tag">Advertise · No screen needed</p>
+         <div className="page__copy">
+-          <h1 className="page__title">Reach nearby customers across Uptick locations.</h1>
++          <h1 className="page__title">
++            Reach nearby customers across Uptick locations.
++          </h1>
+           <p className="page__lead">
+-            Your message on the counter screens of non-competing local businesses around you. Flexible in what you promote,
+-            precise in where it runs, designed with you, and no screen of your own required.
++            Your message on the counter screens of non-competing local
++            businesses around you. Flexible in what you promote, precise in
++            where it runs, designed with you, and no screen of your own
++            required.
+           </p>
+           <div className="page__acts">
+             <a href="#plan" className="btn btn--mint">
+@@ -106,8 +110,8 @@ export default function AdvertisePage() {
+               Whatever the neighborhood should know.
+             </h2>
+             <p className="page__lead">
+-              Want an offer measured all the way to the visit, with customers claiming it on their phone? That is Growth, and it
+-              runs on a host screen at your own business.{" "}
++              Want a managed four-week program with approved fulfillment and
++              observed results? That is Growth. Screen placements are optional.{" "}
+               <Link href="/growth" className="textlink">
+                 About Growth
+               </Link>
+diff --git a/app/growth/page.tsx b/app/growth/page.tsx
+index b0c53b5..fb7a01f 100644
+--- a/app/growth/page.tsx
++++ b/app/growth/page.tsx
+@@ -4,45 +4,51 @@ import ContactPanel from "@/components/ContactPanel";
+ import DropMessage from "@/components/home/DropMessage";
+ import ScreenFace from "@/components/home/ScreenFace";
+ import PageVisual from "@/components/PageVisual";
+-import { CONSENT, CTA, GROWTH_EXAMPLE } from "@/lib/content";
++import { CTA, GROWTH_EXAMPLE } from "@/lib/content";
+ 
+ export const metadata: Metadata = {
+   title: "Uptick Growth",
+   description:
+-    "Uptick Growth turns local attention into measurable customer activity: a Monthly Anchor on your screen and the Uptick screens nearby, Uptick Drops that give customers a reason to come in now, claims and redemptions on their phone, and a plain report. Requires hosting.",
++    "A negotiated, operator-managed four-week Growth program with planned placements, approved fulfillment and observed results. Screens are optional.",
+ };
+ 
+ const HOW = [
+   {
+-    title: "Set the Anchor",
+-    body: "One offer for the month, and what the reward is. It runs on your screen and on the Uptick screens nearby, with one code to scan. The screen is the durable reason to care.",
++    title: "Define the Program",
++    body: "Agree on the objective, exact member benefit, dates, places, category, negotiated program fee and spend ceiling. A merchant can propose this directly; no separate offer studio is required.",
+   },
+   {
+-    title: "Customers scan and claim",
+-    body: "A number delivers this month's pass by text. Two boxes, both optional and off to start: updates from you, and Uptick Drops from nearby businesses.",
++    title: "Plan four weeks",
++    body: "Uptick lays out the planned placements for each week. A plan may use an Uptick screen when it fits, but hosting a screen is not required.",
+   },
+   {
+-    title: "They visit and redeem",
+-    body: "Open the pass, show staff, tap redeem, confirm. Uptick records the redemption and the time. No POS integration, no cashier code, no new software.",
++    title: "Approve Fulfillment",
++    body: "Before release, Uptick checks real inventory, the fulfilling location and staff readiness. The business funding Growth and the business fulfilling a benefit may be different.",
+   },
+   {
+-    title: "Send Drops",
+-    body: "A Drop is a limited-time offer to the people who asked for one: morning hours, this weekend, the first thirty. The phone is the urgent reason to act.",
++    title: "Release the benefit",
++    body: "An admitted adult member receives one featured benefit backed by approved supply, with no purchase or member payment required. Web access is standard; SMS is optional.",
+   },
+   {
+-    title: "Read the report",
+-    body: "Signups, claims, redemptions with time, Drops sent and what each brought back, by placement. Only what Uptick can actually observe.",
++    title: "Read Results",
++    body: "See planned placements, issued benefits, claims, redemptions, fulfillment problems, recovery and credits. Uptick reports observed activity without inventing reach or sales.",
+   },
+ ];
+ 
+ const TRACKED = [
+-  ["Signups", "Numbers entered at the Anchor"],
+-  ["Claims", "Passes delivered and opened"],
+-  ["Redemptions", "Passes redeemed at your counter, with the time"],
+-  ["Drops sent", "Each Drop, and the claims and redemptions it brought back"],
+-  ["Your list", "Customers who chose to hear from you again"],
+-  ["Uptick Drops", "Customers who chose Drops from nearby businesses"],
+-  ["By placement", "Which counters the activity came from"],
++  ["Planned placements", "What was approved for each week"],
++  [
++    "Issued benefits",
++    "Benefits backed by approved supply and released to eligible members",
++  ],
++  ["Claims", "Issued benefits opened or claimed"],
++  ["Redemptions", "Completed fulfillment, with the observed time"],
++  [
++    "Fulfillment",
++    "Readiness, exceptions and recovery when something goes wrong",
++  ],
++  ["Credits", "Approved adjustments tied to the program"],
++  ["By placement", "Which approved placements produced observed activity"],
+ ];
+ 
+ export default function GrowthPage() {
+@@ -50,12 +56,14 @@ export default function GrowthPage() {
+   return (
+     <div className="page">
+       <header className="page__head">
+-        <p className="mono-tag">Uptick Growth · Requires hosting</p>
++        <p className="mono-tag">Uptick Growth · Four-week managed program</p>
+         <div className="page__copy">
+-          <h1 className="page__title">Local attention, turned into visits you can count.</h1>
++          <h1 className="page__title">Local growth, planned and measured.</h1>
+           <p className="page__lead">
+-            Growth is the premium layer on a host screen. A Monthly Anchor on the counter is the reason to care; an Uptick Drop on
+-            the phone is the reason to act now; the pass is redeemed at your register and reported back to you plainly.
++            Growth is a negotiated four-week program managed with Uptick. The
++            approved record covers the program, weekly placements, fulfillment
++            and results. Screens can be part of the plan, but hosting one is
++            optional.
+           </p>
+           <div className="page__acts">
+             <a href="#start" className="btn btn--mint">
+@@ -79,18 +87,26 @@ export default function GrowthPage() {
+ 
+       <PageVisual
+         name="pockets"
+-        alt="Across the street: the convenience store, the gym and the restaurant, each with a counter screen that can carry your Anchor."
+-        caption="Requires hosting · Anchor on the screens · Drops on the phone"
++        alt="Across the street: several local businesses that could take part in an approved Growth placement or fulfill a member benefit."
++        caption="Four weeks · Planned placements · Screens optional"
+       />
+ 
+-      <section id="how" className="band band--paper" aria-labelledby="growth-how">
++      <section
++        id="how"
++        className="band band--paper"
++        aria-labelledby="growth-how"
++      >
+         <div className="band__inner">
+           <header className="band__head">
+-            <p className="mono-tag">How Growth works</p>
++            <p className="mono-tag">Program · Fulfillment · Results</p>
+             <h2 id="growth-how" className="band__title">
+-              Five steps. Two of them are yours.
++              One approved program, carried through four weeks.
+             </h2>
+-            <p className="page__lead">You choose the offer and provide the reward. Uptick does the rest, and reports it back.</p>
++            <p className="page__lead">
++              The fee and commitments are negotiated once at the program level.
++              Amendments are proposed and approved before they change an
++              existing obligation.
++            </p>
+           </header>
+           <div className="steps">
+             {HOW.map((step, i) => (
+@@ -104,24 +120,27 @@ export default function GrowthPage() {
+         </div>
+       </section>
+ 
+-      <section className="band band--light" aria-labelledby="growth-drop">
++      <section className="band band--light" aria-labelledby="growth-protection">
+         <div className="band__inner pair">
+           <div>
+-            <p className="mono-tag">What makes a Drop a Drop</p>
+-            <h2 id="growth-drop" className="band__title" style={{ marginTop: 16 }}>
+-              Real windows. Real limits. Nothing invented.
++            <p className="mono-tag">Bounded protection</p>
++            <h2
++              id="growth-protection"
++              className="band__title"
++              style={{ marginTop: 16 }}
++            >
++              Clear scope, dates and exceptions.
+             </h2>
+             <p className="page__lead" style={{ marginTop: 20 }}>
+-              A screen whose content changes monthly cannot keep saying &ldquo;today only&rdquo; and stay credible. A Drop can,
+-              because it is true: it lands when the window opens and it ends when the window closes.
++              If paid featured protection is included, the approved program
++              states its dates, category and places. Its radius can never exceed
++              the configured maximum of 1.5 straight-line miles. Any exception
++              and termination rule is explicit.
+             </p>
+-            <ul className="places" aria-label="Kinds of Drop window" style={{ marginTop: 28 }}>
+-              {g.windows.map((w) => (
+-                <li key={w}>{w}</li>
+-              ))}
+-            </ul>
+             <p className="step__body" style={{ marginTop: 28 }}>
+-              Drops go only to the people who asked for them. How often is up to you and the offer, not a schedule Uptick imposes.
++              Protection does not remove organic supplier participation or
++              recovery fulfillment. A supplier can participate independently
++              without buying Growth and without paying a Growth fee.
+             </p>
+           </div>
+           <div className="phone phone--drop" style={{ justifySelf: "center" }}>
+@@ -130,30 +149,39 @@ export default function GrowthPage() {
+         </div>
+       </section>
+ 
+-      <section className="band band--deep" aria-labelledby="growth-consent">
++      <section className="band band--deep" aria-labelledby="growth-access">
+         <div className="band__inner">
+           <header className="band__head">
+-            <p className="mono-tag">Consent, exactly</p>
+-            <h2 id="growth-consent" className="band__title">
+-              The claim is one thing. The lists are two others.
++            <p className="mono-tag">Member access</p>
++            <h2 id="growth-access" className="band__title">
++              The benefit does not depend on a marketing list.
+             </h2>
+             <p className="page__lead">
+-              A customer&rsquo;s number is used once, to deliver the pass. Everything else is a separate choice, and both are
+-              unchecked to start.
++              Members use a private web experience. SMS is an optional Uptick
++              Local membership channel and is never merchant marketing consent.
++              Replying STOP ends texts while preserving membership and already
++              issued benefits.
+             </p>
+           </header>
+           <div className="ledger">
+             <div className="ledger__row">
+-              <span>{CONSENT.claim}</span>
+-              <span className="ledger__meta">The action itself. Delivers this month&rsquo;s pass. No list is joined.</span>
++              <span>Web access</span>
++              <span className="ledger__meta">
++                Available without SMS consent.
++              </span>
+             </div>
+             <div className="ledger__row">
+-              <span>{CONSENT.merchant}</span>
+-              <span className="ledger__meta">Optional. Your Drops and updates, from your business only. Reply STOP any time.</span>
++              <span>Optional Uptick SMS</span>
++              <span className="ledger__meta">
++                Unchecked to start. Message frequency varies.
++              </span>
+             </div>
+             <div className="ledger__row">
+-              <span>{CONSENT.network}</span>
+-              <span className="ledger__meta">Optional, and separate. Drops from other nearby businesses, never hidden inside the first box.</span>
++              <span>No merchant list</span>
++              <span className="ledger__meta">
++                A fulfiller does not receive Uptick membership consent or member
++                history.
++              </span>
+             </div>
+           </div>
+         </div>
+@@ -164,11 +192,12 @@ export default function GrowthPage() {
+           <header className="band__head">
+             <p className="mono-tag">What Uptick reports</p>
+             <h2 id="growth-measure" className="band__title">
+-              Real activity, not estimated audiences.
++              Observed execution, not estimated audiences.
+             </h2>
+             <p className="page__lead">
+-              A screen playing your Anchor is a play count, not a headcount. Uptick does not convert plays into impressions and does
+-              not claim to know a customer&rsquo;s total spending. What it can observe, it reports.
++              A screen play remains a play, not a headcount. Program results
++              distinguish planned work, backed benefits and completed
++              fulfillment.
+             </p>
+           </header>
+           <div className="ledger">
+@@ -180,27 +209,30 @@ export default function GrowthPage() {
+             ))}
+           </div>
+ 
+-          <div className="split" style={{ marginTop: "clamp(48px, 7vh, 80px)" }}>
++          <div
++            className="split"
++            style={{ marginTop: "clamp(48px, 7vh, 80px)" }}
++          >
+             <div>
+-              <p className="mono-tag mono-tag--ink">Uptick handles</p>
++              <p className="mono-tag mono-tag--ink">Uptick manages</p>
+               <ul className="plainlist plainlist--ink">
+-                <li>The screens</li>
+-                <li>The code and the claim flow</li>
+-                <li>The texts, the passes, the Drops</li>
+-                <li>Tracking and the report</li>
++                <li>The approved four-week program</li>
++                <li>Weekly placement planning</li>
++                <li>Fulfillment checks and member access</li>
++                <li>Observed results and approved credits</li>
+               </ul>
+             </div>
+             <div>
+-              <p className="mono-tag mono-tag--ink">You handle</p>
++              <p className="mono-tag mono-tag--ink">You approve</p>
+               <p className="split__big">
+-                Choose the offer.
++                Scope and fee.
+                 <br />
+-                Provide the reward.
++                Benefit and ceiling.
+               </p>
+               <p className="step__body" style={{ marginTop: 22 }}>
+-                Growth runs on a host screen at your business. Hosting is free, and it is where every pilot starts.{" "}
++                Hosting is a separate, optional way to join the screen network.{" "}
+                 <Link href="/host" className="textlink">
+-                  Host a screen
++                  About hosting
+                 </Link>
+               </p>
+             </div>
+@@ -210,16 +242,16 @@ export default function GrowthPage() {
+ 
+       <ContactPanel
+         id="start"
+-        tag="30-day Growth pilot"
+-        title="Start a 30-day Growth pilot."
+-        lead="Tell us what you sell and where you are, and we will come back with the Anchor we would run first and which nearby counters could carry it."
++        tag="Four-week Growth program"
++        title="Plan a four-week Growth program."
++        lead="Tell us the outcome you want and where. Uptick will return a concrete program proposal with weekly placements, fulfillment requirements, negotiated fee and spend ceiling for review."
+         include={[
+           "Your business name and address",
+-          "What you sell, so we can screen for non-competing counters",
+-          "The offer you would want to run",
++          "The outcome and category you want to plan around",
++          "The benefit, dates and places you want considered",
+           "The best number or email to reach you",
+         ]}
+-        subject="30-day Growth pilot"
++        subject="Four-week Growth program"
+       />
+     </div>
+   );
+diff --git a/app/host/page.tsx b/app/host/page.tsx
+index caaa2ef..d92ee99 100644
+--- a/app/host/page.tsx
++++ b/app/host/page.tsx
+@@ -25,11 +25,18 @@ const GIVES = [
+   },
+   {
+     title: "You share in what runs",
+-    body: "As paid campaigns run in your area, host businesses share in that revenue. Hosting has value on day one, and it is the foundation if you ever want Growth.",
++    body: "As paid campaigns run in your area, host businesses share in that revenue. Hosting is separate from Growth; a merchant can use either one without buying the other.",
+   },
+ ];
+ 
+-const PLACES = ["Convenience stores & gas stations", "Cafés & quick-serve", "Restaurants with a wait", "Salons & barbershops", "Gyms & studios", "Any busy counter"];
++const PLACES = [
++  "Convenience stores & gas stations",
++  "Cafés & quick-serve",
++  "Restaurants with a wait",
++  "Salons & barbershops",
++  "Gyms & studios",
++  "Any busy counter",
++];
+ 
+ const FAQS = [
+   {
+@@ -56,10 +63,14 @@ export default function HostPage() {
+       <header className="page__head">
+         <p className="mono-tag">Host a screen · Free</p>
+         <div className="page__copy">
+-          <h1 className="page__title">Promote your own business. Join the network.</h1>
++          <h1 className="page__title">
++            Promote your own business. Join the network.
++          </h1>
+           <p className="page__lead">
+-            A free 21-inch countertop screen that shows your own specials and events first, makes your counter part of a local
+-            network of non-competing businesses, and shares in the campaigns that run on it. No paid plan, ever.
++            A free 21-inch countertop screen that shows your own specials and
++            events first, makes your counter part of a local network of
++            non-competing businesses, and shares in the campaigns that run on
++            it. No paid plan, ever.
+           </p>
+           <div className="page__acts">
+             <a href="#apply" className="btn btn--mint">
+@@ -111,8 +122,8 @@ export default function HostPage() {
+               Counters people already stand at.
+             </h2>
+             <p className="page__lead">
+-              High traffic, a natural pause, and eye level. If people wait at your counter for even thirty seconds, the screen
+-              has a job.
++              High traffic, a natural pause, and eye level. If people wait at
++              your counter for even thirty seconds, the screen has a job.
+             </p>
+           </header>
+           <ul className="places" aria-label="Kinds of counter">
+diff --git a/app/layout.tsx b/app/layout.tsx
+index 77b22a2..9979b59 100644
+--- a/app/layout.tsx
++++ b/app/layout.tsx
+@@ -11,28 +11,53 @@ import "./mobile.css";
+  * Newsreader italic is spent on one phrase per page, never more — the
+  * editorial accent that says a person wrote this, not a template.
+  */
+-const sans = Geist({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
+-const mono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono", display: "swap", weight: ["400", "500"] });
+-const serif = Newsreader({ subsets: ["latin"], variable: "--font-serif", display: "swap", style: ["italic"], weight: ["400"] });
++const sans = Geist({
++  subsets: ["latin"],
++  variable: "--font-sans",
++  display: "swap",
++});
++const mono = Geist_Mono({
++  subsets: ["latin"],
++  variable: "--font-mono",
++  display: "swap",
++  weight: ["400", "500"],
++});
++const serif = Newsreader({
++  subsets: ["latin"],
++  variable: "--font-serif",
++  display: "swap",
++  style: ["italic"],
++  weight: ["400"],
++});
+ 
+ export const metadata: Metadata = {
+   metadataBase: new URL("https://upticklocal.com"),
+   title: {
+-    default: "Uptick Local — Grow your business by reaching the customers already around you.",
++    default:
++      "Uptick Local — Grow your business by reaching the customers already around you.",
+     template: "%s — Uptick Local",
+   },
+   description:
+-    "A local business growth system. Host a free countertop screen and join the network, advertise across nearby Uptick locations, run Growth (a Monthly Anchor on the screens, Uptick Drops on the phone, visits you can count), and use Uptick Suite for content that gets you chosen online.",
++    "A local business growth system. Host a free countertop screen, advertise across nearby Uptick locations, or plan a negotiated four-week Growth program with approved fulfillment and observed results. Growth does not require a screen.",
+   openGraph: {
+-    title: "Uptick Local — Grow your business by reaching the customers already around you.",
+-    description: "Screens where people already go. Offers they can act on now. Content that makes them choose you.",
++    title:
++      "Uptick Local — Grow your business by reaching the customers already around you.",
++    description:
++      "Screens where people already go. Offers they can act on now. Content that makes them choose you.",
+     type: "website",
+   },
+ };
+ 
+-export default function RootLayout({ children }: { children: React.ReactNode }) {
++export default function RootLayout({
++  children,
++}: {
++  children: React.ReactNode;
++}) {
+   return (
+-    <html lang="en" className={`${sans.variable} ${mono.variable} ${serif.variable}`}>
++    <html
++      lang="en"
++      className={`${sans.variable} ${mono.variable} ${serif.variable}`}
++    >
+       <body>
+         <a href="#main" className="skiplink">
+           Skip to content
+diff --git a/app/membership/page.tsx b/app/membership/page.tsx
+index e439069..443e144 100644
+--- a/app/membership/page.tsx
++++ b/app/membership/page.tsx
+@@ -6,14 +6,26 @@ import { PROGRAM, SMS_PROGRAM } from "@/lib/program";
+ export const metadata: Metadata = {
+   title: "Uptick Local Membership",
+   description:
+-    "Uptick Local is a free consumer membership for local perks. Join once, receive an eligible Uptick, and redeem it at participating locations when it is available in your market.",
++    "Uptick Local is a free pilot membership for admitted adults. A published weekly release provides one featured, no-purchase benefit backed by approved local supply.",
+ };
+ 
+ const HOW_IT_WORKS = [
+-  ["Join once", "Uptick Local membership is free. No paid membership is currently required."],
+-  ["Get your Uptick", "Members may receive a featured Uptick, with other eligible local options added as the product evolves."],
+-  ["Go redeem it", "The participating location fulfills the specific Uptick. Its exact terms, timing and availability are the ones shown with that benefit."],
+-  ["Come back next week", "The product is built around a recurring local rhythm, with availability depending on participating markets and locations."],
++  [
++    "Be admitted",
++    "The bounded pilot is for adults age 18 or older. It targets 150 admitted members and has a hard cap of 200.",
++  ],
++  [
++    "Get one featured benefit",
++    "For each published weekly release, an eligible member receives one benefit backed by approved supply. No purchase or member payment is required.",
++  ],
++  [
++    "Go redeem it",
++    "The named participating location fulfills the benefit under its displayed timing, capacity and redemption instructions.",
++  ],
++  [
++    "Use web or optional SMS",
++    "A private web experience provides access. Uptick Local membership texts are optional and message frequency varies.",
++  ],
+ ] as const;
+ 
+ export default function MembershipPage() {
+@@ -27,7 +39,9 @@ export default function MembershipPage() {
+               Something good is <em className="accent">free nearby.</em>
+             </h1>
+             <p className="program-hero__lead">
+-              Uptick is a free local consumer membership. Join once, get your Uptick, go redeem it, and come back next week.
++              Uptick is a free local pilot membership for admitted adults. Each
++              published weekly release provides one featured, no-purchase
++              benefit backed by approved local supply.
+             </p>
+             <div className="page__acts">
+               <MembershipCta />
+@@ -36,14 +50,22 @@ export default function MembershipPage() {
+               </Link>
+             </div>
+             <p className="program-hero__note">
+-              Availability depends on participating markets and locations. No paid membership is currently required.
++              The pilot targets {PROGRAM.pilotTargetMembers} admitted members
++              and will not exceed {PROGRAM.pilotMemberCap}. No fixed membership
++              fee or purchase is required.
+             </p>
+           </div>
+ 
+-          <div className="program-hero__signal" aria-label="Uptick Drop overview">
++          <div
++            className="program-hero__signal"
++            aria-label="Uptick Drop overview"
++          >
+             <div className="program-signal">
+               <p className="mono-tag mono-tag--muted">The member benefit</p>
+-              <p className="program-signal__title">An Uptick Drop is a genuinely free item or perk made available through a participating local location.</p>
++              <p className="program-signal__title">
++                One featured item or perk, backed by approved supply and
++                available without a purchase.
++              </p>
+               <dl className="program-facts program-facts--dark">
+                 <div>
+                   <dt>Member</dt>
+@@ -63,36 +85,53 @@ export default function MembershipPage() {
+         </div>
+       </header>
+ 
+-      <section className="program-band program-band--paper" data-theme="light" aria-labelledby="membership-why">
++      <section
++        className="program-band program-band--paper"
++        data-theme="light"
++        aria-labelledby="membership-why"
++      >
+         <div className="program-shell">
+           <p className="mono-tag mono-tag--ink">Why Uptick exists</p>
+           <div className="program-section-head">
+             <h2 id="membership-why">Make local feel worth returning to.</h2>
+             <p>
+-              Local businesses already have reasons for people to stop in. Uptick makes one of those reasons easier to discover and
+-              easier to come back to, without turning the neighborhood into a deal feed.
++              Local businesses already have reasons for people to stop in.
++              Uptick makes one of those reasons easier to discover and easier to
++              come back to, without turning the neighborhood into a deal feed.
+             </p>
+           </div>
+           <div className="program-copy-grid">
+             <p>
+-              The consumer relationship is simple: <strong>Uptick Local and the Uptick Member.</strong> Uptick manages the membership
+-              relationship and the messages a member chooses to receive. Participating locations fulfill the benefit when a member
+-              redeems it.
++              The consumer relationship is between{" "}
++              <strong>Uptick Local and the Uptick Member.</strong> Uptick
++              manages admission, access and any messages a member chooses to
++              receive. A named participating location fulfills the benefit when
++              a member redeems it.
+             </p>
+             <p>
+-              The first merchant focus is gas stations and convenience stores: places already part of a weekly routine. The network
+-              may evolve, but the public promise stays plain—something useful, free, and local when it is actually available.
++              Participating suppliers can join organically without buying a
++              Growth program or paying a Growth fee. A Growth buyer may also be
++              different from the location that fulfills the member benefit.
+             </p>
+           </div>
+         </div>
+       </section>
+ 
+-      <section className="program-band program-band--light" data-theme="light" aria-labelledby="membership-how">
++      <section
++        className="program-band program-band--light"
++        data-theme="light"
++        aria-labelledby="membership-how"
++      >
+         <div className="program-shell">
+           <div className="program-section-head">
+             <p className="mono-tag mono-tag--ink">How it works</p>
+-            <h2 id="membership-how">Join once. Get your Uptick. Go redeem it.</h2>
+-            <p>There is no paid tier to understand and no promise that every location has an Uptick at every moment.</p>
++            <h2 id="membership-how">
++              Be admitted. Get one backed benefit. Go redeem it.
++            </h2>
++            <p>
++              There is no paid tier and no purchase requirement. Only a
++              published release creates a current benefit.
++            </p>
+           </div>
+           <ol className="program-steps">
+             {HOW_IT_WORKS.map(([title, body], index) => (
+@@ -106,44 +145,74 @@ export default function MembershipPage() {
+         </div>
+       </section>
+ 
+-      <section className="program-band program-band--deep" data-theme="dark" aria-labelledby="membership-launch">
++      <section
++        className="program-band program-band--deep"
++        data-theme="dark"
++        aria-labelledby="membership-launch"
++      >
+         <div className="program-shell">
+           <p className="mono-tag">Where it is launching</p>
+           <div className="program-section-head program-section-head--dark">
+-            <h2 id="membership-launch">Starting with the places already in the weekly routine.</h2>
++            <h2 id="membership-launch">
++              A bounded pilot with verified supply.
++            </h2>
+             <p>
+-              Uptick&rsquo;s initial merchant focus is participating gas stations and convenience stores. We are not publishing a live
+-              directory, map, member count or availability claim here. Access depends on the market and locations participating at the
+-              time.
++              The pilot is limited to admitted adults age{" "}
++              {PROGRAM.minimumMemberAge} or older. It targets{" "}
++              {PROGRAM.pilotTargetMembers} members and has a hard cap of{" "}
++              {PROGRAM.pilotMemberCap}. Uptick checks inventory and location
++              readiness before a weekly release is published.
+             </p>
+           </div>
+           <div className="program-copy-grid program-copy-grid--dark">
+             <div>
+               <p className="mono-tag mono-tag--muted">The location</p>
+-              <p>Fulfills the specific Uptick benefit and follows the offer&rsquo;s displayed terms, capacity and timing.</p>
++              <p>
++                Fulfills the specific benefit and follows its displayed terms,
++                capacity, timing and recovery instructions.
++              </p>
+             </div>
+             <div>
+               <p className="mono-tag mono-tag--muted">The relationship</p>
+-              <p>Uptick manages membership. Joining Uptick does not automatically enroll a member in a participating merchant&rsquo;s independent marketing program.</p>
++              <p>
++                Uptick manages membership. Joining Uptick does not automatically
++                enroll a member in a participating merchant&rsquo;s independent
++                marketing program.
++              </p>
+             </div>
+           </div>
+         </div>
+       </section>
+ 
+-      <section className="program-band program-band--paper" data-theme="light" aria-labelledby="membership-messages">
++      <section
++        className="program-band program-band--paper"
++        data-theme="light"
++        aria-labelledby="membership-messages"
++      >
+         <div className="program-shell">
+           <p className="mono-tag mono-tag--ink">Messaging expectations</p>
+           <div className="program-section-head">
+-            <h2 id="membership-messages">A clear message about something worth showing up for.</h2>
++            <h2 id="membership-messages">
++              Use the web. Choose texts only if you want them.
++            </h2>
+             <p>
+-              SMS is an important delivery channel for Uptick Local. Members who choose messaging may receive approximately one
+-              featured Uptick per week. Membership, service, support or transaction-related messages may add to that frequency.
++              Membership and an issued benefit do not depend on SMS. Members who
++              opt in may receive an Uptick notice for a published weekly
++              release, plus service, support or transaction-related messages
++              when needed. Message frequency varies.
+             </p>
+           </div>
+           <ul className="program-list">
+             <li>{SMS_PROGRAM.rates}</li>
+-            <li>{SMS_PROGRAM.optOut} Reply HELP for help or contact {PROGRAM.supportEmail}.</li>
+-            <li>Merchant-specific marketing is a separate choice. A participating location does not inherit Uptick membership consent.</li>
++            <li>
++              {SMS_PROGRAM.optOut} Reply HELP for help or contact{" "}
++              {PROGRAM.supportEmail}.
++            </li>
++            <li>{SMS_PROGRAM.restart}</li>
++            <li>
++              A participating location does not receive Uptick SMS consent or
++              member history.
++            </li>
+           </ul>
+           <Link href={PROGRAM.urls.sms} className="program-text-link">
+             Read the Uptick Local messaging program
+@@ -151,14 +220,21 @@ export default function MembershipPage() {
+         </div>
+       </section>
+ 
+-      <section className="program-cta-band" data-theme="dark" aria-labelledby="membership-cta">
++      <section
++        className="program-cta-band"
++        data-theme="dark"
++        aria-labelledby="membership-cta"
++      >
+         <div className="program-shell program-cta-band__inner">
+           <div>
+             <p className="mono-tag">Membership access</p>
+-            <h2 id="membership-cta">Want to hear when Uptick opens near you?</h2>
++            <h2 id="membership-cta">
++              Want to hear when Uptick opens near you?
++            </h2>
+             <p>
+-              If access is not live in your market yet, we will say so. Use the current membership path when it is configured, or ask
+-              the Uptick team about pilot access.
++              Pilot enrollment is not open while the operating legal identity,
++              notice address and launch process remain unfinished. You can ask
++              the Uptick team about future pilot access.
+             </p>
+           </div>
+           <MembershipCta className="btn btn--mint" />
+diff --git a/app/network/page.tsx b/app/network/page.tsx
+index 7aa8e83..90b71b4 100644
+--- a/app/network/page.tsx
++++ b/app/network/page.tsx
+@@ -11,10 +11,22 @@ export const metadata: Metadata = {
+ };
+ 
+ const LOOP = [
+-  ["Your own specials, first", "A host's screen always leads with the host. Specials, events, announcements: send one and it goes in the loop."],
+-  ["Campaigns from non-competing neighbours", "What Advertise puts on the block. Screened against what you sell, so nothing runs in a competitor."],
+-  ["Monthly Anchors from Growth businesses nearby", "This month's offer from a business up the street, with one code to scan."],
+-  ["Network notices", "Occasionally, Uptick itself: what is new on the block, how to take part."],
++  [
++    "Your own specials, first",
++    "A host's screen always leads with the host. Specials, events, announcements: send one and it goes in the loop.",
++  ],
++  [
++    "Campaigns from non-competing neighbours",
++    "What Advertise puts on the block. Screened against what you sell, so nothing runs in a competitor.",
++  ],
++  [
++    "Approved Growth placements",
++    "A planned Growth message may run when a screen is included in the approved four-week program.",
++  ],
++  [
++    "Network notices",
++    "Occasionally, Uptick itself: what is new on the block, how to take part.",
++  ],
+ ];
+ 
+ const RULES = [
+@@ -36,15 +48,35 @@ const RULES = [
+   },
+   {
+     title: "Consent, explicitly",
+-    body: "A customer chooses, separately, whether to hear from one business again and whether to receive Uptick Drops from nearby businesses. Both are off to start.",
++    body: "Member web access does not require SMS. Uptick Local membership texts are optional, off to start and never become merchant marketing consent.",
+   },
+ ];
+ 
+ const SYSTEM = [
+-  { name: "Host", needs: "Nothing. The screen is free.", does: "Promote your own business; join the block; share in campaign revenue.", href: "/host" },
+-  { name: "Advertise", needs: "No screen of your own.", does: "Reach nearby customers on the screens around you.", href: "/advertise" },
+-  { name: "Growth", needs: "A host screen at your business.", does: "A Monthly Anchor on the screens, Uptick Drops on the phone, visits you can count.", href: "/growth" },
+-  { name: "Uptick Suite", needs: "Nothing on the block. Works with any of the above.", does: "Content that gets you chosen when a customer looks you up.", href: "/suite" },
++  {
++    name: "Host",
++    needs: "Nothing. The screen is free.",
++    does: "Promote your own business; join the block; share in campaign revenue.",
++    href: "/host",
++  },
++  {
++    name: "Advertise",
++    needs: "No screen of your own.",
++    does: "Reach nearby customers on the screens around you.",
++    href: "/advertise",
++  },
++  {
++    name: "Growth",
++    needs: "No host screen required.",
++    does: "A negotiated four-week program with planned placements, fulfillment and observed results.",
++    href: "/growth",
++  },
++  {
++    name: "Uptick Suite",
++    needs: "Nothing on the block. Works with any of the above.",
++    does: "Content that gets you chosen when a customer looks you up.",
++    href: "/suite",
++  },
+ ];
+ 
+ export default function NetworkPage() {
+@@ -55,9 +87,11 @@ export default function NetworkPage() {
+         <div className="page__copy">
+           <h1 className="page__title">One block. One network.</h1>
+           <p className="page__lead">
+-            Countertop screens at local businesses that do not compete with each other, linked so that one business&rsquo;s message
+-            reaches the customers of the businesses around it. This page is the architecture: what a screen is, what runs on it,
+-            and the rules that keep it fair.
++            Countertop screens at local businesses that do not compete with each
++            other, linked so that one business&rsquo;s message reaches the
++            customers of the businesses around it. This page is the
++            architecture: what a screen is, what runs on it, and the rules that
++            keep it fair.
+           </p>
+           <div className="page__acts">
+             <Link href={CTA.host.href} className="btn btn--mint">
+@@ -92,14 +126,18 @@ export default function NetworkPage() {
+               The loop, in order.
+             </h2>
+             <p className="page__lead">
+-              Every screen plays a short loop. The order is the promise to the host: their own business first, then the block.
++              Every screen plays a short loop. The order is the promise to the
++              host: their own business first, then the block.
+             </p>
+           </header>
+           <div className="ledger">
+             {LOOP.map(([name, meta], i) => (
+               <div key={name} className="ledger__row">
+                 <span>
+-                  <span className="step__n" style={{ display: "inline", marginRight: 14 }}>
++                  <span
++                    className="step__n"
++                    style={{ display: "inline", marginRight: 14 }}
++                  >
+                     0{i + 1}
+                   </span>
+                   {name}
+@@ -139,13 +177,18 @@ export default function NetworkPage() {
+               Four ways to use it. One block underneath.
+             </h2>
+             <p className="page__lead">
+-              Three ways to take part in the physical network, and one capability for the half of the job that happens online.
+-              None of them is a tier of another.
++              Three ways to take part in the physical network, and one
++              capability for the half of the job that happens online. None of
++              them is a tier of another.
+             </p>
+           </header>
+           <div className="ledger">
+             {SYSTEM.map((row) => (
+-              <Link key={row.name} href={row.href} className="ledger__row ledger__row--link">
++              <Link
++                key={row.name}
++                href={row.href}
++                className="ledger__row ledger__row--link"
++              >
+                 <span>
+                   {row.name}
+                   <span className="ledger__needs">{row.needs}</span>
+@@ -160,7 +203,11 @@ export default function NetworkPage() {
+       <section className="band" aria-labelledby="partners-note">
+         <div className="band__inner">
+           <p className="mono-tag">Already operate screens?</p>
+-          <h2 id="partners-note" className="band__title" style={{ marginTop: 16 }}>
++          <h2
++            id="partners-note"
++            className="band__title"
++            style={{ marginTop: 16 }}
++          >
+             Uptick can connect existing inventory to local demand.
+           </h2>
+           <div className="page__acts">
+diff --git a/app/partners/page.tsx b/app/partners/page.tsx
+index 05c4c70..798045a 100644
+--- a/app/partners/page.tsx
++++ b/app/partners/page.tsx
+@@ -28,10 +28,14 @@ export default function PartnersPage() {
+       <header className="page__head page__head--solo">
+         <p className="mono-tag">Screen network partners</p>
+         <div className="page__copy">
+-          <h1 className="page__title">Already operate screens? Let&rsquo;s talk.</h1>
++          <h1 className="page__title">
++            Already operate screens? Let&rsquo;s talk.
++          </h1>
+           <p className="page__lead">
+-            If you run digital screens in retail, fitness or hospitality, Uptick can connect that inventory to local demand in
+-            the same neighborhoods: campaigns from nearby businesses and Growth Anchors, screened against what each host sells.
++            If you run digital screens in retail, fitness or hospitality, Uptick
++            can connect that inventory to local demand in the same
++            neighborhoods: campaigns from nearby businesses and approved Growth
++            placements, screened against what each host sells.
+           </p>
+         </div>
+       </header>
+diff --git a/app/privacy/page.tsx b/app/privacy/page.tsx
+index e94055b..84358d3 100644
+--- a/app/privacy/page.tsx
++++ b/app/privacy/page.tsx
+@@ -28,19 +28,22 @@ export default function PrivacyPage() {
+     <LegalDocument
+       eyebrow={`${PROGRAM.brandName} · Privacy`}
+       title="A clear account of the information Uptick needs."
+-      lead="This Privacy Policy foundation describes the information Uptick Local may handle to operate membership, deliver requested communications and measure local perk activity. It is written for founder and legal review before publication."
++      lead="This Privacy Policy describes the information Uptick Local may handle to operate the pilot membership, provide member benefits and deliver communications a member chooses."
+       toc={TOC}
+     >
+       <section id="privacy-scope">
+         <h2>What this policy covers.</h2>
+         <p>
+-          This policy describes the public Uptick Local website, the free Uptick Local consumer membership, Uptick Drops and related
+-          messaging and support. It does not control the privacy practices of an independent participating merchant, another website a
+-          member visits, or a third-party service that has its own policy.
++          This policy describes the public Uptick Local website, the free Uptick
++          Local consumer membership, Uptick Drops and related messaging and
++          support. It does not control the privacy practices of an independent
++          participating merchant, another website a member visits, or a
++          third-party service that has its own policy.
+         </p>
+         <p>
+-          Uptick Local is the public brand used on this site. The legal entity that will issue the final policy, its notice address and
+-          the jurisdiction-specific terms are not inserted here until they are confirmed.
++          Uptick Local is the public brand used on this site. Pilot enrollment
++          is not open. The operating legal entity and notice address will be
++          published before enrollment begins.
+         </p>
+       </section>
+ 
+@@ -48,25 +51,52 @@ export default function PrivacyPage() {
+         <h2>Information we may receive.</h2>
+         <h3>Information a member may provide</h3>
+         <ul className="program-list">
+-          <li>A mobile phone number used to identify a membership or deliver messages a member has chosen to receive.</li>
+-          <li>A home ZIP code and, if a member chooses to provide it, a work ZIP code to help determine eligible local perks.</li>
+-          <li>Membership choices, preferences and other information a member submits through an Uptick flow.</li>
+-          <li>Support communications, including the information included when a member emails or otherwise contacts Uptick.</li>
++          <li>
++            A mobile phone number if a member chooses SMS or uses it for support
++            or account recovery.
++          </li>
++          <li>
++            A home ZIP code and, if a member chooses to provide it, a work ZIP
++            code to help determine eligible local perks.
++          </li>
++          <li>
++            Membership choices, preferences and other information a member
++            submits through an Uptick flow.
++          </li>
++          <li>
++            Support communications, including the information included when a
++            member emails or otherwise contacts Uptick.
++          </li>
+         </ul>
+         <h3>Information created through use</h3>
+         <ul className="program-list">
+-          <li>Membership status, acquisition or source attribution, and the Uptick Drops made available to a member.</li>
+-          <li>Choices, claims, redemption records and the method used to verify a redemption.</li>
+-          <li>Referral activity and messaging status, including consent and opt-out history.</li>
+-          <li>Limited technical and security information needed to protect the service, such as device, browser, log and abuse-prevention signals.</li>
+           <li>
+-            Directions or navigation actions, only if Uptick actually records that action in a product flow. The current public site
+-            does not collect continuous location information.
++            Membership and admission status, source attribution, and the
++            featured benefits issued to a member.
++          </li>
++          <li>
++            Choices, claims, redemption records and the method used to verify a
++            redemption.
++          </li>
++          <li>
++            Referral activity and messaging status, including consent and
++            opt-out history.
++          </li>
++          <li>
++            Limited technical and security information needed to protect the
++            service, such as device, browser, log and abuse-prevention signals.
++          </li>
++          <li>
++            Directions or navigation actions, only if Uptick actually records
++            that action in a product flow. The current public site does not
++            collect continuous location information.
+           </li>
+         </ul>
+         <p>
+-          If Uptick later introduces optional richer location or route functionality, the feature and its data use will be explained
+-          before use and will require an appropriate choice or permission where applicable.
++          If Uptick later introduces optional richer location or route
++          functionality, the feature and its data use will be explained before
++          use and will require an appropriate choice or permission where
++          applicable.
+         </p>
+       </section>
+ 
+@@ -75,64 +105,108 @@ export default function PrivacyPage() {
+         <p>We may use the information above to:</p>
+         <ul className="program-list">
+           <li>Operate and maintain Uptick Local membership.</li>
+-          <li>Deliver requested recurring, service, transactional and support communications.</li>
+-          <li>Determine which local perks may be eligible for a member based on the information the member provides and the participating network.</li>
+-          <li>Prevent abuse, fraud, duplicate claims and other activity that could undermine a benefit or the service.</li>
+-          <li>Verify redemptions and maintain records of relevant Uptick activity.</li>
+-          <li>Respond to support requests and communicate about the service.</li>
+-          <li>Improve Uptick, understand how the membership and local network are used, and produce merchant or network analytics.</li>
+-          <li>Meet legal, security and other obligations that apply to the service.</li>
++          <li>
++            Deliver requested recurring, service, transactional and support
++            communications.
++          </li>
++          <li>
++            Determine which local perks may be eligible for a member based on
++            the information the member provides and the participating network.
++          </li>
++          <li>
++            Prevent abuse, fraud, duplicate claims and other activity that could
++            undermine a benefit or the service.
++          </li>
++          <li>
++            Verify redemptions and maintain records of relevant Uptick activity.
++          </li>
++          <li>
++            Respond to support requests and communicate about the service.
++          </li>
++          <li>
++            Improve Uptick, understand how the membership and local network are
++            used, and produce merchant or network analytics.
++          </li>
++          <li>
++            Meet legal, security and other obligations that apply to the
++            service.
++          </li>
+         </ul>
+       </section>
+ 
+       <section id="privacy-share">
+         <h2>How we share information.</h2>
+         <p>
+-          We may share information with service providers that help us host, secure, support, analyze or message the product. They
+-          receive what is reasonably needed for the task and are expected to process it on Uptick&rsquo;s instructions.
++          We may share information with service providers that help us host,
++          secure, support, analyze or message the product. They receive what is
++          reasonably needed for the task and are expected to process it on
++          Uptick&rsquo;s instructions.
+         </p>
+         <p>
+-          A participating merchant may receive limited information only as needed to operate, fulfill or measure relevant Uptick
+-          activity—for example, information needed to verify that a specific benefit was presented or redeemed. A merchant does not
+-          automatically receive a member&rsquo;s phone number or SMS consent just because it fulfills an Uptick.
++          A participating location may receive only the limited information
++          needed to fulfill a current benefit and view its own observed
++          fulfillment results. It does not receive a member&rsquo;s phone
++          number, SMS consent, acquisition history or cross-location membership
++          history.
+         </p>
+         <p>
+-          Merchant, enterprise and brand analytics should be aggregated or de-identified unless a different use is specifically
+-          disclosed and permitted. We may also disclose information when reasonably necessary to comply with law, respond to a valid
+-          legal process, protect people or property, investigate abuse, or support a business transfer, subject to applicable law.
++          Merchant and network reporting is aggregated or limited to the
++          location&rsquo;s own operational records. There is no member history
++          export. We may also disclose information when reasonably necessary to
++          comply with law, respond to valid legal process, protect people or
++          property, investigate abuse, or support a business transfer, subject
++          to applicable law.
+         </p>
+         <p>
+-          We do not sell or rent raw member phone-number lists. Uptick Local membership consent is not a transferable marketing list
+-          for participating merchants or other senders.
++          We do not sell or rent raw member phone-number lists. Uptick Local
++          membership consent is not a transferable marketing list for
++          participating merchants or other senders.
+         </p>
+       </section>
+ 
+       <section id="privacy-sms">
+         <h2>Mobile information and SMS consent.</h2>
+         <div className="program-callout">
+-          <strong>{SMS_PROGRAM.mobileInfoNonSharing}</strong> We do not sell or rent raw member phone-number lists. SMS opt-in data and
+-          consent are not transferred to participating merchants or other senders for their own marketing. Service providers may
+-          process this information only as needed to operate Uptick Local and deliver the messages a member chose.
++          <strong>{SMS_PROGRAM.mobileInfoNonSharing}</strong> We do not sell or
++          rent raw member phone-number lists. SMS opt-in data and consent are
++          not transferred to participating merchants or other senders for their
++          own marketing. Service providers may process this information only as
++          needed to operate Uptick Local and deliver the messages a member
++          chose.
+         </div>
+         <p>
+-          Uptick Local messages are described on the <Link href={PROGRAM.urls.sms}>SMS program page</Link>. A member&rsquo;s choice to
+-          receive Uptick messages is separate from any independent marketing program a participating merchant may operate. If
+-          merchant-specific marketing is offered later, it requires its own appropriate permission.
++          Uptick Local messages are described on the{" "}
++          <Link href={PROGRAM.urls.sms}>SMS program page</Link>. A
++          member&rsquo;s choice to receive Uptick messages is separate from any
++          independent marketing program a participating merchant may operate. If
++          merchant-specific marketing is offered later, it requires its own
++          appropriate permission.
++        </p>
++        <p>
++          Replying STOP ends texts from the Uptick Local Membership program. It
++          does not cancel membership or an already issued benefit. Replying
++          START only asks the carrier to remove its messaging block; it does not
++          create consent or enroll a member.
+         </p>
+       </section>
+ 
+       <section id="privacy-retain">
+         <h2>Retention and security.</h2>
+         <p>
+-          We keep information for as long as reasonably necessary to provide membership, deliver communications, verify activity,
+-          prevent abuse, resolve disputes, meet legal or accounting obligations, and enforce applicable terms. When information is no
+-          longer needed for those purposes, we aim to delete it, anonymize it or securely isolate it. We may retain a limited
+-          suppression or opt-out record so we can honor a request not to receive messages.
++          We keep information for as long as reasonably necessary to provide
++          membership, deliver communications, verify activity, prevent abuse,
++          resolve disputes, meet legal or accounting obligations, and enforce
++          applicable terms. When information is no longer needed for those
++          purposes, we aim to delete it, anonymize it or securely isolate it. We
++          may retain a limited suppression or opt-out record so we can honor a
++          request not to receive messages.
+         </p>
+         <p>
+-          We use reasonable administrative, technical and organizational safeguards appropriate to the information and the service.
+-          No transmission or storage system can be guaranteed completely secure, so members should use care when sending information
+-          and contact us if they suspect misuse.
++          We use reasonable administrative, technical and organizational
++          safeguards appropriate to the information and the service. No
++          transmission or storage system can be guaranteed completely secure, so
++          members should use care when sending information and contact us if
++          they suspect misuse.
+         </p>
+       </section>
+ 
+@@ -140,16 +214,23 @@ export default function PrivacyPage() {
+         <h2>Your choices.</h2>
+         <ul className="program-list">
+           <li>
+-            <strong>SMS:</strong> reply STOP to stop Uptick Local Membership texts or HELP for help. See the <Link href={PROGRAM.urls.sms}>SMS program page</Link>.
++            <strong>SMS:</strong> reply STOP to stop Uptick Local Membership
++            texts or HELP for help. See the{" "}
++            <Link href={PROGRAM.urls.sms}>SMS program page</Link>.
+           </li>
+           <li>
+-            <strong>Information:</strong> contact us to ask to update inaccurate membership information or ask a question about how it is used.
++            <strong>Information:</strong> contact us to ask to update inaccurate
++            membership information or ask a question about how it is used.
+           </li>
+           <li>
+-            <strong>Optional features:</strong> if a future route or location feature is introduced, a member can choose whether to use it and whether to grant any requested permission.
++            <strong>Optional features:</strong> if a future route or location
++            feature is introduced, a member can choose whether to use it and
++            whether to grant any requested permission.
+           </li>
+           <li>
+-            <strong>Legal requests:</strong> depending on where a member lives, applicable law may provide additional access, correction, deletion, portability or objection choices.
++            <strong>Legal requests:</strong> depending on where a member lives,
++            applicable law may provide additional access, correction, deletion,
++            portability or objection choices.
+           </li>
+         </ul>
+       </section>
+@@ -157,43 +238,54 @@ export default function PrivacyPage() {
+       <section id="privacy-rights">
+         <h2>State privacy rights.</h2>
+         <p>
+-          Some state privacy laws provide rights that may include access to personal information, correction, deletion, portability,
+-          appeal or limits on certain uses. Whether a right applies depends on the member, the service, the state and legal exceptions.
+-          This foundation does not attempt to claim that every state law applies to Uptick or to list a right that may not be available.
++          Some state privacy laws provide rights that may include access to
++          personal information, correction, deletion, portability, appeal or
++          limits on certain uses. Whether a right applies depends on the member,
++          the service, the state and legal exceptions. This policy does not
++          claim that every state law applies to Uptick or list a right that may
++          not be available.
+         </p>
+         <p>
+-          To make a request, contact <a href={`mailto:${PROGRAM.supportEmail}`}>{PROGRAM.supportEmail}</a>. We may need to verify the
+-          request, ask for details needed to find the relevant information, and apply lawful exceptions. The final request process,
+-          response timelines, appeal path and any authorized-agent procedure require founder and legal confirmation.
++          To make a request, contact{" "}
++          <a href={`mailto:${PROGRAM.supportEmail}`}>{PROGRAM.supportEmail}</a>.
++          We may need to verify the request, ask for details needed to find the
++          relevant information, and apply lawful exceptions. Applicable response
++          and appeal rights depend on the law governing the request.
+         </p>
+       </section>
+ 
+       <section id="privacy-age">
+         <h2>Age and children.</h2>
+         <p>
+-          Uptick is not being built as a child-directed service, and we do not knowingly target children with membership or SMS
+-          enrollment. The precise minimum age, any parental-consent process and the response to information submitted by a child must
+-          be confirmed by founder and legal review before launch. If you believe a child has provided information to Uptick, contact us.
++          The pilot is for adults age {PROGRAM.minimumMemberAge} or older.
++          Uptick does not knowingly admit children or seek their information for
++          membership or SMS enrollment. If you believe a child has provided
++          information to Uptick, contact us.
+         </p>
+       </section>
+ 
+       <section id="privacy-changes">
+         <h2>Policy changes.</h2>
+         <p>
+-          We may update this policy as the membership, messaging program or applicable requirements change. We will post the updated
+-          version here and change the effective date. If a change is material, we will provide any additional notice required by law.
++          We may update this policy as the membership, messaging program or
++          applicable requirements change. We will post the updated version here
++          and change the effective date. If a change is material, we will
++          provide any additional notice required by law.
+         </p>
+       </section>
+ 
+       <section id="privacy-contact">
+         <h2>Contact Uptick.</h2>
+         <p>
+-          Questions about this policy or information connected to Uptick Local can be sent to
+-          <a href={`mailto:${PROGRAM.supportEmail}`}> {PROGRAM.supportEmail}</a>.
++          Questions about this policy or information connected to Uptick Local
++          can be sent to
++          <a href={`mailto:${PROGRAM.supportEmail}`}> {PROGRAM.supportEmail}</a>
++          .
+         </p>
+         <p className="program-document__smallprint">
+-          Founder/legal review item: add the confirmed legal entity name, notice address and any required state-specific disclosures
+-          before final publication.
++          Pilot enrollment remains unavailable until Uptick publishes its
++          operating legal identity, notice address and finalized enrollment
++          process.
+         </p>
+       </section>
+     </LegalDocument>
+diff --git a/app/sms/page.tsx b/app/sms/page.tsx
+index aea6fe1..5f16043 100644
+--- a/app/sms/page.tsx
++++ b/app/sms/page.tsx
+@@ -29,8 +29,10 @@ export default function SmsPage() {
+       <section id="sms-program">
+         <h2>The Uptick Local Membership messaging program</h2>
+         <p>
+-          <strong>{SMS_PROGRAM.sender}</strong> sends messages to people who choose to receive Uptick Local membership texts. The
+-          program helps deliver a member&rsquo;s Uptick, local perk information, and necessary membership or service communications.
++          <strong>{SMS_PROGRAM.sender}</strong> sends messages to people who
++          choose to receive Uptick Local membership texts. The program notifies
++          a member about an issued Uptick, provides relevant local benefit
++          information, and sends necessary membership or service communications.
+         </p>
+         <dl className="program-facts">
+           <div>
+@@ -47,39 +49,51 @@ export default function SmsPage() {
+           </div>
+           <div>
+             <dt>Frequency</dt>
+-            <dd>{SMS_PROGRAM.frequency} Message frequency varies.</dd>
++            <dd>{SMS_PROGRAM.frequency}</dd>
+           </div>
+         </dl>
+         <p className="program-callout">
+-          These are recurring automated SMS messages where applicable. {SMS_PROGRAM.rates}
++          These are recurring automated SMS messages where applicable.{" "}
++          {SMS_PROGRAM.rates}
+         </p>
+       </section>
+ 
+       <section id="sms-consent">
+         <h2>Consent is specific and optional.</h2>
+         <p>
+-          SMS consent is a separate choice for the Uptick Local Membership program. It should be clear what messages a member is
+-          choosing to receive, and the choice should not be preselected or bundled with acceptance of general terms. Consent to
+-          receive messages is not a condition of purchase.
++          SMS consent is a separate choice for the Uptick Local Membership
++          program. It should be clear what messages a member is choosing to
++          receive, and the choice should not be preselected or bundled with
++          acceptance of general terms. Consent to receive messages is not a
++          condition of purchase.
+         </p>
+         <p>
+-          This public page describes the program; it is not a signup form. When a membership flow asks for messaging permission, a
+-          member must be able to decline SMS and still continue with any unrelated action that is available to them.
++          This public page describes the program; it is not a signup form. When
++          a membership flow asks for messaging permission, a member can decline
++          SMS and still use membership and an issued benefit through the private
++          web experience.
+         </p>
+       </section>
+ 
+       <section id="sms-messages">
+         <h2>What a message may say.</h2>
+         <p>
+-          A message may point a member to an available Uptick, explain the relevant timing or location, confirm a membership action,
+-          or provide service and support information. Uptick does not use this page to publish a live offer or promise availability in
+-          a particular market.
++          A message may point a member to an available Uptick, explain the
++          relevant timing or location, confirm a membership action, or provide
++          service and support information. Uptick does not use this page to
++          publish a live offer or promise availability in a particular market.
+         </p>
+-        <div className="program-sample" aria-label="Sample Uptick Local message, not a live offer">
+-          <p className="mono-tag mono-tag--ink">Sample message · not a live offer</p>
++        <div
++          className="program-sample"
++          aria-label="Sample Uptick Local message, not a live offer"
++        >
++          <p className="mono-tag mono-tag--ink">
++            Sample message · not a live offer
++          </p>
+           <p>
+-            Uptick Local: Your featured Uptick is ready. Open your member message for the eligible perk, location and timing. Reply
+-            STOP to opt out.
++            Uptick Local: Your featured Uptick is ready. Open your member
++            message for the eligible perk, location and timing. Reply STOP to
++            opt out.
+           </p>
+         </div>
+       </section>
+@@ -87,12 +101,16 @@ export default function SmsPage() {
+       <section id="sms-controls">
+         <h2>STOP to stop. HELP to get help.</h2>
+         <p>
+-          <strong>Reply STOP</strong> to a message to stop receiving Uptick Local Membership texts. <strong>Reply HELP</strong> for
+-          help, or contact <a href={`mailto:${PROGRAM.supportEmail}`}>{PROGRAM.supportEmail}</a>. Opt-out and help requests apply to
+-          this Uptick program; they do not create or transfer consent for any independent merchant program.
++          <strong>Reply STOP</strong> to a message to stop receiving Uptick
++          Local Membership texts. <strong>Reply HELP</strong> for help, or
++          contact{" "}
++          <a href={`mailto:${PROGRAM.supportEmail}`}>{PROGRAM.supportEmail}</a>.
++          Opt-out and help requests apply to this Uptick program; they do not
++          create or transfer consent for any independent merchant program.
+         </p>
+         <ul className="program-list">
+           <li>{SMS_PROGRAM.optOut}</li>
++          <li>{SMS_PROGRAM.restart}</li>
+           <li>{SMS_PROGRAM.help}</li>
+           <li>Message and data rates may apply. Message frequency varies.</li>
+         </ul>
+@@ -101,23 +119,32 @@ export default function SmsPage() {
+       <section id="sms-merchants">
+         <h2>Uptick is the sender. A merchant fulfills the benefit.</h2>
+         <p>
+-          A participating gas station, convenience store, or other eligible location may fulfill an Uptick benefit. That does not
+-          make the merchant an automatic SMS sender, and joining Uptick does not automatically enroll a member in the merchant&rsquo;s
+-          independent marketing program.
++          An approved local location may fulfill an Uptick benefit. That does
++          not make the merchant an automatic SMS sender, and joining Uptick does
++          not automatically enroll a member in the merchant&rsquo;s independent
++          marketing program.
+         </p>
+         <p>
+-          If merchant-specific marketing is offered later, it requires its own appropriate permission from the member. Uptick Local
+-          membership consent is not a pass that can be handed from one business to another.
++          If merchant-specific marketing is offered later, it requires its own
++          appropriate permission from the member. Uptick Local membership
++          consent is not a pass that can be handed from one business to another.
++          Participating locations do not receive Uptick consent records or
++          member history.
+         </p>
+       </section>
+ 
+       <section id="sms-contact">
+         <h2>Questions about the program?</h2>
+         <p>
+-          Contact <a href={`mailto:${PROGRAM.supportEmail}`}>{PROGRAM.supportEmail}</a>. You can also read the
+-          <Link href={PROGRAM.urls.privacy}> Privacy Policy</Link> and <Link href={PROGRAM.urls.terms}> Terms</Link>.
++          Contact{" "}
++          <a href={`mailto:${PROGRAM.supportEmail}`}>{PROGRAM.supportEmail}</a>.
++          You can also read the
++          <Link href={PROGRAM.urls.privacy}> Privacy Policy</Link> and{" "}
++          <Link href={PROGRAM.urls.terms}> Terms</Link>.
++        </p>
++        <p className="program-document__smallprint">
++          Carriers are not liable for delayed or undelivered messages.
+         </p>
+-        <p className="program-document__smallprint">Carriers are not liable for delayed or undelivered messages.</p>
+       </section>
+     </LegalDocument>
+   );
+diff --git a/app/terms/page.tsx b/app/terms/page.tsx
+index 8fbaddc..13ea3cb 100644
+--- a/app/terms/page.tsx
++++ b/app/terms/page.tsx
+@@ -6,13 +6,13 @@ import { PROGRAM, SMS_PROGRAM } from "@/lib/program";
+ export const metadata: Metadata = {
+   title: "Terms",
+   description:
+-    "Read the Terms for Uptick Local membership, Uptick Drops, participating merchants, claims, redemption and messaging.",
++    "Read the Terms for the bounded Uptick Local membership pilot, its featured benefit, participating locations, redemption and optional messaging.",
+ };
+ 
+ const TOC = [
+   { id: "terms-scope", label: "Scope" },
+   { id: "terms-membership", label: "Membership" },
+-  { id: "terms-benefits", label: "Uptick Drops" },
++  { id: "terms-benefits", label: "Featured benefit" },
+   { id: "terms-claims", label: "Claims and redemption" },
+   { id: "terms-merchants", label: "Participating merchants" },
+   { id: "terms-sms", label: "SMS" },
+@@ -20,7 +20,7 @@ const TOC = [
+   { id: "terms-conduct", label: "Responsible use" },
+   { id: "terms-changes", label: "Suspension and changes" },
+   { id: "terms-disclaimers", label: "Disclaimers" },
+-  { id: "terms-contact", label: "Contact and review" },
++  { id: "terms-contact", label: "Contact" },
+ ];
+ 
+ export default function TermsPage() {
+@@ -28,154 +28,234 @@ export default function TermsPage() {
+     <LegalDocument
+       eyebrow={`${PROGRAM.brandName} · Terms`}
+       title="The simple rules around an Uptick."
+-      lead="These Terms describe the current Uptick Local consumer membership and its local perks in readable language. They are a public foundation for founder and legal review before publication."
++      lead="These Terms describe the bounded Uptick Local membership pilot, the featured member benefit and the rules that apply when enrollment opens."
+       toc={TOC}
+     >
+       <section id="terms-scope">
+         <h2>What these Terms cover.</h2>
+         <p>
+-          These Terms apply to the public Uptick Local website, the free Uptick Local consumer membership, Uptick Drops and related
+-          membership messaging. They do not replace the terms of an independent participating merchant or another service a member
+-          reaches through an Uptick.
++          These Terms apply to the public Uptick Local website, the free Uptick
++          Local pilot membership, featured benefits and related membership
++          messaging. They do not replace the terms of an independent
++          participating merchant or another service a member reaches through an
++          Uptick.
+         </p>
+         <p>
+-          In these Terms, <strong>Uptick</strong> means an eligible local item or perk made available through the Uptick Local
+-          membership, and <strong>participating location</strong> means the merchant location identified with that Uptick.
++          In these Terms, <strong>Uptick</strong> means an eligible local item
++          or perk made available through the Uptick Local membership, and{" "}
++          <strong>participating location</strong> means the merchant location
++          identified with that Uptick.
++        </p>
++        <p>
++          Pilot enrollment is not open. Uptick will publish the operating legal
++          entity, notice address and finalized enrollment terms before admitting
++          members.
+         </p>
+       </section>
+ 
+       <section id="terms-membership">
+         <h2>Uptick Local membership.</h2>
+         <p>
+-          Uptick Local is a free local consumer membership. No paid membership is currently required. A member is responsible for
+-          providing accurate information, including a current mobile number when using messaging, and for keeping that information
+-          current enough for the service to work.
++          Uptick Local is a free pilot membership for admitted adults age{" "}
++          {PROGRAM.minimumMemberAge} or older. The pilot targets{" "}
++          {PROGRAM.pilotTargetMembers} admitted members and has a hard cap of{" "}
++          {PROGRAM.pilotMemberCap}. There is no fixed membership fee. A member
++          is responsible for providing accurate information needed for
++          membership and fulfillment.
+         </p>
+         <p>
+-          Membership does not guarantee that a particular Uptick, location or market will always be available. Availability depends on
+-          participating markets, participating locations, capacity, timing and the offer-specific terms shown with the Uptick.
++          Membership does not guarantee that a particular Uptick, location or
++          market will always be available. Availability depends on participating
++          markets, participating locations, capacity, timing and the
++          offer-specific terms shown with the Uptick.
+         </p>
+       </section>
+ 
+       <section id="terms-benefits">
+-        <h2>Uptick Drops and local perks.</h2>
++        <h2>The featured member benefit.</h2>
+         <p>
+-          The hero benefit is a genuinely free item or perk. Uptick may make a featured Uptick available to members and may add other
+-          eligible local options as the product evolves. Uptick does not publish a permanent deal feed or promise that every member
+-          sees the same option.
++          For each published weekly release, an eligible admitted member
++          receives one featured item or perk backed by approved supply. No
++          purchase or payment by the member is required. A week without an
++          approved published release does not create a benefit.
+         </p>
+         <p>
+-          The participating location fulfills the specific benefit. The benefit&rsquo;s displayed description, location, timing, capacity,
+-          expiration, qualifying conditions and limits are part of that Uptick&rsquo;s offer-specific terms. Read them before claiming or
+-          traveling to redeem.
++          The named participating location fulfills the benefit. Its displayed
++          description, location, timing, approved capacity, expiration and
++          redemption limits are part of the benefit-specific terms. Read them
++          before traveling to redeem.
+         </p>
+       </section>
+ 
+       <section id="terms-claims">
+         <h2>Claims, reservations and redemption.</h2>
+         <ul className="program-list">
+-          <li>A claim records a member&rsquo;s choice of an Uptick; it is not a reservation unless the Uptick expressly says that it is.</li>
+-          <li>An Uptick may expire, close when capacity is reached, be limited to a time or day, or be limited to one per member or another stated quantity.</li>
+-          <li>A member must follow the displayed redemption instructions and present the requested member experience or verification method.</li>
+-          <li>Verification may be staff-gated or may use a QR code, NFC, Uptick Tap or another method described with the Uptick. Not every method is live today; only use the method actually presented in the applicable flow.</li>
+-          <li>Do not duplicate, sell, misrepresent or attempt to redeem another member&rsquo;s claim. Unless an Uptick says otherwise, it has no cash value and is not a substitute for cash.</li>
++          <li>
++            An issued benefit is backed by approved supply for the applicable
++            release. Opening or claiming it records member activity; it does not
++            create an additional unit.
++          </li>
++          <li>
++            An Uptick may expire, be limited to a time or day, or be limited to
++            one per admitted member under the displayed terms.
++          </li>
++          <li>
++            A member must follow the displayed redemption instructions and
++            present the requested member experience or verification method.
++          </li>
++          <li>
++            Verification may be staff-gated or may use a QR code, NFC, Uptick
++            Tap or another method described with the Uptick. Not every method is
++            live today; only use the method actually presented in the applicable
++            flow.
++          </li>
++          <li>
++            Do not duplicate, sell, misrepresent or attempt to redeem another
++            member&rsquo;s claim. Unless an Uptick says otherwise, it has no
++            cash value and is not a substitute for cash.
++          </li>
+         </ul>
+         <p>
+-          Uptick may record the claim, redemption, time and verification method to operate the service, prevent abuse and report relevant
+-          activity. If a location cannot fulfill an Uptick, its own operating conditions and the displayed offer terms may control what
+-          happens next; a member can contact Uptick support with a question.
++          Uptick may record the claim, redemption, time and verification method
++          to operate the service, prevent abuse and report relevant activity. If
++          a location cannot fulfill an Uptick, its own operating conditions and
++          the displayed offer terms may control what happens next. Uptick may
++          provide recovery fulfillment or another recorded resolution when the
++          approved process allows it; a member can contact Uptick support with a
++          question.
+         </p>
+       </section>
+ 
+       <section id="terms-merchants">
+         <h2>Participating merchants.</h2>
+         <p>
+-          A participating gas station, convenience store or other eligible local merchant may fulfill an Uptick according to the
+-          offer&rsquo;s terms. The merchant remains responsible for its own staff, products, services, hours, taxes, licenses and legal
+-          obligations. Uptick manages the membership relationship and the delivery of Uptick membership messages.
++          An approved local merchant may fulfill an Uptick according to the
++          benefit&rsquo;s terms. The merchant remains responsible for its own
++          staff, products, services, hours, taxes, licenses and legal
++          obligations. Uptick manages the membership relationship and the
++          delivery of Uptick membership messages.
+         </p>
+         <p>
+-          A merchant is not automatically an Uptick SMS sender, and joining Uptick does not automatically enroll a member in that
+-          merchant&rsquo;s independent marketing program. Merchant-specific marketing requires its own appropriate permission.
++          A merchant is not automatically an Uptick SMS sender, and joining
++          Uptick does not automatically enroll a member in that merchant&rsquo;s
++          independent marketing program. A merchant does not receive Uptick SMS
++          consent or member history.
+         </p>
+       </section>
+ 
+       <section id="terms-sms">
+         <h2>Uptick Local Membership SMS.</h2>
+         <p>
+-          SMS is an important delivery channel. If a member separately chooses the Uptick Local Membership messaging program, the
+-          member may receive recurring automated SMS from {SMS_PROGRAM.sender} about membership, local perks and necessary service or
+-          support communications.
++          SMS is an optional delivery channel. If a member separately chooses
++          the Uptick Local Membership messaging program, the member may receive
++          recurring automated SMS from {SMS_PROGRAM.sender} about membership,
++          local perks and necessary service or support communications.
+         </p>
+         <ul className="program-list">
+-          <li>{SMS_PROGRAM.frequency} Message frequency varies.</li>
++          <li>{SMS_PROGRAM.frequency}</li>
+           <li>{SMS_PROGRAM.rates}</li>
+-          <li><strong>Reply STOP</strong> to stop Uptick Local Membership messages.</li>
+-          <li><strong>Reply HELP</strong> for help, or contact <a href={`mailto:${PROGRAM.supportEmail}`}>{PROGRAM.supportEmail}</a>.</li>
+-          <li>Consent to receive SMS is not a condition of purchase, and it is not permission for a participating merchant to market to the member.</li>
++          <li>
++            <strong>Reply STOP</strong> to stop Uptick Local Membership
++            messages.
++          </li>
++          <li>STOP does not cancel membership or an already issued benefit.</li>
++          <li>
++            <strong>Reply START</strong> to ask the carrier to remove its sender
++            block. START does not provide consent or enroll a member.
++          </li>
++          <li>
++            <strong>Reply HELP</strong> for help, or contact{" "}
++            <a href={`mailto:${PROGRAM.supportEmail}`}>
++              {PROGRAM.supportEmail}
++            </a>
++            .
++          </li>
++          <li>
++            Consent to receive SMS is not a condition of purchase, and it is not
++            permission for a participating merchant to market to the member.
++          </li>
+           <li>Carriers are not liable for delayed or undelivered messages.</li>
+         </ul>
+         <p>
+-          A member is responsible for providing a mobile number they are authorized to use and for telling Uptick if the number
+-          changes. See the <Link href={PROGRAM.urls.sms}>SMS program page</Link> and <Link href={PROGRAM.urls.privacy}>Privacy Policy</Link> for more detail.
++          A member is responsible for providing a mobile number they are
++          authorized to use and for telling Uptick if the number changes. See
++          the <Link href={PROGRAM.urls.sms}>SMS program page</Link> and{" "}
++          <Link href={PROGRAM.urls.privacy}>Privacy Policy</Link> for more
++          detail.
+         </p>
+       </section>
+ 
+       <section id="terms-referrals">
+         <h2>Referrals.</h2>
+         <p>
+-          If Uptick makes a referral feature or referral benefit available, it may include additional rules shown at the time. Use a
+-          referral feature only for genuine personal invitations. Do not create duplicate accounts, impersonate someone, send
+-          unsolicited bulk messages, mislead a recipient or attempt to obtain a benefit through abuse or fraud.
++          If Uptick makes a referral feature or referral benefit available, it
++          may include additional rules shown at the time. Use a referral feature
++          only for genuine personal invitations. Do not create duplicate
++          accounts, impersonate someone, send unsolicited bulk messages, mislead
++          a recipient or attempt to obtain a benefit through abuse or fraud.
+         </p>
+       </section>
+ 
+       <section id="terms-conduct">
+         <h2>Responsible use.</h2>
+         <p>
+-          Members may not interfere with the service, probe or bypass security, manipulate claims or redemption records, use another
+-          person&rsquo;s information without permission, submit false information, or use an Uptick in a way that violates law or the
+-          offer&rsquo;s terms. Contact Uptick if a member believes a claim or redemption record is wrong.
++          Members may not interfere with the service, probe or bypass security,
++          manipulate claims or redemption records, use another person&rsquo;s
++          information without permission, submit false information, or use an
++          Uptick in a way that violates law or the offer&rsquo;s terms. Contact
++          Uptick if a member believes a claim or redemption record is wrong.
+         </p>
+       </section>
+ 
+       <section id="terms-changes">
+         <h2>Suspension, termination and service changes.</h2>
+         <p>
+-          Uptick may suspend or end access to membership or a particular Uptick when reasonably necessary to address abuse, fraud,
+-          security, legal requirements, a merchant withdrawal, capacity or a change in the service. Uptick may also change, pause or
+-          discontinue parts of the product. We will not describe an offer as available when we know it is not.
++          Uptick may suspend or end access to membership or a particular Uptick
++          when reasonably necessary to address abuse, fraud, security, legal
++          requirements, a merchant withdrawal, capacity or a change in the
++          service. Uptick may also change, pause or discontinue parts of the
++          product. We will not describe an offer as available when we know it is
++          not.
+         </p>
+         <p>
+-          These changes do not give a participating merchant permission to use Uptick membership SMS consent for its own marketing.
+-          SMS controls remain described on the <Link href={PROGRAM.urls.sms}>SMS program page</Link>.
++          Pausing SMS does not cancel membership or an already issued benefit.
++          No service change gives a participating merchant permission to use
++          Uptick membership SMS consent or member history. SMS controls remain
++          described on the <Link href={PROGRAM.urls.sms}>SMS program page</Link>
++          .
+         </p>
+       </section>
+ 
+       <section id="terms-disclaimers">
+         <h2>Availability and disclaimers.</h2>
+         <p>
+-          Uptick Local and each Uptick are provided as presented and subject to participating-market, participating-location,
+-          capacity, timing, verification and offer-specific conditions. Uptick does not guarantee that every location or perk will
+-          always be available, that a message will arrive at a particular time, or that a merchant will remain participating.
++          Uptick Local and each Uptick are provided as presented and subject to
++          participating-market, participating-location, capacity, timing,
++          verification and offer-specific conditions. Uptick does not guarantee
++          that every location or perk will always be available, that a message
++          will arrive at a particular time, or that a merchant will remain
++          participating.
+         </p>
+         <p>
+-          To the extent permitted by applicable law, Uptick disclaims warranties that are not expressly stated in these Terms. Nothing
+-          here limits a right or remedy that applicable law does not allow us to limit. The final legal entity, jurisdiction,
+-          liability allocation and any required dispute-resolution provisions must be confirmed by founder and legal review.
++          To the extent permitted by applicable law, Uptick disclaims warranties
++          that are not expressly stated in these Terms. Nothing here limits a
++          right or remedy that applicable law does not allow us to limit.
+         </p>
+       </section>
+ 
+       <section id="terms-contact">
+-        <h2>Contact and final review items.</h2>
++        <h2>Contact.</h2>
+         <p>
+           Questions about membership, an Uptick or these Terms can be sent to
+-          <a href={`mailto:${PROGRAM.supportEmail}`}> {PROGRAM.supportEmail}</a>. The public policy links are the
+-          <Link href={PROGRAM.urls.privacy}> Privacy Policy</Link> and <Link href={PROGRAM.urls.sms}> SMS program page</Link>.
++          <a href={`mailto:${PROGRAM.supportEmail}`}> {PROGRAM.supportEmail}</a>
++          . The public policy links are the
++          <Link href={PROGRAM.urls.privacy}> Privacy Policy</Link> and{" "}
++          <Link href={PROGRAM.urls.sms}> SMS program page</Link>.
+         </p>
+         <p className="program-document__smallprint">
+-          Founder/legal review items before publication: confirm the legal entity and notice address, governing law, venue or dispute
+-          resolution terms, age rule, liability language and any required state-specific provisions. None is fabricated in this draft.
++          Pilot enrollment remains unavailable until Uptick publishes its
++          operating legal identity, notice address and finalized enrollment
++          terms.
+         </p>
+       </section>
+     </LegalDocument>
+diff --git a/components/LegalDocument.tsx b/components/LegalDocument.tsx
+index e3ffa10..29d3666 100644
+--- a/components/LegalDocument.tsx
++++ b/components/LegalDocument.tsx
+@@ -14,7 +14,13 @@ type LegalDocumentProps = {
+   children: ReactNode;
+ };
+ 
+-export default function LegalDocument({ eyebrow, title, lead, toc, children }: LegalDocumentProps) {
++export default function LegalDocument({
++  eyebrow,
++  title,
++  lead,
++  toc,
++  children,
++}: LegalDocumentProps) {
+   return (
+     <div className="page program-page program-page--legal">
+       <header className="program-document__hero" data-theme="light">
+@@ -23,12 +29,18 @@ export default function LegalDocument({ eyebrow, title, lead, toc, children }: L
+           <h1 className="program-document__title">{title}</h1>
+           <p className="program-document__lead">{lead}</p>
+           <p className="program-document__effective">
+-            Effective <time dateTime={PROGRAM.effectiveDateISO}>{PROGRAM.effectiveDate}</time>
++            Last updated{" "}
++            <time dateTime={PROGRAM.effectiveDateISO}>
++              {PROGRAM.effectiveDate}
++            </time>
+           </p>
+-          <aside className="program-review-note" aria-label="Founder and legal review note">
+-            <strong>Founder / legal review before launch.</strong> This public foundation intentionally does not invent a legal entity,
+-            notice address, governing jurisdiction, arbitration terms, or exact age threshold. Confirm those facts before treating this
+-            page as final legal advice.
++          <aside
++            className="program-review-note"
++            aria-label="Pilot enrollment status"
++          >
++            <strong>Pilot enrollment is not open.</strong> Uptick will publish
++            its operating legal identity, notice address and finalized
++            enrollment terms before admitting members.
+           </aside>
+         </div>
+       </header>
+diff --git a/components/MembershipCta.tsx b/components/MembershipCta.tsx
+index 5f42ce7..8ecd45f 100644
+--- a/components/MembershipCta.tsx
++++ b/components/MembershipCta.tsx
+@@ -6,20 +6,31 @@ type MembershipCtaProps = {
+ 
+ /**
+  * The public site does not own membership signup. Use the configured
+- * destination when one exists; otherwise make the next step an honest pilot
+- * access inquiry through the site's existing support address.
++ * destination only after pilot enrollment is explicitly opened. Until the
++ * operating identity and notice details are finalized, the honest next step
++ * is an access inquiry through the existing support address.
+  */
+-export default function MembershipCta({ className = "btn btn--mint" }: MembershipCtaProps) {
+-  const configured = Boolean(PROGRAM.membershipJoinUrl);
++export default function MembershipCta({
++  className = "btn btn--mint",
++}: MembershipCtaProps) {
++  const configured =
++    PROGRAM.pilotEnrollmentOpen && Boolean(PROGRAM.membershipJoinUrl);
+   return (
+     <div className="program-cta">
+-      <a className={className} href={configured ? PROGRAM.membershipJoinUrl ?? MEMBERSHIP_PILOT_HREF : MEMBERSHIP_PILOT_HREF}>
++      <a
++        className={className}
++        href={
++          configured
++            ? (PROGRAM.membershipJoinUrl ?? MEMBERSHIP_PILOT_HREF)
++            : MEMBERSHIP_PILOT_HREF
++        }
++      >
+         {configured ? "Join Uptick Local" : "Ask about pilot access"}
+       </a>
+       <p className="program-cta__note">
+         {configured
+           ? "Membership access opens through the current Uptick link."
+-          : "Self-serve membership access is not live yet; this opens an email about pilot access."}
++          : "Pilot enrollment is not open yet; this opens an email to the current support address."}
+       </p>
+     </div>
+   );
+diff --git a/components/SiteFooter.tsx b/components/SiteFooter.tsx
+index beeede6..20d6d37 100644
+--- a/components/SiteFooter.tsx
++++ b/components/SiteFooter.tsx
+@@ -11,16 +11,27 @@ export default function SiteFooter() {
+   return (
+     <footer className="site-footer" data-theme="dark">
+       <div className="site-footer__inner">
+-        <p className="site-footer__signoff" aria-label={`${SIGN_OFF.lead} ${SIGN_OFF.accent}`}>
++        <p
++          className="site-footer__signoff"
++          aria-label={`${SIGN_OFF.lead} ${SIGN_OFF.accent}`}
++        >
+           {SIGN_OFF.lead} <em className="accent">{SIGN_OFF.accent}</em>
+         </p>
+         <div className="site-footer__grid">
+           <div className="site-footer__brand">
+-            <Link href="/" className="wordmark" aria-label="Uptick Local — home">
++            <Link
++              href="/"
++              className="wordmark"
++              aria-label="Uptick Local — home"
++            >
+               <span className="wordmark__dot" aria-hidden="true" />
+               <span>uptick local</span>
+             </Link>
+-            <p className="site-footer__claim">A local membership and growth system: Uptick Local for members, Uptick Growth for merchants, and local distribution that connects the two.</p>
++            <p className="site-footer__claim">
++              A local membership and growth system: one backed featured benefit
++              for admitted pilot members, and managed four-week Growth programs
++              for merchants.
++            </p>
+           </div>
+           <nav className="site-footer__links" aria-label="Footer">
+             {NAV.map((item) => (
+diff --git a/components/home/ClaimUI.tsx b/components/home/ClaimUI.tsx
+index 4be40b4..066c156 100644
+--- a/components/home/ClaimUI.tsx
++++ b/components/home/ClaimUI.tsx
+@@ -4,16 +4,14 @@ import { useId, useState } from "react";
+ import { CONSENT, GROWTH_EXAMPLE } from "@/lib/content";
+ 
+ /**
+- * The customer's claim page, the ten seconds after they scan the Anchor.
+- * The number field and the send action are pictures of controls — there is
+- * no backend to send to, and a form that drops what you typed is worse than
+- * none. The two consent boxes are real controls, so a reader can see that
+- * nothing is pre-ticked and that the claim goes through without them.
++ * The member's benefit page, shown as a product example.
++ * The access field and action are pictures of controls; this public site has
++ * no membership backend. The SMS consent box is a real control, so a reader
++ * can see that it is not pre-ticked and web access works without it.
+  */
+ export default function ClaimUI({ compact = false }: { compact?: boolean }) {
+   const id = useId();
+-  const [merchant, setMerchant] = useState(false);
+-  const [network, setNetwork] = useState(false);
++  const [sms, setSms] = useState(false);
+ 
+   return (
+     <div className={`claimui${compact ? " claimui--compact" : ""}`}>
+@@ -23,26 +21,28 @@ export default function ClaimUI({ compact = false }: { compact?: boolean }) {
+       </p>
+       <p className="claimui__merchant">{GROWTH_EXAMPLE.merchant}</p>
+       <p className="claimui__offer">{GROWTH_EXAMPLE.offerShort}</p>
+-      <p className="claimui__terms">This month · Show your pass at the counter</p>
++      <p className="claimui__terms">
++        Featured benefit · Show your pass at the counter
++      </p>
+ 
+-      <p className="claimui__label">Mobile number</p>
+-      <p className="claimui__field" aria-label="Mobile number field, example">
+-        (201) 555&#8209;0183
++      <p className="claimui__label">Member access</p>
++      <p className="claimui__field" aria-label="Member access, example">
++        Private web link
+       </p>
+       <p className="claimui__cta">{CONSENT.claim}</p>
+ 
+       <div className="consent">
+         <p className="consent__head">Optional</p>
+         <div className="consent__row">
+-          <input id={`${id}-m`} type="checkbox" className="consent__box" checked={merchant} onChange={(e) => setMerchant(e.target.checked)} />
+-          <label htmlFor={`${id}-m`} className="consent__label">
+-            {CONSENT.merchant}
+-          </label>
+-        </div>
+-        <div className="consent__row">
+-          <input id={`${id}-n`} type="checkbox" className="consent__box" checked={network} onChange={(e) => setNetwork(e.target.checked)} />
+-          <label htmlFor={`${id}-n`} className="consent__label">
+-            {CONSENT.network}
++          <input
++            id={`${id}-sms`}
++            type="checkbox"
++            className="consent__box"
++            checked={sms}
++            onChange={(e) => setSms(e.target.checked)}
++          />
++          <label htmlFor={`${id}-sms`} className="consent__label">
++            {CONSENT.sms}
+           </label>
+         </div>
+         <p className="consent__fine">{CONSENT.fine}</p>
+diff --git a/components/home/DropMessage.tsx b/components/home/DropMessage.tsx
+index 56494f8..09ef834 100644
+--- a/components/home/DropMessage.tsx
++++ b/components/home/DropMessage.tsx
+@@ -1,16 +1,18 @@
+ import { GROWTH_EXAMPLE } from "@/lib/content";
+ 
+ /**
+- * An Uptick Drop, as it lands: a text from the business, in Uptick's own
+- * voice rather than an imitation of any phone's messaging app. The window
+- * is the point — it is the one thing on the page that says "now".
++ * An example featured-benefit notice through the optional Uptick Local SMS
++ * channel. The message is illustrative and does not create a live offer.
+  */
+ export default function DropMessage({ large = false }: { large?: boolean }) {
+   const d = GROWTH_EXAMPLE.drop;
+   return (
+-    <div className={`drop${large ? " drop--large" : ""}`} aria-label="An Uptick Drop, delivered by text">
++    <div
++      className={`drop${large ? " drop--large" : ""}`}
++      aria-label="An optional Uptick Local benefit notice by text"
++    >
+       <p className="drop__from">
+-        {GROWTH_EXAMPLE.merchant} <span>{d.sent}</span>
++        Uptick Local <span>{d.sent}</span>
+       </p>
+       <p className="drop__kind">
+         <span className="drop__pulse" aria-hidden="true" />
+diff --git a/components/home/GrowthChapter.tsx b/components/home/GrowthChapter.tsx
+index c4c6af9..bd01ef9 100644
+--- a/components/home/GrowthChapter.tsx
++++ b/components/home/GrowthChapter.tsx
+@@ -6,34 +6,42 @@ import ScreenFace from "@/components/home/ScreenFace";
+ import { CTA, GROWTH_EXAMPLE } from "@/lib/content";
+ 
+ const REPORT = [
+-  ["Signups", "numbers entered at the Anchor"],
+-  ["Claims", "passes opened"],
+-  ["Redemptions", "each one, with the time"],
+-  ["Drops sent", "and what each brought back"],
+-  ["Lists", "who chose your updates, who chose Uptick Drops"],
+-  ["By placement", "which counters the activity came from"],
++  ["Program", "the approved four-week scope and placements"],
++  ["Issued", "benefits backed by approved supply"],
++  ["Claims", "issued benefits opened"],
++  ["Redemptions", "completed fulfillment, with the time"],
++  ["Recovery", "fulfillment problems and what followed"],
++  ["Credits", "approved program adjustments"],
+ ];
+ 
+ /**
+- * Growth, in one chapter. The diptych carries the product model: a durable
+- * reason to care on the screen, a time-boxed reason to act on the phone.
+- * The loop under it is the customer's side — claim, pass, redeem — and the
+- * report is the business's. No fake numbers anywhere: the report lists what
++ * Growth, in one chapter. The diptych shows an optional screen placement and
++ * a featured member benefit. The loop under it shows access and fulfillment;
++ * the report is the business's. No fake numbers appear: the report lists what
+  * is counted, not a result we have not observed.
+  */
+ export default function GrowthChapter() {
+   const g = GROWTH_EXAMPLE;
+   return (
+-    <section id="growth" className="chapter chapter--growth" data-theme="light" aria-labelledby="growth-heading">
++    <section
++      id="growth"
++      className="chapter chapter--growth"
++      data-theme="light"
++      aria-labelledby="growth-heading"
++    >
+       <div className="chapter__inner">
+         <header className="chapter__head">
+-          <p className="mono-tag mono-tag--ink">05 · Uptick Growth · Requires hosting</p>
++          <p className="mono-tag mono-tag--ink">
++            05 · Uptick Growth · Four-week managed program
++          </p>
+           <h2 id="growth-heading" className="chapter__title">
+-            A reason to care all month. A reason to come in now.
++            Program. Fulfillment. Results.
+           </h2>
+           <p className="chapter__lead">
+-            A screen whose content changes monthly cannot keep shouting &ldquo;today only&rdquo;. So Growth splits the job in two: the
+-            Anchor on the screen is the reason to care, and the Drop on the phone is the reason to act.
++            Uptick and the merchant agree on one four-week program: the scope,
++            negotiated fee, spend ceiling, planned weekly placements, approved
++            fulfillment and the results Uptick can observe. Screens are
++            optional.
+           </p>
+         </header>
+ 
+@@ -41,8 +49,8 @@ export default function GrowthChapter() {
+           <figure className="station station--anchor">
+             <figcaption className="station__label">
+               <span className="station__n">01</span>
+-              <span className="station__name">Monthly Anchor</span>
+-              <span className="station__where">On the screen · All month</span>
++              <span className="station__name">Optional screen placement</span>
++              <span className="station__where">One approved placement</span>
+             </figcaption>
+             <div className="unit">
+               <div className="unit__panel" aria-hidden="true">
+@@ -51,23 +59,24 @@ export default function GrowthChapter() {
+               <div className="unit__foot" aria-hidden="true" />
+             </div>
+             <p className="station__note">
+-              Persistent, at eye level, on your counter and on the Uptick screens nearby. One code to scan for this month&rsquo;s offer
+-              and any future Drops.
++              A screen can carry an approved placement when it fits the program.
++              A merchant does not need to host a screen to use Growth.
+             </p>
+           </figure>
+ 
+           <figure className="station station--drop">
+             <figcaption className="station__label">
+               <span className="station__n">02</span>
+-              <span className="station__name">Uptick Drop</span>
+-              <span className="station__where">On their phone · Limited time</span>
++              <span className="station__name">Featured member benefit</span>
++              <span className="station__where">Web access · SMS optional</span>
+             </figcaption>
+             <div className="phone phone--drop">
+               <DropMessage large />
+             </div>
+             <p className="station__note">
+-              A time-boxed reason to act — {g.windows.slice(0, 3).join(" · ")}. Sent only to the people who asked for them. Real
+-              mechanics, not manufactured urgency.
++              One no-purchase benefit for an admitted adult member, backed by
++              approved supply. Any window or limit is shown clearly—
++              {g.windows.slice(0, 3).join(" · ")}.
+             </p>
+           </figure>
+         </div>
+@@ -77,13 +86,18 @@ export default function GrowthChapter() {
+           <figure className="station">
+             <figcaption className="station__label">
+               <span className="station__n">03</span>
+-              <span className="station__name">Claim</span>
+-              <span className="station__where">Ten seconds, on their phone</span>
++              <span className="station__name">Access</span>
++              <span className="station__where">
++                Private member web experience
++              </span>
+             </figcaption>
+             <div className="phone phone--claim">
+               <ClaimUI compact />
+             </div>
+-            <p className="station__note">The number delivers the pass. The two lists are separate, optional and off to start.</p>
++            <p className="station__note">
++              Web access does not require SMS. Uptick membership texts are a
++              separate, optional choice.
++            </p>
+           </figure>
+ 
+           <figure className="station">
+@@ -95,7 +109,10 @@ export default function GrowthChapter() {
+             <div className="phone phone--pass">
+               <OfferPass caption={false} />
+             </div>
+-            <p className="station__note">Open the pass, show staff, tap redeem, confirm. No POS integration, no cashier code, no new software.</p>
++            <p className="station__note">
++              Open the pass, show staff, tap redeem, confirm. No POS
++              integration, no cashier code, no new software.
++            </p>
+           </figure>
+ 
+           <figure className="station station--report">
+@@ -112,14 +129,18 @@ export default function GrowthChapter() {
+                 </div>
+               ))}
+             </dl>
+-            <p className="station__note">Only what Uptick can actually observe. A play on a screen is a play, never a headcount.</p>
++            <p className="station__note">
++              Only what Uptick can actually observe. A play on a screen is a
++              play, never a headcount.
++            </p>
+           </figure>
+         </div>
+ 
+         <div className="chapter__close">
+           <p className="chapter__close-line">
+-            Uptick runs the screens, the claim flow, the texts, the tracking and the report. You choose the offer and provide the
+-            reward.
++            Uptick manages the approved program, placement plan, fulfillment
++            checks and observed results. The merchant approves the scope,
++            benefit, negotiated fee and ceiling.
+           </p>
+           <div className="chapter__acts">
+             <Link href={CTA.growth.href} className="btn btn--ink">
+diff --git a/components/home/ModesChapter.tsx b/components/home/ModesChapter.tsx
+index b58ee9a..44d3fec 100644
+--- a/components/home/ModesChapter.tsx
++++ b/components/home/ModesChapter.tsx
+@@ -21,8 +21,10 @@ export default function ModesChapter() {
+ 
+   const onKey = (event: React.KeyboardEvent) => {
+     let next: number;
+-    if (event.key === "ArrowDown" || event.key === "ArrowRight") next = (index + 1) % WAYS.length;
+-    else if (event.key === "ArrowUp" || event.key === "ArrowLeft") next = (index - 1 + WAYS.length) % WAYS.length;
++    if (event.key === "ArrowDown" || event.key === "ArrowRight")
++      next = (index + 1) % WAYS.length;
++    else if (event.key === "ArrowUp" || event.key === "ArrowLeft")
++      next = (index - 1 + WAYS.length) % WAYS.length;
+     else if (event.key === "Home") next = 0;
+     else if (event.key === "End") next = WAYS.length - 1;
+     else return;
+@@ -32,7 +34,12 @@ export default function ModesChapter() {
+   };
+ 
+   return (
+-    <section id="ways" className="chapter chapter--modes" data-theme="light" aria-labelledby="modes-heading">
++    <section
++      id="ways"
++      className="chapter chapter--modes"
++      data-theme="light"
++      aria-labelledby="modes-heading"
++    >
+       <div className="chapter__inner">
+         <header className="chapter__head">
+           <p className="mono-tag mono-tag--ink">04 · One network</p>
+@@ -40,13 +47,20 @@ export default function ModesChapter() {
+             One network. Three ways to use it.
+           </h2>
+           <p className="chapter__lead">
+-            The screens are the infrastructure. Put one on your own counter, reach the ones around you, or run offers across them that
+-            come back as visits you can count.
++            The screens are the infrastructure. Put one on your own counter,
++            reach the ones around you, or run offers across them that come back
++            as visits you can count.
+           </p>
+         </header>
+ 
+         <div className="modes">
+-          <div className="modes__rail" role="tablist" aria-orientation="vertical" aria-label="Ways to use the network" onKeyDown={onKey}>
++          <div
++            className="modes__rail"
++            role="tablist"
++            aria-orientation="vertical"
++            aria-label="Ways to use the network"
++            onKeyDown={onKey}
++          >
+             {WAYS.map((w, i) => (
+               <button
+                 key={w.id}
+@@ -71,7 +85,13 @@ export default function ModesChapter() {
+             ))}
+           </div>
+ 
+-          <div role="tabpanel" id={`${baseId}-panel-${way.id}`} aria-labelledby={`${baseId}-tab-${way.id}`} className="modes__panel" data-way={way.id}>
++          <div
++            role="tabpanel"
++            id={`${baseId}-panel-${way.id}`}
++            aria-labelledby={`${baseId}-tab-${way.id}`}
++            className="modes__panel"
++            data-way={way.id}
++          >
+             <p className="modes__intro">
+               <span>{way.requirement}</span>
+               {way.line}
+@@ -96,7 +116,10 @@ export default function ModesChapter() {
+                     <li key={point}>{point}</li>
+                   ))}
+                 </ul>
+-                <Link href={way.cta.href} className={`btn ${way.id === "growth" ? "btn--ink" : "btn--line"}`}>
++                <Link
++                  href={way.cta.href}
++                  className={`btn ${way.id === "growth" ? "btn--ink" : "btn--line"}`}
++                >
+                   {way.cta.label}
+                 </Link>
+               </div>
+@@ -104,7 +127,11 @@ export default function ModesChapter() {
+           </div>
+         </div>
+ 
+-        <p className="modes__foot">Host and Advertise are complete on their own. Growth runs on a host screen, and Uptick Suite works with any of them.</p>
++        <p className="modes__foot">
++          Host and Advertise are complete on their own. Growth is a separate
++          managed program with optional screen placements, and Uptick Suite
++          works with any of them.
++        </p>
+       </div>
+     </section>
+   );
+diff --git a/components/home/OfferPass.tsx b/components/home/OfferPass.tsx
+index 385d355..7e20d5a 100644
+--- a/components/home/OfferPass.tsx
++++ b/components/home/OfferPass.tsx
+@@ -6,7 +6,9 @@ import { GROWTH_EXAMPLE } from "@/lib/content";
+ type State = "ready" | "confirming" | "redeemed";
+ 
+ function stamp(date: Date) {
+-  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }).toUpperCase();
++  return date
++    .toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
++    .toUpperCase();
+ }
+ 
+ /**
+@@ -35,17 +37,25 @@ export default function OfferPass({ caption = true }: { caption?: boolean }) {
+         <div className="pass__body">
+           <p className="pass__offer">{GROWTH_EXAMPLE.offerShort}</p>
+           <p className="pass__meta">{GROWTH_EXAMPLE.address}</p>
+-          <p className="pass__terms">This month · One per customer · Show staff</p>
++          <p className="pass__terms">
++            No purchase needed · One per admitted member · Show staff
++          </p>
+         </div>
+ 
+         <div className="pass__state" role="status" aria-live="polite">
+           <span className="pass__dot" aria-hidden="true" />
+-          {state === "redeemed" ? `Redeemed · ${time}` : "Active · Show this to staff"}
++          {state === "redeemed"
++            ? `Redeemed · ${time}`
++            : "Active · Show this to staff"}
+         </div>
+ 
+         <div className="pass__actions">
+           {state === "ready" && (
+-            <button type="button" className="pass__btn" onClick={() => setState("confirming")}>
++            <button
++              type="button"
++              className="pass__btn"
++              onClick={() => setState("confirming")}
++            >
+               Redeem offer
+             </button>
+           )}
+@@ -55,12 +65,20 @@ export default function OfferPass({ caption = true }: { caption?: boolean }) {
+               <button type="button" className="pass__btn" onClick={redeem}>
+                 Yes, redeem
+               </button>
+-              <button type="button" className="pass__btn pass__btn--quiet" onClick={() => setState("ready")}>
++              <button
++                type="button"
++                className="pass__btn pass__btn--quiet"
++                onClick={() => setState("ready")}
++              >
+                 Not yet
+               </button>
+             </>
+           )}
+-          {state === "redeemed" && <p className="pass__done">Uptick recorded the redemption and the time. That is the receipt.</p>}
++          {state === "redeemed" && (
++            <p className="pass__done">
++              Uptick recorded the redemption and the time. That is the receipt.
++            </p>
++          )}
+         </div>
+ 
+         <p className="pass__by">
+@@ -73,7 +91,11 @@ export default function OfferPass({ caption = true }: { caption?: boolean }) {
+           {state === "redeemed" ? (
+             <>
+               The pass stays like this.{" "}
+-              <button type="button" className="linkbtn" onClick={() => setState("ready")}>
++              <button
++                type="button"
++                className="linkbtn"
++                onClick={() => setState("ready")}
++              >
+                 Show it again
+               </button>
+             </>
+diff --git a/components/home/ScreenFace.tsx b/components/home/ScreenFace.tsx
+index 93ce579..75753ef 100644
+--- a/components/home/ScreenFace.tsx
++++ b/components/home/ScreenFace.tsx
+@@ -46,8 +46,10 @@ export default function ScreenFace({ way }: { way: WayId }) {
+ 
+ /** The same face, as a sentence, for readers who do not see it. */
+ export function describeFace(way: WayId): string {
+-  if (way === "host") return `The screen shows the host store's own special: ${SPECIAL.line1}, ${SPECIAL.line2}. ${SPECIAL.where}.`;
+-  if (way === "advertise") return `The screen shows a nearby business's campaign: ${CAMPAIGN.who}, ${CAMPAIGN.line1}, ${CAMPAIGN.line2}. ${CAMPAIGN.where}.`;
++  if (way === "host")
++    return `The screen shows the host store's own special: ${SPECIAL.line1}, ${SPECIAL.line2}. ${SPECIAL.where}.`;
++  if (way === "advertise")
++    return `The screen shows a nearby business's campaign: ${CAMPAIGN.who}, ${CAMPAIGN.line1}, ${CAMPAIGN.line2}. ${CAMPAIGN.where}.`;
+   const a = GROWTH_EXAMPLE.anchor;
+-  return `The screen shows the Monthly Anchor for ${GROWTH_EXAMPLE.merchant}: ${a.line1}, ${a.line2}. ${a.scan}. A code to scan.`;
++  return `The screen shows an optional Growth placement for ${GROWTH_EXAMPLE.merchant}: ${a.line1}, ${a.line2}. ${a.scan}. A code to scan.`;
+ }
+diff --git a/docs/PILOT_POLICY_BLOCKERS.md b/docs/PILOT_POLICY_BLOCKERS.md
+new file mode 100644
+index 0000000..25a806f
+--- /dev/null
++++ b/docs/PILOT_POLICY_BLOCKERS.md
+@@ -0,0 +1,26 @@
++# Pilot policy blockers
++
++Public pilot enrollment must remain closed until the items below are finalized and reflected consistently in the public and operating policy pages.
++
++## Business identity and notices
++
++- Confirm the operating legal entity name and business form. Do not substitute the Uptick Local brand name for the legal entity.
++- Confirm the physical or mailing notice address that can be published in the Privacy Policy and Terms.
++- Confirm whether another formal legal-notice contact is required in addition to the current support address, `iwhite@upticklocal.com`.
++
++## Terms and privacy details
++
++- Confirm governing law, venue, dispute process, liability language and state-specific disclosures with qualified review.
++- Approve the retention schedule, deletion process, verified privacy-request process, response timelines, appeal route and authorized-agent process.
++- Confirm the production incident and child-information response procedures. Pilot admission is currently limited to adults age 18 or older.
++
++## Enrollment and messaging launch
++
++- Approve the final enrollment language and admission workflow for a pilot targeting 150 adult members with a hard cap of 200.
++- Confirm that each published weekly release is backed by approved inventory and location readiness before member benefits are issued.
++- Complete and approve the production SMS sender, carrier registration, HELP response, STOP/START handling and consent-record workflow.
++- Verify that web membership access works without SMS and that STOP preserves membership and already issued benefits.
++
++## Publication gate
++
++Do not enable the public membership join destination or production messaging until the operating identity, notice address, launch workflow and required review above are complete. The public site requires both a configured join URL and `NEXT_PUBLIC_UPTICK_PILOT_ENROLLMENT_OPEN=true` before it renders a join action.
+diff --git a/lib/content.ts b/lib/content.ts
+index 558267f..9c0a6d1 100644
+--- a/lib/content.ts
++++ b/lib/content.ts
+@@ -7,7 +7,10 @@
+ import { PROGRAM } from "@/lib/program";
+ 
+ /** The company promise. Everything on the homepage descends from this line. */
+-export const PROMISE = { lead: "Grow your business by reaching the customers", accent: "already around you." };
++export const PROMISE = {
++  lead: "Grow your business by reaching the customers",
++  accent: "already around you.",
++};
+ export const PROMISE_TEXT = `${PROMISE.lead} ${PROMISE.accent}`;
+ 
+ /** Under the promise: the whole system in one breath. */
+@@ -21,45 +24,62 @@ export const CONTACT_EMAIL = PROGRAM.supportEmail;
+    ---------------------------------------------------------------------- */
+ 
+ /** What a host's own screen shows: the store's own special, first. */
+-export const SPECIAL = { line1: "COFFEE + BAGEL, $4", line2: "WEEKDAY MORNINGS", tag: "Your special", where: "Convenience · 118 Main St" };
++export const SPECIAL = {
++  line1: "COFFEE + BAGEL, $4",
++  line2: "WEEKDAY MORNINGS",
++  tag: "Your special",
++  where: "Convenience · 118 Main St",
++};
+ 
+ /** An Advertise example: a nearby business, on the screens around it. */
+-export const CAMPAIGN = { line1: "GRAND OPENING", line2: "SATURDAY · 3 DOORS DOWN", who: "Main St Fitness", where: "Showing on the Uptick screens nearby" };
++export const CAMPAIGN = {
++  line1: "GRAND OPENING",
++  line2: "SATURDAY · 3 DOORS DOWN",
++  who: "Main St Fitness",
++  where: "Showing on the Uptick screens nearby",
++};
+ 
+ /**
+- * The Growth example. Joe's is a gas station with a market counter — the
+- * kind of place that already has a stream of people and a reason to bring
+- * them back. The Anchor lives on the screen all month; a Drop is a
+- * time-boxed reason to come in now.
++ * The Growth example. Joe's is a worked example of a four-week managed
++ * program. A screen is one optional placement, not a prerequisite.
+  */
+ export const GROWTH_EXAMPLE = {
+   note: "A worked example. Joe's Market is not a client; the mechanics are exactly what runs.",
+   merchant: "Joe's Market",
+   address: "118 Main St",
+   anchor: {
+-    tag: "This month at Joe's",
+-    line1: "$30+ ON GAS",
+-    line2: "FREE LARGE COFFEE",
+-    scan: "Scan for this month's offer + Uptick Drops",
++    tag: "Featured Uptick at Joe's",
++    line1: "FREE LARGE COFFEE",
++    line2: "NO PURCHASE NEEDED",
++    scan: "Open the featured benefit",
+   },
+   drop: {
+-    kind: "Morning Drop",
+-    line: "$25+ fill-up → free large coffee before 11 AM.",
++    kind: "Featured benefit",
++    line: "Free large coffee before 11 AM. No purchase needed.",
+     window: "Today only",
+     sent: "6:48 AM",
+   },
+   /** Other shapes a Drop can take. Real mechanics, not manufactured urgency. */
+-  windows: ["Before 11 AM", "Friday to Sunday", "First 30 redemptions", "This week only", "While supplies last"],
+-  offerShort: "Free large coffee with $30+ gas",
+-  claim: { code: "7QK2", link: "upticklocal.com/c/7QK2", dropLink: "upticklocal.com/d/7QK2" },
++  windows: [
++    "Before 11 AM",
++    "Friday to Sunday",
++    "First 30 redemptions",
++    "This week only",
++    "While supplies last",
++  ],
++  offerShort: "Free large coffee · no purchase needed",
++  claim: {
++    code: "7QK2",
++    link: "upticklocal.com/c/7QK2",
++    dropLink: "upticklocal.com/d/7QK2",
++  },
+ } as const;
+ 
+-/** The three consent choices. Claiming is the action; the two lists are boxes, unchecked. */
++/** Member benefit access is available on the web; SMS is one optional channel. */
+ export const CONSENT = {
+-  claim: "Text me this month's offer",
+-  merchant: `Updates and offers from ${GROWTH_EXAMPLE.merchant}`,
+-  network: "Uptick Local Drops from nearby businesses",
+-  fine: "Both are optional and unchecked to start. Leaving them off never affects your claim. Reply STOP any time.",
++  claim: "Open my benefit on the web",
++  sms: "Text me Uptick Local membership notices",
++  fine: "SMS is optional and unchecked to start. Leaving it off never affects membership or an issued benefit. Reply STOP any time.",
+ } as const;
+ 
+ /* -------------------------------------------------------------------------
+@@ -119,20 +139,35 @@ export const PHONE_STORY = {
+ 
+ export const CTA = {
+   how: { label: "See how it works", href: "#block" },
+-  talk: { label: "Talk to us", href: `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("Uptick Local")}` },
++  talk: {
++    label: "Talk to us",
++    href: `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("Uptick Local")}`,
++  },
+   host: { label: "Host a free screen", href: "/host" },
+   advertise: { label: "Advertise locally", href: "/advertise" },
+-  growth: { label: "Start a 30-day Growth pilot", href: "/growth" },
++  growth: { label: "Plan a four-week Growth program", href: "/growth" },
+   suite: { label: "Ask about Uptick Suite", href: "/suite" },
+ } as const;
+ 
+ /** Primary navigation, in the order a new visitor should meet it. */
+ export const NAV = [
+-  { href: "/network", label: "The Network", line: "The block, the screens, the rules" },
++  {
++    href: "/network",
++    label: "The Network",
++    line: "The block, the screens, the rules",
++  },
+   { href: "/host", label: "Host", line: "A free screen. Your own specials." },
+-  { href: "/advertise", label: "Advertise", line: "Your campaign on nearby screens. No screen needed." },
+-  { href: "/growth", label: "Growth", line: "Anchor, Drop, claim, visit, redeem, report." },
+-  { href: "/suite", label: "Uptick Suite", line: "Content that makes them choose you." },
++  {
++    href: "/advertise",
++    label: "Advertise",
++    line: "Your campaign on nearby screens. No screen needed.",
++  },
++  { href: "/growth", label: "Growth", line: "Program, Fulfillment, Results." },
++  {
++    href: "/suite",
++    label: "Uptick Suite",
++    line: "Content that makes them choose you.",
++  },
+ ] as const;
+ 
+ /* -------------------------------------------------------------------------
+@@ -141,7 +176,8 @@ export const NAV = [
+ 
+ /**
+  * The three ways to use the physical network. Not tiers: Host is the network
+- * itself, Advertise reaches it without a screen, Growth runs on a host screen.
++ * itself, Advertise reaches it without a screen, and Growth is a managed
++ * program that may include screens when they fit the approved plan.
+  */
+ export const WAYS = [
+   {
+@@ -178,14 +214,15 @@ export const WAYS = [
+     id: "growth",
+     name: "Growth",
+     line: "Turn local attention into measurable customer activity.",
+-    requirement: "Requires hosting",
+-    short: "Requires hosting",
+-    diagram: "The Anchor on the screens. The Drop on their phone. The visit at your door.",
++    requirement: "Screens optional",
++    short: "Screens optional",
++    diagram:
++      "A four-week plan across approved placements, fulfillment and measured results.",
+     points: [
+-      "A Monthly Anchor on your screen and the Uptick screens nearby.",
+-      "Uptick Drops: limited-time reasons to come in now.",
+-      "Customers claim on their phone and redeem at your counter.",
+-      "Claims, redemptions and follow-up, reported plainly.",
++      "One operator-managed four-week program with an approved scope and negotiated fee.",
++      "Planned weekly placements; screens are optional.",
++      "Approved supply and location readiness before member benefits are released.",
++      "Program, Fulfillment and Results, reported plainly.",
+     ],
+     cta: CTA.growth,
+   },
+@@ -205,7 +242,8 @@ export const SUITE = {
+   source: {
+     label: "One conversation with you",
+     business: "Ridge Physical Therapy",
+-    topic: "What actually happens at a first physical therapy visit, and how to tell when it is time to book one.",
++    topic:
++      "What actually happens at a first physical therapy visit, and how to tell when it is time to book one.",
+   },
+   /** Every business named here is a worked example, and the site says so. */
+   example: "A worked example. Ridge Physical Therapy is not a client.",
+@@ -213,32 +251,103 @@ export const SUITE = {
+   second: {
+     label: "One conversation with you",
+     business: "Northside Roofing",
+-    topic: "Most people call us after the leak. Here is what we look for before it, and what an honest estimate includes.",
++    topic:
++      "Most people call us after the leak. Here is what we look for before it, and what an honest estimate includes.",
+     surfaces: [
+-      { id: "site", channel: "Website copy", title: "An estimate you can read.", body: "A services page that explains what is in the number before anyone has to ask." },
+-      { id: "blog", channel: "Blog & articles", title: "What a roof inspection actually covers", body: "Useful enough to be found, plain enough to be trusted." },
+-      { id: "google", channel: "Google Business", title: "Storm week: the three things to check today.", body: "Profile posts that keep your listing current and chosen." },
++      {
++        id: "site",
++        channel: "Website copy",
++        title: "An estimate you can read.",
++        body: "A services page that explains what is in the number before anyone has to ask.",
++      },
++      {
++        id: "blog",
++        channel: "Blog & articles",
++        title: "What a roof inspection actually covers",
++        body: "Useful enough to be found, plain enough to be trusted.",
++      },
++      {
++        id: "google",
++        channel: "Google Business",
++        title: "Storm week: the three things to check today.",
++        body: "Profile posts that keep your listing current and chosen.",
++      },
+     ],
+   },
+   surfaces: [
+-    { id: "site", channel: "Website copy", title: "Your first visit, explained.", body: "A service page that answers the questions people have before they call." },
+-    { id: "blog", channel: "Blog & articles", title: "Five signs it is time to see a physical therapist", body: "Search-aware, genuinely useful, written to be found." },
+-    { id: "social", channel: "Social", title: "The thing we check first is rarely the part that hurts.", body: "A post that earns a save, not a scroll." },
+-    { id: "google", channel: "Google Business", title: "New-patient visits this week: what to bring.", body: "Profile posts that keep your listing current and chosen." },
+-    { id: "email", channel: "Email & newsletter", title: "Subject: The stretch we teach everyone first", body: "Campaigns that bring past patients back." },
+-    { id: "ad", channel: "Ad creative & copy", title: "Move without the wince.", body: "Scroll-stopping creative and copy, for screens, social and search." },
++    {
++      id: "site",
++      channel: "Website copy",
++      title: "Your first visit, explained.",
++      body: "A service page that answers the questions people have before they call.",
++    },
++    {
++      id: "blog",
++      channel: "Blog & articles",
++      title: "Five signs it is time to see a physical therapist",
++      body: "Search-aware, genuinely useful, written to be found.",
++    },
++    {
++      id: "social",
++      channel: "Social",
++      title: "The thing we check first is rarely the part that hurts.",
++      body: "A post that earns a save, not a scroll.",
++    },
++    {
++      id: "google",
++      channel: "Google Business",
++      title: "New-patient visits this week: what to bring.",
++      body: "Profile posts that keep your listing current and chosen.",
++    },
++    {
++      id: "email",
++      channel: "Email & newsletter",
++      title: "Subject: The stretch we teach everyone first",
++      body: "Campaigns that bring past patients back.",
++    },
++    {
++      id: "ad",
++      channel: "Ad creative & copy",
++      title: "Move without the wince.",
++      body: "Scroll-stopping creative and copy, for screens, social and search.",
++    },
+   ],
+   services: [
+-    ["Website copy", "Clear, persuasive pages that give a visitor a reason to choose you."],
+-    ["Blogs & articles", "Helpful, search-aware writing that builds trust and supports your local visibility."],
+-    ["Local content", "Location pages, service pages and content that speaks to your community."],
+-    ["Social content", "Posts that build visibility and keep your audience coming back."],
+-    ["Google Business profile", "Updates and posts that keep the listing people check first current."],
+-    ["Email & newsletters", "Campaigns that inform, engage and bring people back."],
+-    ["Ad creative & copy", "Creative and copy for screens, social and search, built to be acted on."],
+-    ["Strategy & repurposing", "One plan, one voice, every channel; nothing written twice."],
++    [
++      "Website copy",
++      "Clear, persuasive pages that give a visitor a reason to choose you.",
++    ],
++    [
++      "Blogs & articles",
++      "Helpful, search-aware writing that builds trust and supports your local visibility.",
++    ],
++    [
++      "Local content",
++      "Location pages, service pages and content that speaks to your community.",
++    ],
++    [
++      "Social content",
++      "Posts that build visibility and keep your audience coming back.",
++    ],
++    [
++      "Google Business profile",
++      "Updates and posts that keep the listing people check first current.",
++    ],
++    [
++      "Email & newsletters",
++      "Campaigns that inform, engage and bring people back.",
++    ],
++    [
++      "Ad creative & copy",
++      "Creative and copy for screens, social and search, built to be acted on.",
++    ],
++    [
++      "Strategy & repurposing",
++      "One plan, one voice, every channel; nothing written twice.",
++    ],
+   ],
+-  industries: "Dentists, physical therapists, chiropractors, dermatology and med spas, law firms, home-service companies, and other expert local businesses.",
++  industries:
++    "Dentists, physical therapists, chiropractors, dermatology and med spas, law firms, home-service companies, and other expert local businesses.",
+   /**
+    * Suite is delivered with JBCI, the editorial partner. Said plainly and
+    * once: a customer buys the capability, not the corporate structure.
+@@ -273,7 +382,8 @@ export const PROOF = {
+       width: 558,
+       height: 720,
+       alt: "A convenience-store counter: a countertop display stands between the register and a heated case, with the store's shelves behind it.",
+-      caption: "Not an Uptick install. Another screen supplier's hardware and content, photographed as found on a convenience-store counter. The placement is the point.",
++      caption:
++        "Not an Uptick install. Another screen supplier's hardware and content, photographed as found on a convenience-store counter. The placement is the point.",
+     },
+   ],
+ } as const;
+@@ -286,10 +396,30 @@ export const FINALE = {
+   tag: "Your business · The businesses around it · One local network",
+   title: "Put your business on the local map.",
+   doors: [
+-    { id: "host", name: "Host a screen", line: "Turn your counter into a local destination.", href: CTA.host.href },
+-    { id: "advertise", name: "Advertise", line: "Get in front of more locals, no screen needed.", href: CTA.advertise.href },
+-    { id: "growth", name: "Growth", line: "Anchor, Drop, visit, redeem, report.", href: CTA.growth.href },
+-    { id: "suite", name: "Uptick Suite", line: "Content that gets you chosen online.", href: CTA.suite.href },
++    {
++      id: "host",
++      name: "Host a screen",
++      line: "Turn your counter into a local destination.",
++      href: CTA.host.href,
++    },
++    {
++      id: "advertise",
++      name: "Advertise",
++      line: "Get in front of more locals, no screen needed.",
++      href: CTA.advertise.href,
++    },
++    {
++      id: "growth",
++      name: "Growth",
++      line: "Program, Fulfillment, Results.",
++      href: CTA.growth.href,
++    },
++    {
++      id: "suite",
++      name: "Uptick Suite",
++      line: "Content that gets you chosen online.",
++      href: CTA.suite.href,
++    },
+   ],
+ } as const;
+ 
+diff --git a/lib/program.ts b/lib/program.ts
+index e02a752..847d451 100644
+--- a/lib/program.ts
++++ b/lib/program.ts
+@@ -5,21 +5,31 @@
+  * the browser. The membership join destination is deliberately configurable:
+  * the public site does not own the membership signup flow.
+  */
+-const configuredMembershipJoinUrl = process.env.NEXT_PUBLIC_UPTICK_MEMBERSHIP_JOIN_URL?.trim();
++const configuredMembershipJoinUrl =
++  process.env.NEXT_PUBLIC_UPTICK_MEMBERSHIP_JOIN_URL?.trim();
++const pilotEnrollmentOpen =
++  process.env.NEXT_PUBLIC_UPTICK_PILOT_ENROLLMENT_OPEN === "true";
+ 
+ export const PROGRAM = {
+   brandName: "Uptick Local",
+   supportEmail: "iwhite@upticklocal.com",
+   smsProgramName: "Uptick Local Membership",
+-  effectiveDate: "September 11, 2026",
+-  effectiveDateISO: "2026-09-11",
++  effectiveDate: "September 13, 2026",
++  effectiveDateISO: "2026-09-13",
+   urls: {
+     membership: "/membership",
+     sms: "/sms",
+     privacy: "/privacy",
+     terms: "/terms",
+   },
+-  membershipJoinUrl: configuredMembershipJoinUrl || null,
++  membershipJoinUrl:
++    pilotEnrollmentOpen && configuredMembershipJoinUrl
++      ? configuredMembershipJoinUrl
++      : null,
++  pilotEnrollmentOpen,
++  pilotTargetMembers: 150,
++  pilotMemberCap: 200,
++  minimumMemberAge: 18,
+ } as const;
+ 
+ export const MEMBERSHIP_PILOT_HREF = `mailto:${PROGRAM.supportEmail}?subject=${encodeURIComponent("Uptick Local membership pilot")}`;
+@@ -27,11 +37,14 @@ export const MEMBERSHIP_PILOT_HREF = `mailto:${PROGRAM.supportEmail}?subject=${e
+ export const SMS_PROGRAM = {
+   sender: PROGRAM.brandName,
+   purpose:
+-    "Members receive their Uptick membership messages, including local perk messages and necessary membership or service communications.",
++    "Members who opt in receive Uptick membership messages, including notice of their featured local benefit and necessary membership or service communications.",
+   frequency:
+-    "Approximately one featured Uptick per week. Service, transactional and support messages may create additional messages when needed.",
++    "Message frequency varies. A published weekly release may create one featured-benefit notice, and service, transactional or support activity may create additional messages.",
+   rates: "Message and data rates may apply.",
+-  optOut: "Reply STOP to stop receiving Uptick Local messages.",
++  optOut:
++    "Reply STOP to stop receiving Uptick Local texts. STOP does not cancel membership or an already issued benefit.",
++  restart:
++    "Reply START to ask the carrier to remove its messaging block. START does not enroll you or provide new SMS consent.",
+   help: `Reply HELP for help, or contact ${PROGRAM.supportEmail}.`,
+   mobileInfoNonSharing:
+     "Mobile information, including phone numbers and SMS opt-in or consent data, will not be shared with third parties or affiliates for their own marketing or promotional purposes.",
+-- 
+2.54.0
+
