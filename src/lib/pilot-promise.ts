@@ -12,13 +12,20 @@ const key = z.string().trim().min(1).max(100);
 const shortText = z.string().trim().min(1).max(200);
 const note = z.string().trim().min(10).max(1500);
 const weekKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const zeroMoney = z.coerce.number().finite().refine((value) => value === 0, {
-  message: "The core weekly Uptick must have no required spend or member fee.",
-});
+const zeroMoney = z.coerce
+  .number()
+  .finite()
+  .refine((value) => value === 0, {
+    message:
+      "The core weekly Uptick must have no required spend or member fee.",
+  });
 const instant = z
   .string()
   .trim()
-  .refine((value) => !Number.isNaN(Date.parse(value)), "Choose a valid date and time.")
+  .refine(
+    (value) => !Number.isNaN(Date.parse(value)),
+    "Choose a valid date and time.",
+  )
   .transform((value) => new Date(value).toISOString());
 
 function requireOperator(actor: Actor) {
@@ -109,11 +116,7 @@ const supplyTermsInput = z.object({
   dataKind,
 });
 
-export async function configurePilotSupply(
-  db: DB,
-  actor: Actor,
-  raw: unknown,
-) {
+export async function configurePilotSupply(db: DB, actor: Actor, raw: unknown) {
   requireOperator(actor);
   const input = supplyTermsInput.parse(raw);
   return db.transaction(async (tx) => {
@@ -140,12 +143,14 @@ export async function configurePilotSupply(
       [input.supplyId],
     );
     if (!supply) throw new RequestError("Choose an existing Drop supply.", 404);
-    if (!(["draft", "review"].includes(supply.state)) || supply.approved_by)
+    if (!["draft", "review"].includes(supply.state) || supply.approved_by)
       throw new RequestError(
         "Configure the exact pilot promise before approving this supply.",
       );
     if (supply.inventory_policy === "unlimited" || !supply.quantity)
-      throw new RequestError("Pilot supply must have a finite positive quantity.");
+      throw new RequestError(
+        "Pilot supply must have a finite positive quantity.",
+      );
     if (input.fulfillerOrganizationId !== supply.organization_id)
       throw new RequestError(
         "The fulfiller must own the location attached to this supply.",
@@ -155,19 +160,24 @@ export async function configurePilotSupply(
         "The supply and Market Cell must have the same real/test classification.",
       );
     if (input.dataKind === "real" && supply.is_demo)
-      throw new RequestError("Demo organizations cannot fund real pilot supply.");
+      throw new RequestError(
+        "Demo organizations cannot fund real pilot supply.",
+      );
     const [funder] = await tx.query<{ id: string; is_demo: boolean }>(
       "select id,is_demo from organizations where id=$1",
       [input.funderOrganizationId],
     );
-    if (!funder) throw new RequestError("Choose an existing funding organization.");
+    if (!funder)
+      throw new RequestError("Choose an existing funding organization.");
     if (input.dataKind === "real" && funder.is_demo)
-      throw new RequestError("Demo organizations cannot fund real pilot supply.");
+      throw new RequestError(
+        "Demo organizations cannot fund real pilot supply.",
+      );
     assertNoPurchaseLanguage(supply.qualification, supply.reward, supply.terms);
-    await tx.query("update network_drop_supplies set data_kind=$2 where id=$1", [
-      supply.id,
-      input.dataKind,
-    ]);
+    await tx.query(
+      "update network_drop_supplies set data_kind=$2 where id=$1",
+      [supply.id, input.dataKind],
+    );
     await tx.query(
       `insert into pilot_supply_terms(
         supply_id,exact_item,item_sku,size_label,usable_hours,dependency_key,
@@ -196,17 +206,24 @@ export async function configurePilotSupply(
         actor.id,
       ],
     );
-    await audit(tx, actor.id, supply.organization_id, "pilot.supply_terms_saved", supply.id, {
-      exactItem: input.exactItem,
-      itemSku: input.itemSku,
-      sizeLabel: input.sizeLabel,
-      usableHours: input.usableHours,
-      requiredSpend: 0,
-      memberFee: 0,
-      funderOrganizationId: input.funderOrganizationId,
-      fulfillerOrganizationId: input.fulfillerOrganizationId,
-      dataKind: input.dataKind,
-    });
+    await audit(
+      tx,
+      actor.id,
+      supply.organization_id,
+      "pilot.supply_terms_saved",
+      supply.id,
+      {
+        exactItem: input.exactItem,
+        itemSku: input.itemSku,
+        sizeLabel: input.sizeLabel,
+        usableHours: input.usableHours,
+        requiredSpend: 0,
+        memberFee: 0,
+        funderOrganizationId: input.funderOrganizationId,
+        fulfillerOrganizationId: input.fulfillerOrganizationId,
+        dataKind: input.dataKind,
+      },
+    );
     return supply.id;
   });
 }
@@ -241,9 +258,12 @@ export async function savePilotFallback(db: DB, actor: Actor, raw: unknown) {
        where s.id=$1 for update of s`,
       [input.supplyId],
     );
-    if (!supply) throw new RequestError("Save the exact pilot supply terms first.");
+    if (!supply)
+      throw new RequestError("Save the exact pilot supply terms first.");
     if (supply.approved_by || !["draft", "review"].includes(supply.state))
-      throw new RequestError("Define the fallback before approving this supply.");
+      throw new RequestError(
+        "Define the fallback before approving this supply.",
+      );
     if (input.dependencyKey === supply.dependency_key)
       throw new RequestError(
         "The fallback must use a different underlying resource than the primary item.",
@@ -254,7 +274,9 @@ export async function savePilotFallback(db: DB, actor: Actor, raw: unknown) {
     );
     if (!payer) throw new RequestError("Choose an existing fallback payer.");
     if (supply.data_kind === "real" && payer.is_demo)
-      throw new RequestError("Demo organizations cannot pay for a real pilot fallback.");
+      throw new RequestError(
+        "Demo organizations cannot pay for a real pilot fallback.",
+      );
     const fallbackId = id();
     const [saved] = await tx.query<{ id: string }>(
       `insert into pilot_supply_fallbacks(
@@ -287,14 +309,21 @@ export async function savePilotFallback(db: DB, actor: Actor, raw: unknown) {
         actor.id,
       ],
     );
-    await audit(tx, actor.id, supply.organization_id, "pilot.fallback_saved", saved.id, {
-      supplyId: input.supplyId,
-      substituteItem: input.substituteItem,
-      usableCapacity: input.usableCapacity,
-      payerOrganizationId: input.payerOrganizationId,
-      approved: input.approve,
-      independentDependency: true,
-    });
+    await audit(
+      tx,
+      actor.id,
+      supply.organization_id,
+      "pilot.fallback_saved",
+      saved.id,
+      {
+        supplyId: input.supplyId,
+        substituteItem: input.substituteItem,
+        usableCapacity: input.usableCapacity,
+        payerOrganizationId: input.payerOrganizationId,
+        approved: input.approve,
+        independentDependency: true,
+      },
+    );
     return saved.id;
   });
 }
@@ -329,12 +358,16 @@ export async function saveDestinationReadiness(
       location_id: string;
       state: string;
       approved_by: string | null;
-    }>("select * from network_drop_supplies where id=$1 for update", [input.supplyId]);
+    }>("select * from network_drop_supplies where id=$1 for update", [
+      input.supplyId,
+    ]);
     if (!supply) throw new RequestError("Choose an existing Drop supply.", 404);
     if (input.state === "ready") {
       const now = new Date();
       if (supply.state !== "approved" || !supply.approved_by)
-        throw new RequestError("Approve the exact supply before marking its counter ready.");
+        throw new RequestError(
+          "Approve the exact supply before marking its counter ready.",
+        );
       if (
         !input.ownerApprovedBy ||
         input.primaryManager.length < 2 ||
@@ -365,7 +398,9 @@ export async function saveDestinationReadiness(
         [input.supplyId],
       );
       if (!contract)
-        throw new RequestError("Approve an independent same-counter fallback first.");
+        throw new RequestError(
+          "Approve an independent same-counter fallback first.",
+        );
       const [qr] = await tx.query<{ id: string }>(
         `select rp.id from redemption_points rp
          join redemption_credentials rc on rc.point_id=rp.id
@@ -416,13 +451,20 @@ export async function saveDestinationReadiness(
         actor.id,
       ],
     );
-    await audit(tx, actor.id, supply.organization_id, "pilot.readiness_saved", input.supplyId, {
-      state: input.state,
-      validUntil: input.validUntil,
-      qrRehearsed: Boolean(input.qrRehearsedAt),
-      exactItemConfirmed: input.exactItemConfirmed,
-      shiftsBriefed: Boolean(input.shiftsBriefedAt),
-    });
+    await audit(
+      tx,
+      actor.id,
+      supply.organization_id,
+      "pilot.readiness_saved",
+      input.supplyId,
+      {
+        state: input.state,
+        validUntil: input.validUntil,
+        qrRehearsed: Boolean(input.qrRehearsedAt),
+        exactItemConfirmed: input.exactItemConfirmed,
+        shiftsBriefed: Boolean(input.shiftsBriefedAt),
+      },
+    );
     return input.supplyId;
   });
 }
@@ -458,7 +500,9 @@ function releaseFingerprint(input: ReleaseInput) {
         weekKey: input.weekKey,
         dataKind: input.dataKind,
         assignments: [...input.assignments].sort(
-          (a, b) => a.memberId.localeCompare(b.memberId) || a.supplyId.localeCompare(b.supplyId),
+          (a, b) =>
+            a.memberId.localeCompare(b.memberId) ||
+            a.supplyId.localeCompare(b.supplyId),
         ),
       }),
     )
@@ -625,16 +669,23 @@ async function programForSupply(
     throw new RequestError(
       "Paid supply must come from the approved Program version for this pilot run.",
     );
-  const [{ total, week_total }] = await db.query<{ total: number; week_total: number }>(
+  const [{ total, week_total }] = await db.query<{
+    total: number;
+    week_total: number;
+  }>(
     `select count(*)::int total,
       count(*) filter(where week_key=$3)::int week_total
      from fulfillment_grants where source_program_id=$1 and source_program_version=$2`,
     [program.program_id, program.program_version, week],
   );
   if (total + newPlacements > program.benefit_ceiling)
-    throw new RequestError("This release would exceed the approved Program benefit ceiling.");
+    throw new RequestError(
+      "This release would exceed the approved Program benefit ceiling.",
+    );
   if (week_total + newPlacements > program.planned_placements)
-    throw new RequestError("This release would exceed the Program's approved weekly placements.");
+    throw new RequestError(
+      "This release would exceed the Program's approved weekly placements.",
+    );
   return program;
 }
 
@@ -648,7 +699,9 @@ export async function releaseWeeklyBenefits(
   const memberIds = input.assignments.map((item) => item.memberId);
   const supplyIds = input.assignments.map((item) => item.supplyId);
   if (new Set(memberIds).size !== memberIds.length)
-    throw new RequestError("Each reviewed member must receive exactly one featured Uptick.");
+    throw new RequestError(
+      "Each reviewed member must receive exactly one featured Uptick.",
+    );
   const fingerprint = releaseFingerprint(input);
   return db.transaction(async (tx) => {
     let run:
@@ -682,12 +735,20 @@ export async function releaseWeeklyBenefits(
           .slice(0, 10),
       );
       if (!weeks.includes(input.weekKey))
-        throw new RequestError("Choose one of this pilot run's four Monday week keys.");
+        throw new RequestError(
+          "Choose one of this pilot run's four Monday week keys.",
+        );
     } else if (input.dataKind === "real") {
-      throw new RequestError("Real weekly releases require a reviewed pilot run.");
+      throw new RequestError(
+        "Real weekly releases require a reviewed pilot run.",
+      );
     }
 
-    const [market] = await tx.query<{ id: string; timezone: string; data_kind: string }>(
+    const [market] = await tx.query<{
+      id: string;
+      timezone: string;
+      data_kind: string;
+    }>(
       "select id,timezone,data_kind from market_cells where id=$1 for update",
       [input.marketId],
     );
@@ -700,7 +761,9 @@ export async function releaseWeeklyBenefits(
       market.timezone,
     );
     if (marketWeek.weekKey !== input.weekKey)
-      throw new RequestError("The weekly release key must be a Monday in the Market Cell.");
+      throw new RequestError(
+        "The weekly release key must be a Monday in the Market Cell.",
+      );
     const now = new Date();
     if (marketWeekWindow(now, market.timezone).weekKey !== input.weekKey)
       throw new RequestError(
@@ -713,7 +776,9 @@ export async function releaseWeeklyBenefits(
     );
     if (byRequest) {
       if (byRequest.request_fingerprint !== fingerprint)
-        throw new RequestError("This release request key was already used for different terms.");
+        throw new RequestError(
+          "This release request key was already used for different terms.",
+        );
       return weeklyReleaseView(tx, byRequest.id);
     }
     const [existing] = await tx.query<WeeklyRelease>(
@@ -724,7 +789,9 @@ export async function releaseWeeklyBenefits(
     );
     if (existing) {
       if (existing.request_fingerprint !== fingerprint)
-        throw new RequestError("This pilot week already has a different published release.");
+        throw new RequestError(
+          "This pilot week already has a different published release.",
+        );
       return weeklyReleaseView(tx, existing.id);
     }
 
@@ -789,7 +856,10 @@ export async function releaseWeeklyBenefits(
         "Every released member must be active, verified, adult-confirmed and in the same cohort classification.",
       );
     if (run) {
-      const admissions = await tx.query<{ member_id: string; data_kind: string }>(
+      const admissions = await tx.query<{
+        member_id: string;
+        data_kind: string;
+      }>(
         "select member_id,data_kind from pilot_admissions where run_id=$1 order by member_id",
         [run.id],
       );
@@ -806,14 +876,18 @@ export async function releaseWeeklyBenefits(
         );
     }
 
-    await tx.query("select singleton from growth_program_coordination where singleton=true for update");
+    await tx.query(
+      "select singleton from growth_program_coordination where singleton=true for update",
+    );
     const supplyPrograms = new Map<
       string,
       Awaited<ReturnType<typeof programForSupply>>
     >();
     const pendingProgramPlacements = new Map<string, number>();
     for (const supply of supplies) {
-      const assigned = input.assignments.filter((item) => item.supplyId === supply.id).length;
+      const assigned = input.assignments.filter(
+        (item) => item.supplyId === supply.id,
+      ).length;
       if (
         supply.market_id !== input.marketId ||
         supply.data_kind !== input.dataKind ||
@@ -853,14 +927,18 @@ export async function releaseWeeklyBenefits(
         new Date(supply.starts_at) > marketWeek.start ||
         new Date(supply.expires_at) < marketWeek.end
       )
-        throw new RequestError(`Supply ${supply.id} must cover the complete release week.`);
+        throw new RequestError(
+          `Supply ${supply.id} must cover the complete release week.`,
+        );
       const [{ used }] = await tx.query<{ used: number }>(
         `select count(*)::int used from recovery_grants
          where fallback_id=$1 and (state='redeemed' or expires_at>now())`,
         [supply.fallback_id],
       );
       if (supply.fallback_capacity - used < assigned)
-        throw new RequestError(`Fallback capacity cannot cover every grant for ${supply.exact_item}.`);
+        throw new RequestError(
+          `Fallback capacity cannot cover every grant for ${supply.exact_item}.`,
+        );
       const obligations = await primaryObligations(tx, supply.id, new Date());
       let committed: number | null = null;
       if (run) {
@@ -870,19 +948,28 @@ export async function releaseWeeklyBenefits(
           [run.id, input.weekKey, supply.id],
         );
         if (!plan)
-          throw new RequestError(`Supply ${supply.id} is not committed to this pilot week.`);
+          throw new RequestError(
+            `Supply ${supply.id} is not committed to this pilot week.`,
+          );
         committed = Number(plan.committed_quantity);
         if (obligations.primary_grants + assigned > committed)
-          throw new RequestError(`The release exceeds committed stock for ${supply.exact_item}.`);
+          throw new RequestError(
+            `The release exceeds committed stock for ${supply.exact_item}.`,
+          );
       }
       const [{ adjustment }] = await tx.query<{ adjustment: number }>(
         "select coalesce(sum(delta),0)::int adjustment from supply_adjustments where supply_id=$1",
         [supply.id],
       );
       const total = Number(supply.quantity) + adjustment;
-      const primary = Math.max(committed || 0, obligations.primary_grants + assigned);
+      const primary = Math.max(
+        committed || 0,
+        obligations.primary_grants + assigned,
+      );
       if (total < primary + obligations.legacy_used + obligations.recoveries)
-        throw new RequestError(`Confirmed inventory cannot cover every grant for ${supply.exact_item}.`);
+        throw new RequestError(
+          `Confirmed inventory cannot cover every grant for ${supply.exact_item}.`,
+        );
       let program = await programForSupply(
         tx,
         supply.id,
@@ -908,7 +995,9 @@ export async function releaseWeeklyBenefits(
     }
 
     for (const member of members) {
-      const assignment = input.assignments.find((item) => item.memberId === member.id)!;
+      const assignment = input.assignments.find(
+        (item) => item.memberId === member.id,
+      )!;
       const supply = supplies.find((item) => item.id === assignment.supplyId)!;
       const [conflict] = await tx.query<{ id: string }>(
         `select a.id from member_allocations a where a.member_id=$1 and a.week_key=$2
@@ -939,14 +1028,21 @@ export async function releaseWeeklyBenefits(
         fingerprint,
       ],
     );
-    for (const member of [...members].sort((a, b) => a.id.localeCompare(b.id))) {
-      const assignment = input.assignments.find((item) => item.memberId === member.id)!;
+    for (const member of [...members].sort((a, b) =>
+      a.id.localeCompare(b.id),
+    )) {
+      const assignment = input.assignments.find(
+        (item) => item.memberId === member.id,
+      )!;
       const supply = supplies.find((item) => item.id === assignment.supplyId)!;
       const program = supplyPrograms.get(supply.id);
       const allocationId = id();
       const grantId = id();
       const expiresAt = new Date(
-        Math.min(new Date(supply.expires_at).getTime(), marketWeek.end.getTime()),
+        Math.min(
+          new Date(supply.expires_at).getTime(),
+          marketWeek.end.getTime(),
+        ),
       ).toISOString();
       const snapshot: Snapshot & Record<string, unknown> = {
         merchant: supply.merchant,
@@ -971,7 +1067,8 @@ export async function releaseWeeklyBenefits(
         fallback: {
           available: true,
           same_counter: true,
-          instructions: "Ask the cashier for the approved substitute or contact Uptick support.",
+          instructions:
+            "Ask the cashier for the approved substitute or contact Uptick support.",
         },
         origin: {
           network: true,
@@ -1053,15 +1150,22 @@ export async function releaseWeeklyBenefits(
         dedupKey: `grant:${grantId}`,
       });
     }
-    await audit(tx, actor.id, null, "pilot.weekly_release_published", releaseId, {
-      runId: run?.id || null,
-      marketId: input.marketId,
-      weekKey: input.weekKey,
-      memberCount: members.length,
-      supplyIds: sortedSupplyIds,
-      allOrNothing: true,
-      messagesSent: false,
-    });
+    await audit(
+      tx,
+      actor.id,
+      null,
+      "pilot.weekly_release_published",
+      releaseId,
+      {
+        runId: run?.id || null,
+        marketId: input.marketId,
+        weekKey: input.weekKey,
+        memberCount: members.length,
+        supplyIds: sortedSupplyIds,
+        allOrNothing: true,
+        messagesSent: false,
+      },
+    );
     return weeklyReleaseView(tx, releaseId);
   });
 }
@@ -1089,7 +1193,8 @@ const incidentInput = z.object({
 
 async function createIncident(
   db: DB,
-  reporter: { kind: "operator"; actor: Actor } | { kind: "member"; memberId: string },
+  reporter:
+    { kind: "operator"; actor: Actor } | { kind: "member"; memberId: string },
   raw: unknown,
 ) {
   const input = incidentInput.parse(raw);
@@ -1098,9 +1203,13 @@ async function createIncident(
       "select * from fulfillment_grants where id=$1 for update",
       [input.grantId],
     );
-    if (!grant) throw new RequestError("Choose an issued fulfillment grant.", 404);
+    if (!grant)
+      throw new RequestError("Choose an issued fulfillment grant.", 404);
     if (reporter.kind === "member" && reporter.memberId !== grant.member_id)
-      throw new RequestError("This fulfillment grant belongs to another member.", 403);
+      throw new RequestError(
+        "This fulfillment grant belongs to another member.",
+        403,
+      );
     const [existing] = await tx.query<{ id: string; grant_id: string }>(
       "select id,grant_id from fulfillment_incidents where idempotency_key=$1",
       [input.idempotencyKey],
@@ -1161,7 +1270,11 @@ async function createIncident(
         grant.organization_id,
         "pilot.incident_opened",
         incidentId,
-        { grantId: grant.id, type: input.incidentType, severity: input.severity },
+        {
+          grantId: grant.id,
+          type: input.incidentType,
+          severity: input.severity,
+        },
       );
     return incidentId;
   });
@@ -1196,7 +1309,11 @@ const recoveryInput = z.object({
   expiresAt: instant,
 });
 
-export async function issueIncidentRecovery(db: DB, actor: Actor, raw: unknown) {
+export async function issueIncidentRecovery(
+  db: DB,
+  actor: Actor,
+  raw: unknown,
+) {
   requireOperator(actor);
   const input = recoveryInput.parse(raw);
   return db.transaction(async (tx) => {
@@ -1205,8 +1322,11 @@ export async function issueIncidentRecovery(db: DB, actor: Actor, raw: unknown) 
       grant_id: string;
       member_id: string;
       state: string;
-    }>("select * from fulfillment_incidents where id=$1 for update", [input.incidentId]);
-    if (!incident) throw new RequestError("Choose an existing fulfillment incident.", 404);
+    }>("select * from fulfillment_incidents where id=$1 for update", [
+      input.incidentId,
+    ]);
+    if (!incident)
+      throw new RequestError("Choose an existing fulfillment incident.", 404);
     const [existing] = await tx.query<{
       id: string;
       remedy_type: string;
@@ -1219,11 +1339,15 @@ export async function issueIncidentRecovery(db: DB, actor: Actor, raw: unknown) 
         existing.fallback_id !== input.fallbackId ||
         existing.replacement_supply_id !== input.replacementSupplyId
       )
-        throw new RequestError("This incident already has a different recovery remedy.");
+        throw new RequestError(
+          "This incident already has a different recovery remedy.",
+        );
       return existing.id;
     }
     if (!["open", "recovering"].includes(incident.state))
-      throw new RequestError("This incident is no longer accepting a recovery remedy.");
+      throw new RequestError(
+        "This incident is no longer accepting a recovery remedy.",
+      );
     const [grant] = await tx.query<FulfillmentGrant>(
       "select * from fulfillment_grants where id=$1",
       [incident.grant_id],
@@ -1252,7 +1376,9 @@ export async function issueIncidentRecovery(db: DB, actor: Actor, raw: unknown) 
     );
     if (!payer) throw new RequestError("Choose an existing recovery payer.");
     if (grant.data_kind === "real" && payer.is_demo)
-      throw new RequestError("Demo organizations cannot pay for a real pilot recovery.");
+      throw new RequestError(
+        "Demo organizations cannot pay for a real pilot recovery.",
+      );
 
     let fallbackId: string | null = null;
     let replacementSupplyId: string | null = null;
@@ -1331,16 +1457,22 @@ export async function issueIncidentRecovery(db: DB, actor: Actor, raw: unknown) 
         new Date(fallback.valid_until) < new Date(input.expiresAt) ||
         input.payerOrganizationId !== fallback.payer_organization_id
       )
-        throw new RequestError("The same-counter fallback is not independently ready and funded.");
+        throw new RequestError(
+          "The same-counter fallback is not independently ready and funded.",
+        );
       const [{ used }] = await tx.query<{ used: number }>(
         `select count(*)::int used from recovery_grants
          where fallback_id=$1 and (state='redeemed' or expires_at>now())`,
         [fallback.id],
       );
       if (used >= fallback.usable_capacity)
-        throw new RequestError("The same-counter fallback capacity is exhausted.");
+        throw new RequestError(
+          "The same-counter fallback capacity is exhausted.",
+        );
       if (new Date(input.expiresAt) > new Date(fallback.expires_at))
-        throw new RequestError("Recovery cannot outlast the same-counter supply window.");
+        throw new RequestError(
+          "Recovery cannot outlast the same-counter supply window.",
+        );
       fallbackId = fallback.id;
       targetOrganizationId = fallback.organization_id;
       targetLocationId = fallback.location_id;
@@ -1428,12 +1560,18 @@ export async function issueIncidentRecovery(db: DB, actor: Actor, raw: unknown) 
         Number(replacement.required_spend) !== 0 ||
         Number(replacement.member_fee) !== 0
       )
-        throw new RequestError("Choose independently backed, ready replacement supply.");
+        throw new RequestError(
+          "Choose independently backed, ready replacement supply.",
+        );
       if (new Date(input.expiresAt) > new Date(replacement.expires_at))
-        throw new RequestError("Recovery cannot outlast the replacement supply window.");
+        throw new RequestError(
+          "Recovery cannot outlast the replacement supply window.",
+        );
       const usage = await supplyUsage(tx, replacement.id);
       if (usage.remaining === null || usage.remaining < 1)
-        throw new RequestError("The replacement supply has no uncommitted capacity.");
+        throw new RequestError(
+          "The replacement supply has no uncommitted capacity.",
+        );
       replacementSupplyId = replacement.id;
       targetOrganizationId = replacement.organization_id;
       targetLocationId = replacement.location_id;
@@ -1446,7 +1584,8 @@ export async function issueIncidentRecovery(db: DB, actor: Actor, raw: unknown) 
         usable_hours: replacement.usable_hours,
         required_spend: 0,
         member_fee: 0,
-        instructions: "Show this recovery at the named counter and scan the staff-presented Uptick QR.",
+        instructions:
+          "Show this recovery at the named counter and scan the staff-presented Uptick QR.",
         remedy_type: "replacement_supply",
       };
     }
@@ -1500,15 +1639,22 @@ export async function issueIncidentRecovery(db: DB, actor: Actor, raw: unknown) 
       },
       dedupKey: `recovery:${incident.id}`,
     });
-    await audit(tx, actor.id, targetOrganizationId!, "pilot.recovery_issued", recoveryId, {
-      incidentId: incident.id,
-      originalGrantId: grant.id,
-      remedyType: input.remedyType,
-      fallbackId,
-      replacementSupplyId,
-      payerOrganizationId: input.payerOrganizationId,
-      countsAsPaidPlacement: false,
-    });
+    await audit(
+      tx,
+      actor.id,
+      targetOrganizationId!,
+      "pilot.recovery_issued",
+      recoveryId,
+      {
+        incidentId: incident.id,
+        originalGrantId: grant.id,
+        remedyType: input.remedyType,
+        fallbackId,
+        replacementSupplyId,
+        payerOrganizationId: input.payerOrganizationId,
+        countsAsPaidPlacement: false,
+      },
+    );
     return recoveryId;
   });
 }
@@ -1564,7 +1710,9 @@ export async function pilotPromiseOperations(
   return { supplies, releases, incidents, recoveries };
 }
 
-export type PilotPromiseOperations = Awaited<ReturnType<typeof pilotPromiseOperations>>;
+export type PilotPromiseOperations = Awaited<
+  ReturnType<typeof pilotPromiseOperations>
+>;
 
 export function allocationGrantView(
   db: DB,

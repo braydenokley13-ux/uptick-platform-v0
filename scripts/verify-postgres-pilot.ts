@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import type { DB } from "../src/lib/db";
 import type { Actor } from "../src/lib/domain";
 import { decrypt, encrypt, hash, token } from "../src/lib/security";
-import { marketWeekWindow, claimMemberDrop, supplyUsage } from "../src/lib/network";
+import {
+  marketWeekWindow,
+  claimMemberDrop,
+  supplyUsage,
+} from "../src/lib/network";
 import { adjustSupply } from "../src/lib/network-operations";
 import {
   issueIncidentRecovery,
@@ -61,7 +65,9 @@ export async function seedSyntheticPilot(
     .toISOString()
     .slice(0, 10);
   const supplyStart = new Date(window.start.getTime() - 86400000).toISOString();
-  const supplyEnd = new Date(window.start.getTime() + 35 * 86400000).toISOString();
+  const supplyEnd = new Date(
+    window.start.getTime() + 35 * 86400000,
+  ).toISOString();
   const readyAt = new Date(Date.now() - 60000).toISOString();
   const readyUntil = new Date(window.end.getTime() + 86400000).toISOString();
 
@@ -249,7 +255,9 @@ export async function verifyPilotPostgres(db: DB) {
   assert.equal((await supplyUsage(db, fixture.supplyId)).remaining, 0);
   const privatePass = decrypt(claims[0].token_encrypted);
   await redeemAtPoint(db, privatePass, { pointToken: fixture.pointToken });
-  const grant = competing[0].grants.find((item) => item.member_id === first.id)!;
+  const grant = competing[0].grants.find(
+    (item) => item.member_id === first.id,
+  )!;
   const incidentInput = {
     grantId: grant.id,
     incidentType: "redemption_failure" as const,
@@ -278,20 +286,21 @@ export async function verifyPilotPostgres(db: DB) {
   ]);
   assert.equal(recoveries[0], recoveries[1]);
   await redeemAtPoint(db, privatePass, { pointToken: fixture.pointToken });
-  const [{ claims: claimCount, allocations, recoveries: recoveryCount, evidence }] =
-    await db.query<{
-      claims: number;
-      allocations: number;
-      recoveries: number;
-      evidence: number;
-    }>(
-      `select
+  const [
+    { claims: claimCount, allocations, recoveries: recoveryCount, evidence },
+  ] = await db.query<{
+    claims: number;
+    allocations: number;
+    recoveries: number;
+    evidence: number;
+  }>(
+    `select
         (select count(*)::int from claims where id=$1) claims,
         (select count(*)::int from member_allocations where member_id=$2) allocations,
         (select count(*)::int from recovery_grants where original_claim_id=$1) recoveries,
         (select count(*)::int from redemption_evidence where claim_id=$1) evidence`,
-      [claims[0].id, first.id],
-    );
+    [claims[0].id, first.id],
+  );
   assert.deepEqual(
     { claimCount, allocations, recoveryCount, evidence },
     { claimCount: 1, allocations: 1, recoveryCount: 1, evidence: 1 },

@@ -390,10 +390,9 @@ export async function claimMemberDrop(
       member_snapshot: Snapshot;
       expires_at: string;
       state: string;
-    }>(
-      "select * from fulfillment_grants where allocation_id=$1 for update",
-      [allocation.id],
-    );
+    }>("select * from fulfillment_grants where allocation_id=$1 for update", [
+      allocation.id,
+    ]);
     if (grant) {
       if (
         grant.member_id !== member.id ||
@@ -402,9 +401,13 @@ export async function claimMemberDrop(
         grant.offer_id !== supply.offer_id ||
         grant.offer_version !== supply.offer_version
       )
-        throw new RequestError("This week's fulfillment grant does not match the saved Uptick.");
+        throw new RequestError(
+          "This week's fulfillment grant does not match the saved Uptick.",
+        );
       if (grant.state !== "issued" || new Date(grant.expires_at) <= at)
-        throw new RequestError("This week's fulfillment grant is no longer claimable.");
+        throw new RequestError(
+          "This week's fulfillment grant is no longer claimable.",
+        );
     } else {
       if (member.data_kind === "real")
         throw new RequestError(
@@ -746,5 +749,11 @@ export async function networkPass(db: DB, credential: string) {
         [grant.id],
       )
     : [];
-  return { claim, mapping, supply, grant: grant || null, recovery: recovery || null };
+  return {
+    claim,
+    mapping,
+    supply,
+    grant: grant || null,
+    recovery: recovery || null,
+  };
 }

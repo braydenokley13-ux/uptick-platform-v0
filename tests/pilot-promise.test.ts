@@ -83,8 +83,14 @@ test("a release rolls back the whole reviewed cohort when primary stock is short
       /inventory cannot cover/,
     );
     assert.equal((await db.query("select * from weekly_releases")).length, 0);
-    assert.equal((await db.query("select * from member_allocations")).length, 0);
-    assert.equal((await db.query("select * from fulfillment_grants")).length, 0);
+    assert.equal(
+      (await db.query("select * from member_allocations")).length,
+      0,
+    );
+    assert.equal(
+      (await db.query("select * from fulfillment_grants")).length,
+      0,
+    );
   } finally {
     await db.close?.();
   }
@@ -118,7 +124,10 @@ test("stale stock and future-dated completion evidence cannot publish a promise"
         }),
         /fully rehearsed pilot promise/,
       );
-      assert.equal((await db.query("select * from fulfillment_grants")).length, 0);
+      assert.equal(
+        (await db.query("select * from fulfillment_grants")).length,
+        0,
+      );
     } finally {
       await db.close?.();
     }
@@ -163,10 +172,12 @@ test("an unclaimed failed grant can recover without recording a false original r
       expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
     });
     assert.equal(
-      (await db.query<{ original_claim_id: string | null }>(
-        "select original_claim_id from recovery_grants where id=$1",
-        [recoveryId],
-      ))[0].original_claim_id,
+      (
+        await db.query<{ original_claim_id: string | null }>(
+          "select original_claim_id from recovery_grants where id=$1",
+          [recoveryId],
+        )
+      )[0].original_claim_id,
       null,
     );
     const accessToken = token();
@@ -176,18 +187,16 @@ test("an unclaimed failed grant can recover without recording a false original r
         disclosure,home_zip,age_attested
        ) values('preclaim-recovery-access',$1,$2,$3,'access',now()+interval '30 days',
         now(),'Synthetic isolated verification','10001',true)`,
-      [
-        fixture.members[0].id,
-        hash(accessToken),
-        encrypt(accessToken),
-      ],
+      [fixture.members[0].id, hash(accessToken), encrypt(accessToken)],
     );
     const claim = await claimMemberDrop(db, accessToken, fixture.supplyId);
     assert.equal(
-      (await db.query<{ original_claim_id: string | null }>(
-        "select original_claim_id from recovery_grants where id=$1",
-        [recoveryId],
-      ))[0].original_claim_id,
+      (
+        await db.query<{ original_claim_id: string | null }>(
+          "select original_claim_id from recovery_grants where id=$1",
+          [recoveryId],
+        )
+      )[0].original_claim_id,
       claim.id,
     );
     const result = await redeemAtPoint(db, decrypt(claim.token_encrypted), {

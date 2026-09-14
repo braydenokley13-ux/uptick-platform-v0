@@ -129,10 +129,12 @@ test("public repeat requests cannot overwrite verified geography, attribution or
   assert.equal(state.source_id, "source");
   assert.equal(state.state, "active");
   assert.equal(
-    (await db.query<{ accepted: boolean }>(
-      "select accepted from member_consents where member_id=$1 order by sequence desc limit 1",
-      [joined.member.id],
-    ))[0].accepted,
+    (
+      await db.query<{ accepted: boolean }>(
+        "select accepted from member_consents where member_id=$1 order by sequence desc limit 1",
+        [joined.member.id],
+      )
+    )[0].accepted,
     false,
   );
   await confirmMemberAccess(db, joined.credential, true);

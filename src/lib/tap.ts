@@ -336,13 +336,13 @@ export async function tapPassView(
   );
   const recoveryAvailable =
     recovery?.state === "issued" && new Date(recovery.expires_at) > at;
-  const recoveryDestination = recoveryAvailable || recovery?.state === "redeemed";
-  const matches =
-    recoveryDestination
-      ? recovery.target_organization_id === point.organization_id &&
-        recovery.target_location_id === point.location_id
-      : claim.organization_id === point.organization_id &&
-        offer?.location_id === point.location_id;
+  const recoveryDestination =
+    recoveryAvailable || recovery?.state === "redeemed";
+  const matches = recoveryDestination
+    ? recovery.target_organization_id === point.organization_id &&
+      recovery.target_location_id === point.location_id
+    : claim.organization_id === point.organization_id &&
+      offer?.location_id === point.location_id;
   let state = passState(claim, at);
   if (
     state === "active" &&
@@ -444,9 +444,13 @@ async function finishRecovery(
   if (recovery.state === "redeemed")
     return { claim, recovery, evidence: existing || null, repeated: true };
   if (!["active", "redeemed"].includes(claim.state))
-    throw new RequestError("This original pass can no longer use its recovery.");
+    throw new RequestError(
+      "This original pass can no longer use its recovery.",
+    );
   if (new Date(recovery.expires_at) <= new Date())
-    throw new RequestError("This recovery has expired. Contact Uptick support.");
+    throw new RequestError(
+      "This recovery has expired. Contact Uptick support.",
+    );
   const [evidence] = await db.query<RecoveryEvidence>(
     `insert into recovery_redemptions(
       id,recovery_grant_id,original_claim_id,point_id,credential_id,method,
@@ -707,7 +711,9 @@ export async function redeemAtPoint(
       "select * from redemption_credentials where public_token=$1 for update",
       [input.pointToken],
     );
-    const policy = recoveryPath ? "staff_tap" : supply?.verification_mode || "staff_tap";
+    const policy = recoveryPath
+      ? "staff_tap"
+      : supply?.verification_mode || "staff_tap";
     validatePointPolicy(
       point,
       credential,
