@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowUpRight,
   ArrowRight,
@@ -9,7 +10,10 @@ import {
   Share2,
   Smartphone,
 } from "lucide-react";
-import { MEMBERSHIP_DISCLOSURE } from "@/lib/membership-copy";
+import {
+  MARKETING_SMS_DISCLOSURE,
+  MEMBERSHIP_TERMS,
+} from "@/lib/membership-copy";
 import { navigationOptions } from "@/lib/location-intelligence";
 type Result = {
   ok?: boolean;
@@ -19,6 +23,7 @@ type Result = {
   privateUrl?: string;
   development?: boolean;
   url?: string;
+  codes?: string[];
 };
 async function action(body: object): Promise<Result> {
   const response = await fetch("/api/member", {
@@ -58,6 +63,7 @@ export function JoinUptick({
           homeZip: form.get("homeZip"),
           workZip: form.get("workZip") || "",
           consentRequested: form.get("consent") === "on",
+          ageAttested: form.get("adult") === "on",
           sourceToken,
           referralToken,
         }),
@@ -139,8 +145,13 @@ export function JoinUptick({
         </label>
       </div>
       <label className="member-consent">
-        <input name="consent" type="checkbox" required />
-        <span>I want to join Uptick and get my weekly Drop by text.</span>
+        <input name="adult" type="checkbox" required />
+        <span>I confirm that I am 18 or older and want to join Uptick.</span>
+      </label>
+      <p className="member-disclosure">{MEMBERSHIP_TERMS}</p>
+      <label className="member-consent">
+        <input name="consent" type="checkbox" />
+        <span>I also want promotional texts about my weekly Uptick.</span>
       </label>
       <button disabled={busy} className="button member-full">
         {busy ? "Saving your invitation…" : "Join Uptick — it’s free"}
@@ -152,7 +163,7 @@ export function JoinUptick({
         </p>
       )}
       <p className="member-disclosure">
-        {MEMBERSHIP_DISCLOSURE} <Link href="/sms">SMS terms</Link> ·{" "}
+        {MARKETING_SMS_DISCLOSURE} <Link href="/sms">SMS terms</Link> ·{" "}
         <Link href="/privacy">Privacy</Link> · <Link href="/terms">Terms</Link>
       </p>
     </form>
@@ -167,6 +178,7 @@ export function ConfirmMembership({
   requested: boolean;
   disclosure: string;
 }) {
+  const router = useRouter();
   const [accepted, setAccepted] = useState(requested),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
@@ -181,8 +193,7 @@ export function ConfirmMembership({
               onChange={(e) => setAccepted(e.target.checked)}
             />
             <span>
-              Yes, join Uptick’s free membership and send my weekly Drop by
-              text.
+              Yes, send me optional promotional texts about my weekly Uptick.
             </span>
           </label>
           <p className="member-disclosure">{disclosure}</p>
@@ -197,9 +208,10 @@ export function ConfirmMembership({
             await action({
               action: "confirm",
               token,
-              acceptMembership: accepted,
+              acceptMarketing: accepted,
             });
-            window.location.reload();
+            router.push("/your-uptick");
+            router.refresh();
           } catch (e) {
             setError(e instanceof Error ? e.message : "Try again.");
             setBusy(false);
@@ -209,8 +221,8 @@ export function ConfirmMembership({
         {busy
           ? "Opening your Uptick…"
           : requested
-            ? "Confirm & open my Uptick"
-            : "Open my Uptick"}
+            ? "Join & open my Uptick"
+            : "Join & open my Uptick"}
         <ArrowRight size={17} />
       </button>
       {error && (
@@ -222,11 +234,9 @@ export function ConfirmMembership({
   );
 }
 export function ClaimUptick({
-  token,
   supplyId,
   disabled = false,
 }: {
-  token: string;
   supplyId: string;
   disabled?: boolean;
 }) {
@@ -240,7 +250,7 @@ export function ClaimUptick({
         onClick={async () => {
           setBusy(true);
           try {
-            const result = await action({ action: "claim", token, supplyId });
+            const result = await action({ action: "claim", supplyId });
             if (result.redirect) window.location.assign(result.redirect);
           } catch (e) {
             setError(e instanceof Error ? e.message : "Try again.");
@@ -264,11 +274,9 @@ export function ClaimUptick({
   );
 }
 export function MemberViewEvent({
-  token,
   supplyId,
   children,
 }: {
-  token: string;
   supplyId: string;
   children: React.ReactNode;
 }) {
@@ -279,7 +287,7 @@ export function MemberViewEvent({
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((e) => e.isIntersecting)) {
-          void action({ action: "view", token, supplyId }).catch(() => {});
+          void action({ action: "view", supplyId }).catch(() => {});
           observer.disconnect();
         }
       },
@@ -287,7 +295,7 @@ export function MemberViewEvent({
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [token, supplyId]);
+  }, [supplyId]);
   return <div ref={element}>{children}</div>;
 }
 export function PairUptick({ token }: { token: string }) {
@@ -321,13 +329,7 @@ export function PairUptick({ token }: { token: string }) {
     </div>
   );
 }
-export function InviteMember({
-  token,
-  supplyId,
-}: {
-  token: string;
-  supplyId?: string;
-}) {
+export function InviteMember({ supplyId }: { supplyId?: string }) {
   const [url, setUrl] = useState(""),
     [message, setMessage] = useState(""),
     [busy, setBusy] = useState(false);
@@ -339,7 +341,7 @@ export function InviteMember({
         onClick={async () => {
           setBusy(true);
           try {
-            const result = await action({ action: "share", token, supplyId });
+            const result = await action({ action: "share", supplyId });
             if (result.url)
               setUrl(new URL(result.url, window.location.origin).href);
           } catch (e) {
@@ -387,12 +389,10 @@ export function InviteMember({
   );
 }
 export function MemberPreferences({
-  token,
   homeZip,
   workZip,
   subscribed,
 }: {
-  token: string;
   homeZip: string;
   workZip: string | null;
   subscribed: boolean;
@@ -409,7 +409,6 @@ export function MemberPreferences({
         try {
           const r = await action({
             action: "preferences",
-            token,
             homeZip: form.get("homeZip"),
             workZip: form.get("workZip") || "",
             subscribed: form.get("subscribed") === "on",
@@ -449,7 +448,7 @@ export function MemberPreferences({
         <input name="subscribed" type="checkbox" defaultChecked={subscribed} />
         <span>Keep my Uptick membership texts on.</span>
       </label>
-      <p className="member-disclosure">{MEMBERSHIP_DISCLOSURE}</p>
+      <p className="member-disclosure">{MARKETING_SMS_DISCLOSURE}</p>
       <button disabled={busy} className="button">
         {busy ? "Saving…" : "Save my preferences"}
         <Check size={16} />
@@ -467,18 +466,175 @@ export function MemberPreferences({
     </form>
   );
 }
+
+export function RecoverMemberAccess() {
+  const router = useRouter();
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  return (
+    <details className="member-fine-details">
+      <summary>Lost access? Use a recovery code</summary>
+      <form
+        className="member-join-form"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          setBusy(true);
+          setMessage("");
+          try {
+            const result = await action({
+              action: "recover",
+              phone: form.get("phone"),
+              code: form.get("code"),
+            });
+            if (result.redirect) {
+              router.push(result.redirect);
+              router.refresh();
+            }
+          } catch (error) {
+            setMessage(error instanceof Error ? error.message : "Try again.");
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <label>
+          Mobile number
+          <input name="phone" type="tel" autoComplete="tel" required />
+        </label>
+        <label>
+          One-use recovery code
+          <input
+            name="code"
+            autoComplete="off"
+            placeholder="ABCDE-FGHIJ-KLMNO-PQRST"
+            required
+          />
+        </label>
+        <button className="button secondary" disabled={busy}>
+          {busy ? "Checking…" : "Recover Your Uptick"}
+        </button>
+        {message && <p role="alert">{message}</p>}
+      </form>
+    </details>
+  );
+}
+
+export function MemberAccountControls() {
+  const router = useRouter();
+  const [codes, setCodes] = useState<string[]>([]);
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  return (
+    <section className="member-share">
+      <h2>Keep access without SMS</h2>
+      <p>
+        Create one-use recovery codes, print or save them somewhere private, and
+        use one with your current phone number if this browser session is lost.
+      </p>
+      <button
+        className="button secondary"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          setMessage("");
+          try {
+            const result = await action({ action: "recovery-codes" });
+            setCodes(result.codes || []);
+            setMessage(
+              "These codes replace any older unused codes. Each works once.",
+            );
+          } catch (error) {
+            setMessage(error instanceof Error ? error.message : "Try again.");
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        {busy ? "Creating…" : "Create new recovery codes"}
+      </button>
+      {codes.length > 0 && (
+        <div className="member-share-result">
+          <ol>
+            {codes.map((code) => (
+              <li key={code}>
+                <code>{code}</code>
+              </li>
+            ))}
+          </ol>
+          <button className="text-link" onClick={() => window.print()}>
+            Print these codes
+          </button>
+        </div>
+      )}
+      {message && <p role="status">{message}</p>}
+      <button
+        className="text-link"
+        onClick={async () => {
+          const result = await action({ action: "signout" });
+          router.push(result.redirect || "/join");
+          router.refresh();
+        }}
+      >
+        Sign out of this browser
+      </button>
+    </section>
+  );
+}
+
+export function MemberHelp() {
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  return (
+    <details className="member-fine-details">
+      <summary>Get help with this Uptick</summary>
+      <form
+        className="member-join-form"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          setBusy(true);
+          try {
+            const result = await action({
+              action: "help",
+              message: form.get("message") || undefined,
+            });
+            setMessage(result.message || "Your request is queued.");
+            event.currentTarget.reset();
+          } catch (error) {
+            setMessage(error instanceof Error ? error.message : "Try again.");
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <p>
+          Uptick already attaches your membership and current benefit context.
+          Add a short note if it helps.
+        </p>
+        <label>
+          What happened? <small>optional</small>
+          <textarea name="message" maxLength={2000} />
+        </label>
+        <button className="button secondary" disabled={busy}>
+          {busy ? "Sending…" : "Send to Uptick support"}
+        </button>
+        {message && <p role="status">{message}</p>}
+      </form>
+    </details>
+  );
+}
+
 export function NavigationLinks({
   address,
   latitude,
   longitude,
-  token,
   supplyId,
   passToken,
 }: {
   address: string;
   latitude?: string | number | null;
   longitude?: string | number | null;
-  token?: string;
   supplyId?: string;
   passToken?: string;
 }) {
@@ -508,10 +664,9 @@ export function NavigationLinks({
                   token: passToken,
                   provider: link.provider,
                 }).catch(() => {});
-              else if (token && supplyId)
+              else if (supplyId)
                 void action({
                   action: "directions",
-                  token,
                   supplyId,
                   provider: link.provider,
                 }).catch(() => {});

@@ -1,12 +1,22 @@
 import type { DB } from "./db";
 import { rateLimit } from "./domain";
+import { appUrl, localMode } from "./config";
 import { id, token, hash, encrypt, normalizePhone } from "./security";
 import { RequestError } from "./http";
 import { demandEvent } from "./demand-events";
+import { uptickEnvironment } from "./environment";
+import { createMemberSession, memberSession } from "./member-session";
+import {
+  MARKETING_SMS_DISCLOSURE,
+  MEMBERSHIP_DISCLOSURE,
+} from "./membership-copy";
+import { tryAdmitMemberInTransaction } from "./pilot-operations";
 
-export const MEMBERSHIP_DISCLOSURE_VERSION = "uptick-membership-2026-09-v1";
-import { MEMBERSHIP_DISCLOSURE } from "./membership-copy";
+export const MEMBERSHIP_DISCLOSURE_VERSION =
+  "uptick-promotional-sms-2026-09-v2";
+export const MEMBERSHIP_CONSENT_PURPOSE = "promotional_membership_sms";
 export { MEMBERSHIP_DISCLOSURE } from "./membership-copy";
+
 export type Member = {
   id: string;
   customer_id: string;
@@ -15,9 +25,12 @@ export type Member = {
   market_id: string | null;
   source_id: string | null;
   state: "pending" | "active" | "paused";
+  data_kind: "real" | "internal" | "demo" | "synthetic";
+  age_confirmed_at: string | null;
   verified_at: string | null;
   created_at: string;
 };
+
 export type Access = {
   id: string;
   member_id: string;
@@ -25,18 +38,56 @@ export type Access = {
   purpose: "access" | "drop";
   expires_at: string;
   confirmed_at: string | null;
+  consumed_at: string | null;
+  exchanged_session_id: string | null;
   consent_requested: boolean;
+  age_attested: boolean;
   disclosure: string;
   home_zip: string;
   work_zip: string | null;
   source_id: string | null;
   created_at: string;
 };
+
+export type ConsentAction = "opt_in" | "declined" | "opt_out" | "stop";
+
 const zip = (value: string) => {
   if (!/^\d{5}$/.test(value))
     throw new RequestError("Enter a five-digit ZIP code.");
   return value;
 };
+
+function enrollmentDataKind() {
+  const environment = uptickEnvironment();
+  if (environment === "development" && localMode()) return "internal" as const;
+  if (environment === "staging") return "internal" as const;
+  if (environment !== "production")
+    throw new RequestError(
+      "Membership enrollment is not available in this environment.",
+      503,
+    );
+  let canonical = false;
+  try {
+    canonical = new URL(appUrl()).href === "https://pilot.upticklocal.com/";
+  } catch {
+    /* Invalid production origins keep real classification closed. */
+  }
+  const legalIdentity =
+    process.env.LEGAL_APPROVED === "true" &&
+    !!process.env.BUSINESS_LEGAL_NAME?.trim() &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(process.env.SUPPORT_EMAIL || "");
+  if (
+    !canonical ||
+    process.env.PILOT_ENROLLMENT_ENABLED !== "true" ||
+    !legalIdentity
+  )
+    throw new RequestError(
+      "Real pilot enrollment is not open yet. Please check back soon.",
+      503,
+    );
+  return "real" as const;
+}
+
 export async function resolveMarket(
   db: DB,
   homeZip: string,
@@ -48,6 +99,7 @@ export async function resolveMarket(
   );
   return market?.id || null;
 }
+
 export async function acquisitionSource(db: DB, sourceToken: string) {
   const [source] = await db.query<{
     id: string;
@@ -68,6 +120,7 @@ export async function acquisitionSource(db: DB, sourceToken: string) {
     );
   return source;
 }
+
 export async function requestMemberAccess(
   db: DB,
   input: {
@@ -77,10 +130,19 @@ export async function requestMemberAccess(
     sourceToken?: string;
     referralToken?: string;
     consentRequested: boolean;
+    ageAttested?: boolean;
   },
 ) {
   const phone = normalizePhone(input.phone);
   await rateLimit(db, `member-access:${hash(phone)}`, 6, 3600);
+  const dataKind = enrollmentDataKind();
+  // Existing local fixtures predate the adult field. Hosted/public enrollment
+  // always supplies an explicit true value and cannot use this local fixture path.
+  const ageAttested =
+    input.ageAttested === true ||
+    (localMode() && input.ageAttested === undefined);
+  if (!ageAttested)
+    throw new RequestError("Confirm that you are 18 or older to join Uptick.");
   return db.transaction(async (tx) => {
     const source = input.sourceToken
       ? await acquisitionSource(tx, input.sourceToken)
@@ -104,7 +166,8 @@ export async function requestMemberAccess(
             : null;
     if (!member) {
       [member] = await tx.query<Member>(
-        "insert into uptick_members(id,customer_id,home_zip,work_zip,market_id,source_id) values($1,$2,$3,$4,$5,$6) returning *",
+        `insert into uptick_members(id,customer_id,home_zip,work_zip,market_id,source_id,data_kind)
+         values($1,$2,$3,$4,$5,$6,$7) returning *`,
         [
           id(),
           customer.id,
@@ -112,6 +175,7 @@ export async function requestMemberAccess(
           workZip,
           await resolveMarket(tx, homeZip, workZip),
           source?.id || null,
+          dataKind,
         ],
       );
       await demandEvent(tx, {
@@ -119,26 +183,27 @@ export async function requestMemberAccess(
         memberId: member.id,
         marketId: member.market_id,
         sourceId: member.source_id,
+        detail: { dataKind },
         dedupKey: `requested:${member.id}`,
       });
     }
     const credential = token();
     const [access] = await tx.query<Access>(
-      `insert into member_access(id,member_id,token_hash,token_encrypted,expires_at,consent_requested,disclosure,home_zip,work_zip,source_id) values($1,$2,$3,$4,now()+interval '30 minutes',$5,$6,$7,$8,$9) returning *`,
+      `insert into member_access(id,member_id,token_hash,token_encrypted,expires_at,consent_requested,age_attested,disclosure,home_zip,work_zip,source_id)
+       values($1,$2,$3,$4,now()+interval '30 minutes',$5,$6,$7,$8,$9,$10) returning *`,
       [
         id(),
         member.id,
         hash(credential),
         encrypt(credential),
         input.consentRequested,
-        MEMBERSHIP_DISCLOSURE,
+        ageAttested,
+        MARKETING_SMS_DISCLOSURE,
         homeZip,
         workZip,
         source?.id || null,
       ],
     );
-    // Referral credit must originate on this exact pre-verification access request.
-    // Invalid/expired invitations never prevent someone joining Uptick normally.
     if (
       input.referralToken &&
       !member.verified_at &&
@@ -157,6 +222,15 @@ export async function requestMemberAccess(
     return { member, access, credential };
   });
 }
+
+async function accessByCredential(db: DB, credential: string) {
+  const [access] = await db.query<Access>(
+    "select * from member_access where token_hash=$1 and expires_at>now()",
+    [hash(credential)],
+  );
+  return access || null;
+}
+
 export async function memberAccess(
   db: DB,
   credential: string,
@@ -164,94 +238,164 @@ export async function memberAccess(
 ) {
   if (!/^[A-Za-z0-9_-]{43}$/.test(credential))
     throw new RequestError("This private Uptick link is not valid.", 404);
-  const [access] = await db.query<Access>(
-    "select * from member_access where token_hash=$1 and expires_at>now()",
-    [hash(credential)],
+  let access: Access | null | undefined = await accessByCredential(
+    db,
+    credential,
   );
-  if (!access || (confirmed && !access.confirmed_at))
+  let memberId: string | undefined = access?.member_id;
+  if (!access) {
+    const session = await memberSession(db, credential);
+    memberId = session?.member_id;
+    if (session?.source_access_id)
+      [access] = await db.query<Access>(
+        "select * from member_access where id=$1 and member_id=$2",
+        [session.source_access_id, session.member_id],
+      );
+    if (session && !access)
+      [access] = await db.query<Access>(
+        "select * from member_access where member_id=$1 and confirmed_at is not null order by confirmed_at desc limit 1",
+        [session.member_id],
+      );
+  }
+  if (!access || !memberId || (confirmed && !access.confirmed_at))
     throw new RequestError("Open your private Uptick link to continue.", 401);
   const [member] = await db.query<Member>(
     "select * from uptick_members where id=$1",
-    [access.member_id],
+    [memberId],
   );
   if (!member) throw new RequestError("This membership is unavailable.", 404);
   return { access, member };
 }
-export async function confirmMemberAccess(
-  db: DB,
+
+async function confirmMemberAccessInTransaction(
+  tx: DB,
   credential: string,
-  acceptMembership: boolean,
+  acceptMarketing: boolean,
 ) {
-  return db.transaction(async (tx) => {
-    const initial = await memberAccess(tx, credential);
-    await tx.query("select id from uptick_members where id=$1 for update", [
-      initial.member.id,
+  const access = await accessByCredential(tx, credential);
+  if (!access || access.purpose !== "access")
+    throw new RequestError("This private Uptick link is not valid.", 404);
+  if (!access.age_attested)
+    throw new RequestError("Confirm that you are 18 or older to join Uptick.");
+  const [member] = await tx.query<Member>(
+    "select * from uptick_members where id=$1 for update",
+    [access.member_id],
+  );
+  if (!member) throw new RequestError("This membership is unavailable.", 404);
+  if (!access.confirmed_at) {
+    await tx.query("update member_access set confirmed_at=now() where id=$1", [
+      access.id,
     ]);
-    const { access, member } = await memberAccess(tx, credential);
-    if (access.confirmed_at) return member;
-    await tx.query(
-      "update member_access set confirmed_at=now(),expires_at=greatest(expires_at,now()+interval '30 days') where id=$1",
-      [access.id],
-    );
-    if (!member.verified_at)
+    const firstVerification = !member.verified_at;
+    if (firstVerification)
       await tx.query(
         "insert into member_first_verifications(member_id,access_id) values($1,$2) on conflict(member_id) do nothing",
         [member.id, access.id],
       );
-    // A weekly message is not a new consent request. Reopening an old link cannot resubscribe.
-    const subscribe =
-      access.purpose === "access" &&
-      access.consent_requested &&
-      acceptMembership;
-    const marketId =
-      access.purpose === "access"
-        ? await resolveMarket(tx, access.home_zip, access.work_zip)
-        : member.market_id;
-    await tx.query(
-      `update uptick_members set verified_at=coalesce(verified_at,now()),home_zip=$2,work_zip=$3,market_id=$4,state=case when $5 then 'active' else state end,updated_at=now() where id=$1`,
-      [
-        member.id,
-        access.purpose === "access" ? access.home_zip : member.home_zip,
-        access.purpose === "access" ? access.work_zip : member.work_zip,
-        marketId,
-        subscribe,
-      ],
-    );
-    if (
-      access.purpose === "access" &&
-      access.consent_requested &&
-      (subscribe || member.state === "pending")
-    )
+    if (firstVerification) {
+      const marketId = await resolveMarket(
+        tx,
+        access.home_zip,
+        access.work_zip,
+      );
+      await tx.query(
+        `update uptick_members set verified_at=now(),age_confirmed_at=now(),
+         home_zip=$2,work_zip=$3,market_id=$4,state='active',updated_at=now()
+         where id=$1`,
+        [member.id, access.home_zip, access.work_zip, marketId],
+      );
+      const optedIn = access.consent_requested && acceptMarketing;
       await recordMemberConsent(
         tx,
         member.id,
-        subscribe,
+        optedIn,
         "private-membership-confirmation",
         access.disclosure,
+        optedIn ? "opt_in" : "declined",
       );
-    await demandEvent(tx, {
-      kind: subscribe ? "member_joined" : "member_access_confirmed",
-      memberId: member.id,
-      marketId,
-      sourceId: member.source_id,
-      dedupKey: subscribe ? `joined:${member.id}` : `access:${access.id}`,
-    });
-    return (
-      await tx.query<Member>("select * from uptick_members where id=$1", [
-        member.id,
-      ])
-    )[0];
+      const admission = await tryAdmitMemberInTransaction(tx, member.id);
+      await demandEvent(tx, {
+        kind: "member_joined",
+        memberId: member.id,
+        marketId,
+        sourceId: member.source_id,
+        detail: { promotionalSms: optedIn, admission: admission.state },
+        dedupKey: `joined:${member.id}`,
+      });
+    } else {
+      await tx.query(
+        "update uptick_members set age_confirmed_at=coalesce(age_confirmed_at,now()) where id=$1",
+        [member.id],
+      );
+      await demandEvent(tx, {
+        kind: "member_access_confirmed",
+        memberId: member.id,
+        marketId: member.market_id,
+        sourceId: member.source_id,
+        dedupKey: `access:${access.id}`,
+      });
+    }
+  }
+  return (
+    await tx.query<Member>("select * from uptick_members where id=$1", [
+      member.id,
+    ])
+  )[0];
+}
+
+export async function confirmMemberAccess(
+  db: DB,
+  credential: string,
+  acceptMarketing: boolean,
+) {
+  return db.transaction((tx) =>
+    confirmMemberAccessInTransaction(tx, credential, acceptMarketing),
+  );
+}
+
+export async function exchangeMemberAccess(
+  db: DB,
+  credential: string,
+  acceptMarketing: boolean,
+) {
+  return db.transaction(async (tx) => {
+    const access = await accessByCredential(tx, credential);
+    if (!access || access.purpose !== "access")
+      throw new RequestError("This private Uptick link is not valid.", 404);
+    await tx.query("select id from member_access where id=$1 for update", [
+      access.id,
+    ]);
+    const current = await accessByCredential(tx, credential);
+    if (!current || current.consumed_at || current.exchanged_session_id)
+      throw new RequestError(
+        "This access link was already used. Open Your Uptick or use a recovery code.",
+        409,
+      );
+    const member = await confirmMemberAccessInTransaction(
+      tx,
+      credential,
+      acceptMarketing,
+    );
+    const created = await createMemberSession(tx, member.id, current.id);
+    await tx.query(
+      "update member_access set consumed_at=now(),exchanged_session_id=$2 where id=$1",
+      [current.id, created.session.id],
+    );
+    return { member, ...created };
   });
 }
+
 export async function recordMemberConsent(
   db: DB,
   memberId: string,
   accepted: boolean,
   sourceUi: string,
   disclosure = MEMBERSHIP_DISCLOSURE,
+  action: ConsentAction = accepted ? "opt_in" : "opt_out",
 ) {
   await db.query(
-    "insert into member_consents(id,member_id,accepted,disclosure_version,disclosure,source_ui) values($1,$2,$3,$4,$5,$6)",
+    `insert into member_consents(id,member_id,accepted,disclosure_version,disclosure,source_ui,consent_purpose,consent_action)
+     values($1,$2,$3,$4,$5,$6,$7,$8)`,
     [
       id(),
       memberId,
@@ -259,9 +403,12 @@ export async function recordMemberConsent(
       MEMBERSHIP_DISCLOSURE_VERSION,
       disclosure,
       sourceUi,
+      MEMBERSHIP_CONSENT_PURPOSE,
+      action,
     ],
   );
 }
+
 export async function memberPreferences(
   db: DB,
   credential: string,
@@ -275,25 +422,22 @@ export async function memberPreferences(
     const homeZip = zip(input.homeZip),
       workZip = input.workZip ? zip(input.workZip) : null;
     await tx.query(
-      `update uptick_members set home_zip=$2,work_zip=$3,market_id=$4,state=$5,updated_at=now() where id=$1`,
-      [
-        member.id,
-        homeZip,
-        workZip,
-        await resolveMarket(tx, homeZip, workZip),
-        input.subscribed ? "active" : "paused",
-      ],
+      `update uptick_members set home_zip=$2,work_zip=$3,market_id=$4,updated_at=now()
+       where id=$1`,
+      [member.id, homeZip, workZip, await resolveMarket(tx, homeZip, workZip)],
     );
     await recordMemberConsent(
       tx,
       member.id,
       input.subscribed,
       "member-preferences",
+      MARKETING_SMS_DISCLOSURE,
+      input.subscribed ? "opt_in" : "opt_out",
     );
     await demandEvent(tx, {
       kind: "member_preferences_saved",
       memberId: member.id,
-      detail: { subscribed: input.subscribed },
+      detail: { promotionalSms: input.subscribed },
     });
   });
 }

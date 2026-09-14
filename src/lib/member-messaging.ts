@@ -8,9 +8,9 @@ import {
   uptickEnvironment,
 } from "./environment";
 import { platformReadiness } from "./launch";
-import { id, decrypt } from "./security";
+import { id, decrypt, encrypt } from "./security";
 import { RequestError, readBody } from "./http";
-import { eligibleDrops } from "./network";
+import { recordMemberConsent } from "./membership-identity";
 
 export type MemberMessage = {
   id: string;
@@ -135,7 +135,7 @@ async function member(db: DB, memberId: string) {
 }
 async function latestConsent(db: DB, memberId: string) {
   const [consent] = await db.query<{ accepted: boolean }>(
-    "select accepted from member_consents where member_id=$1 order by sequence desc limit 1",
+    "select accepted from member_consents where member_id=$1 and consent_purpose='promotional_membership_sms' order by sequence desc limit 1",
     [memberId],
   );
   return consent?.accepted === true;
@@ -304,6 +304,11 @@ export async function memberMessageEligibility(
     return "Member access has expired or does not match.";
   if (message.purpose === "access" && access.confirmed_at)
     return "Member access was already used.";
+  const [globalSuppression] = await db.query<{ suppressed: boolean }>(
+    "select suppressed from member_global_suppressions where phone=$1",
+    [owner.phone],
+  );
+  if (globalSuppression?.suppressed) return "Uptick program opt-out.";
   const [suppression] = await db.query<{ suppressed: boolean }>(
     "select suppressed from member_suppressions where phone=$1 and sender_id=$2",
     [owner.phone, message.sender_id],
@@ -357,18 +362,17 @@ export async function memberMessageEligibility(
       "select supply_id from allocation_options where allocation_id=$1",
       [message.allocation_id],
     );
-    const available = new Set(
-      (await eligibleDrops(db, owner.id, now)).map((supply) => supply.id),
-    );
-    if (!options.some((option) => available.has(option.supply_id)))
-      return "No current approved Drop is available in this member's market.";
+    // The allocation/grant represents a backed obligation. Current unreserved
+    // inventory eligibility must not hide it after a release reserved supply.
+    if (!options.length)
+      return "This week's Uptick is not backed by an allocation.";
   }
   return null;
 }
 export function memberMessageText(purpose: "access" | "drop", url: string) {
   return purpose === "access"
     ? `Uptick Local: Your requested secure access link: ${url} Open it to confirm your phone and review your membership choices. Reply STOP to stop texts. HELP for help.`
-    : `Uptick Local: Your Uptick is ready. See this week's featured free local perk and your curated alternatives: ${url} Reply STOP to stop texts. HELP for help.`;
+    : `Uptick Local: Your featured Uptick is ready. See this week's free local benefit: ${url} No purchase required. Reply STOP to stop promotional texts. HELP for help.`;
 }
 export async function dispatchMemberMessages(
   db: DB,
@@ -455,14 +459,21 @@ export async function dispatchMemberMessages(
       "select * from member_senders where id=$1",
       [message.sender_id],
     );
+    const body = memberMessageText(
+      message.purpose,
+      message.purpose === "access"
+        ? `${appUrl()}/u/${decrypt(access.token_encrypted)}`
+        : `${appUrl()}/your-uptick`,
+    );
     try {
+      await db.query(
+        "update member_messages set rendered_body_encrypted=$2 where id=$1 and state='submitting'",
+        [message.id, encrypt(body)],
+      );
       const result = await send({
         to: owner.phone,
         messagingServiceSid: sender.service_sid,
-        body: memberMessageText(
-          message.purpose,
-          `${appUrl()}/u/${decrypt(access.token_encrypted)}`,
-        ),
+        body,
         statusCallback: `${appUrl()}/api/member-twilio/status?message=${message.id}`,
       });
       if (!/^SM[0-9a-fA-F]{32}$/.test(result.sid))
@@ -591,7 +602,7 @@ export async function memberInbound(db: DB, fields: Record<string, string>) {
       : action === "HELP"
         ? "HELP"
         : "OTHER";
-  await db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const [sender] = fields.MessagingServiceSid
       ? await tx.query<Sender>(
           "select * from member_senders where service_sid=$1",
@@ -609,29 +620,88 @@ export async function memberInbound(db: DB, fields: Record<string, string>) {
       "insert into member_inbound_events(provider_sid,sender_id,action) values($1,$2,$3) on conflict do nothing returning provider_sid",
       [fields.MessageSid, sender.id, normalized],
     );
-    if (!inserted.length) return;
+    if (!inserted.length)
+      return {
+        action: normalized,
+        reply:
+          normalized === "HELP"
+            ? memberHelpReply()
+            : "Uptick Local received your message. A support person will review it.",
+      };
     if (normalized === "STOP" || normalized === "START") {
       await tx.query(
         "insert into member_suppressions(phone,sender_id,suppressed) values($1,$2,$3) on conflict(phone,sender_id) do update set suppressed=excluded.suppressed,updated_at=now()",
         [fields.From, sender.id, normalized === "STOP"],
       );
+      await tx.query(
+        "insert into member_global_suppressions(phone,suppressed,source_sender_id) values($1,$2,$3) on conflict(phone) do update set suppressed=excluded.suppressed,source_sender_id=excluded.source_sender_id,updated_at=now()",
+        [fields.From, normalized === "STOP", sender.id],
+      );
       if (normalized === "STOP" && owner) {
-        await tx.query("update uptick_members set state='paused' where id=$1", [
+        await recordMemberConsent(
+          tx,
           owner.id,
-        ]);
-        await tx.query(
-          "insert into member_consents(id,member_id,accepted,disclosure_version,disclosure,source_ui) values($1,$2,false,'uptick-membership-stop-v1','STOP received for Uptick Local membership.','twilio-membership-inbound')",
-          [id(), owner.id],
+          false,
+          "twilio-membership-inbound",
+          "STOP received for Uptick Local promotional membership texts.",
+          "stop",
         );
         await tx.query(
-          "update member_messages set state='suppressed',suppression_reason='Uptick sender opt-out.',updated_at=now() where member_id=$1 and state='queued'",
+          "update member_messages set state='suppressed',suppression_reason='Uptick program opt-out.',updated_at=now() where member_id=$1 and state='queued'",
           [owner.id],
         );
       }
       // START changes carrier suppression only. A fresh explicit consent action must resume membership.
     }
+    if (normalized === "HELP" || normalized === "OTHER") {
+      const [allocation] = owner
+        ? await tx.query<{ id: string; week_key: string }>(
+            "select id,week_key from member_allocations where member_id=$1 order by created_at desc limit 1",
+            [owner.id],
+          )
+        : [];
+      await tx.query(
+        `insert into member_support_requests(id,member_id,provider_sid,sender_id,origin,phone_encrypted,body_encrypted,context)
+         values($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [
+          id(),
+          owner?.id || null,
+          fields.MessageSid,
+          sender.id,
+          normalized === "HELP" ? "sms_help" : "sms_other",
+          encrypt(fields.From),
+          encrypt((fields.Body || "").slice(0, 2000)),
+          {
+            membershipState: owner?.state || "unknown",
+            verified: !!owner?.verified_at,
+            allocationId: allocation?.id || null,
+            weekKey: allocation?.week_key || null,
+          },
+        ],
+      );
+    }
+    return {
+      action: normalized,
+      reply:
+        normalized === "STOP"
+          ? "Uptick Local promotional texts are stopped. Your membership and any issued Uptick stay active."
+          : normalized === "START"
+            ? "Carrier blocking is cleared. Promotional texts remain off until you opt in again in Your Uptick preferences."
+            : normalized === "HELP"
+              ? memberHelpReply()
+              : "Uptick Local received your message. A support person will review it.",
+    };
   });
-  return normalized;
+  return result;
+}
+
+function memberHelpReply() {
+  const support = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+    process.env.SUPPORT_EMAIL || "",
+  )
+    ? ` Email ${process.env.SUPPORT_EMAIL}.`
+    : "";
+  return `Uptick Local help: open ${appUrl()}/your-uptick for your benefit and preferences.${support} Reply STOP to stop promotional texts.`;
 }
 export async function verifyMemberWebhook(request: Request, kind: string) {
   if (!["inbound", "status"].includes(kind))

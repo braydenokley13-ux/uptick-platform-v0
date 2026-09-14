@@ -77,12 +77,10 @@ export function PerkIllustration({
 }
 export function DropCard({
   supply,
-  token,
   alternative = false,
   available = true,
 }: {
   supply: Supply;
-  token: string;
   alternative?: boolean;
   available?: boolean;
 }) {
@@ -95,7 +93,7 @@ export function DropCard({
     timeZone: supply.timezone,
   });
   return (
-    <MemberViewEvent token={token} supplyId={supply.id}>
+    <MemberViewEvent supplyId={supply.id}>
       <article className={`member-drop ${alternative ? "alternative" : ""}`}>
         <div className="member-drop-top">
           <p className="eyebrow">
@@ -125,7 +123,7 @@ export function DropCard({
             <span>Limited quantity</span>
           )}
         </div>
-        <ClaimUptick token={token} supplyId={supply.id} disabled={!available} />
+        <ClaimUptick supplyId={supply.id} disabled={!available} />
         <details className="member-fine-details">
           <summary>The details</summary>
           <p>{supply.terms}</p>
@@ -150,7 +148,6 @@ export function DropCard({
             address={supply.address}
             latitude={supply.latitude}
             longitude={supply.longitude}
-            token={token}
             supplyId={supply.id}
           />
         )}
@@ -344,13 +341,7 @@ export async function NetworkPass({
     </MemberFrame>
   );
 }
-export function MemberInvite({
-  token,
-  supplyId,
-}: {
-  token: string;
-  supplyId?: string;
-}) {
+export function MemberInvite({ supplyId }: { supplyId?: string }) {
   return (
     <div className="member-invite">
       <div>
@@ -358,7 +349,7 @@ export function MemberInvite({
         <h3>Better with someone nearby.</h3>
         <p>Invite a friend to discover their own Uptick.</p>
       </div>
-      <InviteMember token={token} supplyId={supplyId} />
+      <InviteMember supplyId={supplyId} />
     </div>
   );
 }

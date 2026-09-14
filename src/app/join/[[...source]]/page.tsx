@@ -6,7 +6,7 @@ import {
   type Supply,
 } from "@/lib/network";
 import { MemberFrame, PerkIllustration } from "@/components/member-ui";
-import { JoinUptick } from "@/components/member-controls";
+import { JoinUptick, RecoverMemberAccess } from "@/components/member-controls";
 import { Badge } from "@/components/ui";
 import Link from "next/link";
 export const dynamic = "force-dynamic";
@@ -109,11 +109,15 @@ export default async function JoinPage({
             <br />
             <em>starts here.</em>
           </h2>
-          <p>We’ll text a private link to your Uptick.</p>
+          <p>
+            We’ll text a one-time private link to confirm your phone and open
+            your membership.
+          </p>
           <JoinUptick sourceToken={sourceToken} />
           <p className="member-already">
             Already a member? Use the same number to get a fresh private link.
           </p>
+          <RecoverMemberAccess />
         </section>
       </div>
       {source && <SourceVisit token={sourceToken!} />}

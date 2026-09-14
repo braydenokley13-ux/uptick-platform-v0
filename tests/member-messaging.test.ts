@@ -249,33 +249,24 @@ test("dispatch rechecks latest explicit consent in deterministic event order", a
   await dispatchMemberMessages(db);
   assert.equal((await saved(message.id)).state, "suppressed");
 });
-test("paused market or missing supply blocks a promised weekly perk", async () => {
+test("a queued backed weekly promise survives a later market pause", async () => {
   await active();
   const message = await queueMemberDrop(db, await drop());
   assert.equal(await memberMessageEligibility(db, message), null);
   await db.query("update market_cells set state='paused' where id='market'");
-  assert.match(
-    (await memberMessageEligibility(db, message))!,
-    /No current approved Drop/,
-  );
+  assert.equal(await memberMessageEligibility(db, message), null);
 });
-test("queued weekly messages recheck active location, ZIP relevance and prior offer claims before dispatch", async () => {
+test("queued backed weekly messages are not hidden by later eligibility changes", async () => {
   await active();
   const message = await queueMemberDrop(db, await drop());
   assert.equal(await memberMessageEligibility(db, message), null);
   await db.query("update market_locations set active=false");
-  assert.match(
-    (await memberMessageEligibility(db, message))!,
-    /No current approved Drop/,
-  );
+  assert.equal(await memberMessageEligibility(db, message), null);
   await db.query("update market_locations set active=true");
   await db.query(
     "update uptick_members set home_zip='99999' where id='member'",
   );
-  assert.match(
-    (await memberMessageEligibility(db, message))!,
-    /No current approved Drop/,
-  );
+  assert.equal(await memberMessageEligibility(db, message), null);
   await db.query(
     "update uptick_members set home_zip='10583' where id='member'",
   );
@@ -283,14 +274,11 @@ test("queued weekly messages recheck active location, ZIP relevance and prior of
   await db.query(
     "insert into claims(id,customer_id,organization_id,offer_id,offer_version,token_hash,token_encrypted,snapshot) values('prior-offer','customer','merchant','offer',1,'prior-fixture-hash','prior-fixture-credential','{}')",
   );
-  assert.match(
-    (await memberMessageEligibility(db, message))!,
-    /No current approved Drop/,
-  );
+  assert.equal(await memberMessageEligibility(db, message), null);
   await dispatchMemberMessages(db);
-  assert.equal((await saved(message.id)).state, "suppressed");
+  assert.equal((await saved(message.id)).state, "development");
 });
-test("a queued weekly message is suppressed when another member uses the last available item", async () => {
+test("a queued backed weekly message stays visible after unreserved supply is exhausted", async () => {
   await active();
   const message = await queueMemberDrop(db, await drop(1));
   assert.equal(await memberMessageEligibility(db, message), null);
@@ -311,12 +299,9 @@ test("a queued weekly message is suppressed when another member uses the last av
   await redeemAtPoint(db, decrypt(pass.token_encrypted), {
     pointToken: point.credential.public_token,
   });
-  assert.match(
-    (await memberMessageEligibility(db, message))!,
-    /No current approved Drop/,
-  );
+  assert.equal(await memberMessageEligibility(db, message), null);
   await dispatchMemberMessages(db);
-  assert.equal((await saved(message.id)).state, "suppressed");
+  assert.equal((await saved(message.id)).state, "development");
 });
 test("staging cannot send to a number removed from its allowlist after queueing", async () => {
   staging();
@@ -371,7 +356,7 @@ test("provider work commits before delivery, uncertain outcomes are never retrie
     /Unknown/,
   );
 });
-test("STOP pauses only Uptick membership; START clears suppression without reactivating consent", async () => {
+test("STOP suppresses queued promotion program-wide without pausing membership; START does not restore consent", async () => {
   staging();
   const sender = await configureMemberSender(db, actor, {
     serviceSid,
@@ -382,7 +367,7 @@ test("STOP pauses only Uptick membership; START clears suppression without react
   await db.query(
     "insert into subscriptions(customer_id,scope,organization_id,state) values('customer','merchant','merchant','subscribed')",
   );
-  const message = await queueMemberAccess(db, await access());
+  const message = await queueMemberDrop(db, await drop());
   const fields = {
     MessageSid: providerSid,
     From: phone,
@@ -394,7 +379,7 @@ test("STOP pauses only Uptick membership; START clears suppression without react
   assert.equal(
     (await db.query<{ state: string }>("select state from uptick_members"))[0]
       .state,
-    "paused",
+    "active",
   );
   assert.equal((await saved(message.id)).state, "suppressed");
   assert.equal(
@@ -422,10 +407,59 @@ test("STOP pauses only Uptick membership; START clears suppression without react
     false,
   );
   assert.equal(
+    (
+      await db.query<{ suppressed: boolean }>(
+        "select suppressed from member_global_suppressions where phone=$1",
+        [phone],
+      )
+    )[0].suppressed,
+    false,
+  );
+  assert.equal(
     (await db.query<{ state: string }>("select state from uptick_members"))[0]
       .state,
-    "paused",
+    "active",
   );
+});
+
+test("HELP and free text create an encrypted contextual support queue with useful replies", async () => {
+  staging();
+  await configureMemberSender(db, actor, {
+    serviceSid,
+    phone: "+12015550199",
+    approved: true,
+  });
+  await active();
+  await drop();
+  process.env.SUPPORT_EMAIL = "help@uptick.example";
+  const help = await memberInbound(db, {
+    MessageSid: providerSid,
+    From: phone,
+    MessagingServiceSid: serviceSid,
+    Body: "HELP",
+  });
+  assert.equal(help.action, "HELP");
+  assert.match(help.reply, /help@uptick\.example/);
+  const note = "The cashier could not find my free coffee";
+  const other = await memberInbound(db, {
+    MessageSid: `SM${"d".repeat(32)}`,
+    From: phone,
+    MessagingServiceSid: serviceSid,
+    Body: note,
+  });
+  assert.equal(other.action, "OTHER");
+  assert.match(other.reply, /support person/);
+  const requests = await db.query<{
+    phone_encrypted: string;
+    body_encrypted: string;
+    context: { allocationId: string | null };
+  }>(
+    "select phone_encrypted,body_encrypted,context from member_support_requests order by created_at",
+  );
+  assert.equal(requests.length, 2);
+  assert.ok(requests.every((request) => request.phone_encrypted !== phone));
+  assert.ok(requests.every((request) => request.body_encrypted !== note));
+  assert.ok(requests.every((request) => request.context.allocationId));
 });
 test("membership sender cannot borrow a merchant program and queue context is immutable", async () => {
   await db.query(
