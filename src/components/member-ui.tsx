@@ -15,6 +15,15 @@ import { getDb } from "@/lib/db";
 import { localMode } from "@/lib/config";
 import type { Supply, networkPass } from "@/lib/network";
 import "./member.css";
+// Keep the saved promise intact; remove only an already-repeated display size.
+function benefitHeading(reward: string) {
+  const title = reward.replace(/^Get (a |an )?/i, "");
+  const parts = title.split(" — ");
+  return parts.length === 2 &&
+    parts[0].toLowerCase().includes(parts[1].toLowerCase())
+    ? parts[0]
+    : title;
+}
 export function MemberFrame({
   children,
   privateView = false,
@@ -105,7 +114,7 @@ export function DropCard({
         <div className="member-drop-content">
           <div>
             <p className="member-destination">{supply.merchant}</p>
-            <h2>{supply.reward.replace(/^Get (a |an )?/i, "")}</h2>
+            <h2>{benefitHeading(supply.reward)}</h2>
             <p className="member-condition">{supply.qualification}</p>
             <p className="member-distance">
               <MapPin size={13} />
@@ -289,8 +298,8 @@ export async function NetworkPass({
           </div>
         ) : (
           <>
-            <PerkIllustration reward={claim.snapshot.reward} />
-            <h1>{claim.snapshot.reward.replace(/^Get (a |an )?/i, "")}</h1>
+            <PerkIllustration reward={claim.snapshot.reward} compact />
+            <h1>{benefitHeading(claim.snapshot.reward)}</h1>
             <p className="member-condition">{claim.snapshot.qualification}</p>
             <p className="member-address">
               <MapPin size={14} />
@@ -311,22 +320,26 @@ export async function NetworkPass({
               </p>
               {active && (
                 <>
-                  <ol>
-                    <li>
-                      {supply.verification_mode === "staff_tap"
-                        ? grant
-                          ? "Show the cashier this issued benefit and the exact promised item. No purchase is required."
-                          : "Show the cashier your qualifying purchase."
-                        : "Head to the participating store."}
-                    </li>
-                    <li>
-                      {supply.verification_mode === "staff_tap"
-                        ? "The cashier presents the Uptick sign."
-                        : "Find the Uptick sign at the counter."}
-                    </li>
-                    <li>Tap or scan. Wait for the green redeemed screen.</li>
-                  </ol>
                   <PairUptick token={token} />
+                  <details className="member-counter-help">
+                    <summary>How to use this at the counter</summary>
+                    <ol>
+                      <li>
+                        {supply.verification_mode === "staff_tap"
+                          ? grant
+                            ? "Show the cashier this issued benefit and the exact promised item. No purchase is required."
+                            : "Show the cashier your qualifying purchase."
+                          : "Head to the participating store."}
+                      </li>
+                      <li>
+                        {supply.verification_mode === "staff_tap"
+                          ? "The cashier presents the Uptick sign."
+                          : "Find the Uptick sign at the counter."}
+                      </li>
+                      <li>Tap or scan. Wait for the green redeemed screen.</li>
+                    </ol>
+                  </details>
+
                   {supply.verification_mode === "self_confirm" &&
                     supply.self_confirm_approved && (
                       <div className="member-self-confirm">

@@ -2,11 +2,13 @@
 
 **Decision date: September 15, 2026. Accountable integrator: GPT-6.**
 
-This is the single current readiness record for the candidate below. The attached master brief governs implementation; the supplied mockup images were visual references, not new product requirements. Earlier audit, founder and release documents remain historical unless this record explicitly carries their evidence forward.
+**Current hosting/UI addendum:** The pilot domain now serves the isolated cloud demo, including the complete browser journey and reset. See [the September 15 cloud release record](verification/cloud-demo/2026-09-15/DEPLOYMENT_STATUS.md) for current deployment, 299-test CI evidence, screenshots, and six readiness verdicts. The original normal application deployment is retained and still requires commissioning.
+
+This is the software implementation baseline for the candidate below. The attached master brief governs implementation; the supplied mockup images were visual references, not new product requirements. Earlier audit, founder and release documents remain historical unless this record explicitly carries their evidence forward.
 
 ## 1. Executive decision
 
-The isolated founder demo and the independent software work are complete for the requested controlled four-week pilot. The live host is still the older release. Provider approval, positive hosted commissioning and actual market commitments remain required. **Do not open real enrollment now.**
+The isolated founder demo and the independent software work are complete for the requested controlled four-week pilot. The normal application deployment is still the older release; the pilot domain now serves the separate cloud demo. Provider approval, positive hosted commissioning and actual market commitments remain required. **Do not open real enrollment now.**
 
 | Readiness state                        | Verdict    | Exact basis                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | -------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

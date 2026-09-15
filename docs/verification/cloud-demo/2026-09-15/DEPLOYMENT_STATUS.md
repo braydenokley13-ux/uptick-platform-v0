@@ -1,44 +1,72 @@
-# Cloud demo deployment status — 2026-09-15
+# Uptick cloud demo: live, verified, and separate from real enrollment
 
-## Completed
+**September 15, 2026. Accountable integrator: GPT-6.**
 
-- Platform branch pushed: `codex/real-enrollment-ready`.
-- Cloud application commit: `01c7f169b34d434e295e0deb52ceed5b54690067`.
-- Final verification/runbook commit: `07ef0cbb29f78a55f8cb0c1265dbf4cccad59085`. [Final CI 35000140768](https://github.com/braydenokley13-ux/uptick-platform-v0/actions/runs/35000140768) passed in 6m29s, including the new isolated cloud database rehearsal. Runtime application files match the cloud application commit above.
-- GitHub CI: [34998979714](https://github.com/braydenokley13-ux/uptick-platform-v0/actions/runs/34998979714), **success**. Includes lint, TypeScript, unit tests, PostgreSQL verification, restore rehearsal, HTTP/browser tests, and build.
-- Full local test rerun: **299 passed, 0 failed**. An earlier restricted run stopped with callback-test failures; those tests passed independently and the full rerun passed. The failed run is not used as release evidence.
-- Dedicated cloud Vercel project: `prj_OaNjYj6hnSFqyy7iiT7d8lOGTUgF` (`uptick-cloud-demo`).
-- Vercel build: `dpl_7KhBNEzRTjRBBgysJd75zXuwUHAX`, **READY**, from the exact application commit above.
-- Noncanonical deployment URL returns HTTP **421**, verifying that the configured origin guard is active.
-- Supabase migration `20260915170135_isolated_cloud_demo_schema` installed the private demo schemas in existing project `dmirmwzubafuzoxcporr`. No new Supabase project was created.
-- Hosted readback: private migration ledger **34**, normal application ledger **21**; **1 sample member**, **0 normal members**.
-- Hosted role audit: **0 normal application/auth table privileges**; superuser, RLS bypass, create-role, and create-database powers all false; **0 private tables with RLS disabled**.
-- Disposable PostgreSQL proof in `database-proof.json`: real-data constraints, restricted-role denial, shared persistence, complete claim/redemption/failure/recovery-redemption journey, reset, old-lease invalidation, and failed-reset rollback all passed. The normal-schema sentinel remained unchanged.
+## Open it
 
-## Still pending
+1. Open **https://pilot.upticklocal.com**.
+2. Select **Open demo**. If prompted, paste the founder key from the private `private/cloud-demo/FOUNDER_ACCESS.md` file on this laptop.
+3. Use the six-step guide in the same browser. Return to Demo Studio is at the top of each screen.
+4. Open **Reset or finish this demo** to reset the fictional activity or end the session.
 
-1. Obtain the existing Supabase transaction-pooler hostname. The available project metadata exposes the direct host only; a local connection to that direct endpoint failed DNS resolution.
-2. Update the dedicated runtime URL to the confirmed pooler host and verify connection as the restricted role.
-3. Move `pilot.upticklocal.com` to the tested demo deployment, retaining the previous deployment for rollback.
-4. Verify the entire journey and reset in the actual hosted browser, then update this file with that evidence.
+No terminal or SQL is needed for the cloud rehearsal. The laptop launcher remains available separately. The physical Supabase project is shared per the founder's revised instruction; demo tables, credentials, and access are isolated.
 
-**The pilot domain has not been moved. The cloud demo is not yet declared runnable or GREEN.**
+## Verified hosted journey
 
-The founder was asked for the non-secret pooler hostname, or specific approval for a preview-only diagnostic that writes only hostname and port to their Vercel build logs. Automatic approval review rejected that diagnostic without specific payload/destination approval. It was not executed and the normal deployment was not changed by it.
+The real application at the pilot domain completed:
 
-## Evidence limits
+- Fictional member entry with optional promotional consent left unchecked.
+- Simulated private access link. UI explicitly reported no text sent.
+- Backed weekly coffee benefit and saved claim.
+- Pass preparation and the exact staff QR destination.
+- Original digital redemption, recorded September 15 at 3:27:12 PM Eastern.
+- Merchant results: 1 issued placement, 1 claim, 1 recorded redemption. Operator overview: 1 admitted member, 1 member with digital use.
+- Sample stockout before physical handoff, preserving the original digital evidence.
+- Backed sealed-water recovery using separate fallback stock.
+- Recovery redemption at the same staff QR, recorded at 3:30:18 PM Eastern.
+- UI and database totals: **1 / 1 / 1 / 1 / 1** (claim, original redemption, incident, recovery, recovery redemption).
+- Browser reset returned every activity total to **0**. Visiting the pre-reset private pass displayed **“This private link isn’t valid.”**
 
-A whole-database fingerprint changed between readbacks while the normal deployment's scheduled jobs were active (`scheduled_job_runs` had 2,689 rows on the later check). Consequently, this report does **not** claim that every normal database row remained byte-for-byte unchanged during the elapsed interval. The directly verified isolation evidence is the restricted role's zero privileges, private-only installation, unchanged normal migration count, zero normal members, and the disposable cross-schema sentinel test.
+Screenshots are in `docs/demo/screenshots/cloud-refresh/`. The offline guide is `output/pdf/uptick-cloud-demo-guide.pdf`. These are sample evidence, not traction or proof of purchase/physical fulfillment.
 
-This demo deliberately shares the physical Supabase project with the normal application, per the founder's explicit revised instruction. It uses private tables and independent credentials. The laptop demo still touches zero hosted data. Neither synthetic records nor a successful deployment are real-enrollment evidence.
+## Source, build, and tests
 
-## Readiness separation
+- Repository/branch: `braydenokley13-ux/uptick-platform-v0`, `codex/real-enrollment-ready`.
+- Main remains `81ad63e0922e4a1fb3bf2c4d51bbf001d458f51b`.
+- Visual foundation: `8d1f970c71e6904528b3822893e4e01dbfcb819d`; [CI 35012202208](https://github.com/braydenokley13-ux/uptick-platform-v0/actions/runs/35012202208) passed.
+- Guided demo and task workspaces: `e670b6e4c36c2029e4e1fb217ded6033bf8f29c9`; [CI 35013090123](https://github.com/braydenokley13-ux/uptick-platform-v0/actions/runs/35013090123) passed. Full hosted journey above used this version.
+- Vercel project: `uptick-cloud-demo`, `prj_OaNjYj6hnSFqyy7iiT7d8lOGTUgF`. Deployment `dpl_EqpnC2F9RvoL6ctCSZjHdB666hB5` reached READY for the guided version. Any final presentation-only follow-up is identified in `release-receipt.json`.
+- Local unit/domain tests: **299 passed, 0 failed**. TypeScript, lint and whitespace checks passed.
+- Dedicated real-PostgreSQL isolation verifier passed: restricted public/auth access, lease isolation, shared persistence, full recovery journey, reset rotation, failed-reset rollback, normal-schema sentinel unchanged.
+- CI additionally checks PostgreSQL upgrade/concurrency, backup/restore, HTTP/browser behavior and production build.
 
-| State                              | Status                                              | Evidence / remaining gate                                                                                                       |
-| ---------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| DEMO READINESS                     | YELLOW for cloud; laptop evidence remains available | Hosted connection, domain switch, and actual browser journey pending.                                                           |
-| SOFTWARE REAL-ENROLLMENT READINESS | Existing candidate evidence retained                | This change adds cloud-demo isolation; it does not commission normal hosted enrollment. See `REAL_ENROLLMENT_RELEASE_TRUTH.md`. |
-| TWILIO / MESSAGING READINESS       | External gates remain closed                        | Cloud demo has no Twilio credentials and real sending disabled.                                                                 |
-| HOSTED COMMISSIONING               | RED for normal enrollment; YELLOW for demo          | Build and private schema complete; runtime connection and hosted journey pending.                                               |
-| MARKET-CELL READINESS              | RED for real enrollment                             | No real market-cell/member setup is created by the demo.                                                                        |
-| REAL ENROLLMENT                    | RED                                                 | Real enrollment remains disabled; normal schema is still at migration 21.                                                       |
+## Hosted isolation evidence
+
+- Existing Supabase project `dmirmwzubafuzoxcporr` is reused. No new project was purchased.
+- Private demo migrations: 001–034. Normal application migrations: 001–021, unchanged.
+- Runtime role: `uptick_cloud_demo_runtime`; no grants on normal application/auth tables, no superuser/RLS bypass/role creation/database creation; private tables have RLS.
+- The confirmed transaction pooler works with this restricted role. Direct normal-table access was denied with PostgreSQL 42501.
+- No Twilio credentials exist in the demo deployment. Access SMS, promotional SMS, production delivery and real enrollment flags are disabled.
+- Final readback after reset: **0 normal members**, **0 sample activity counts**, **0 provider-associated sample messages**, **0 normal table grants** for the demo role.
+- Protected normal-data fingerprint across **95 tables** was identical before and after the hosted journey/reset: `f9b5d642fe1708d49bbab165c461282d`.
+- That fingerprint excludes `scheduled_job_runs`, `scheduled_job_leases`, and `rate_limits`, because the retained normal deployment's scheduled jobs legitimately update them. It is not a claim that every normal row is unchanged.
+
+The pilot domain now serves the demo project. The earlier hostname/domain blockers are resolved. The original normal Vercel project and deployment remain available for rollback; its default build configuration was restored.
+
+## Six separate readiness decisions
+
+| State                                  | Verdict    | Exact basis / remaining gate                                                                                                                                                                                                                                                 |
+| -------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **DEMO READINESS**                     | **GREEN**  | Hosted full journey and reset above; isolated runtime role; normal-data fingerprint unchanged; laptop launcher and offline fallback available.                                                                                                                               |
+| **SOFTWARE REAL-ENROLLMENT READINESS** | **GREEN**  | Implemented candidate has 299 passing tests plus successful CI, PostgreSQL concurrency/upgrade, restore and HTTP/browser checks. See `REAL_ENROLLMENT_RELEASE_TRUTH.md` for the software blocker inventory. Bounded to controlled four-week enrollment after external gates. |
+| **TWILIO / MESSAGING READINESS**       | **YELLOW** | Software and evidence package exist; provider registration/approval, sender association and actual handset delivery remain unproved. No real SMS was sent by this demo.                                                                                                      |
+| **HOSTED COMMISSIONING**               | **RED**    | Demo hosting works. Normal enrollment still needs migrations 022–034 and positive hosted auth/MFA/recovery/callback/support/restore evidence on its release.                                                                                                                 |
+| **MARKET-CELL READINESS**              | **RED**    | No real supply, fallback, distribution, trained staff, or support commitments are established by sample data.                                                                                                                                                                |
+| **REAL ENROLLMENT**                    | **RED**    | Disabled. Provider, legal/business, hosted commissioning and actual market-cell gates must be satisfied first.                                                                                                                                                               |
+
+## Exact next actions for real enrollment
+
+1. Review the prepared messaging/consent/policy evidence, submit the correct Twilio/A2P registration and associate approved senders. Prove signed callbacks and handset delivery with explicitly authorized recipients.
+2. Commission a normal deployment using the existing release/upgrade runbook: reviewed migration baseline, forward migrations, hosted operator/member/merchant login, MFA, recovery, support and backup/restore evidence. Do not turn the isolated demo project into the normal runtime by changing a flag.
+3. Record actual four-week capacity and fallback funding, destination/staff readiness, distribution and support coverage in the operator setup screens.
+4. Review the separate readiness gates. Only then explicitly enable controlled real enrollment.

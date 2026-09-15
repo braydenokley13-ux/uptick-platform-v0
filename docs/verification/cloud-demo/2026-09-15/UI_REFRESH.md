@@ -25,3 +25,7 @@ The follow-up usability pass separates the operator workspace into Overview, Wee
 Main navigation now presents Overview, Members, and Store operations. Markets, Programs, Messaging, and Settings remain under More tools. Fulfillment prioritizes active issues in DOM, keyboard, and visual order; support keeps unresolved work and lookup visible.
 
 Demo Studio presents one numbered step at a time, using a bookmarkable step URL. Its default step follows saved activity; it never marks a physical handoff complete from a digital redemption. Saved counters and reset/end controls remain explicitly available. All real enrollment/provider/business gates remain separate and closed as before.
+
+The final pass-screen refinement moves pass preparation above optional counter instructions, reduces decorative spacing, and avoids repeating a size already present in the displayed benefit heading. Saved promises and terms remain unchanged. This is a presentation-only follow-up to the complete hosted journey.
+
+The screenshot backend's full-page PNGs include extra blank canvas. The PDF frames the rendered page area and splits long screens into readable continuation pages; raw captures remain available in the archive.

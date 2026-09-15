@@ -2,7 +2,7 @@
 
 ## Address and purpose
 
-The requested address is **https://pilot.upticklocal.com/demo**. See the cloud deployment evidence for whether the domain switch and browser verification have finished.
+The live address is **https://pilot.upticklocal.com**. Choose **Open demo**. The full hosted journey and reset are verified in `verification/cloud-demo/2026-09-15/DEPLOYMENT_STATUS.md`.
 
 This is the same Uptick application and GitHub branch as the laptop demo. Cloud mode uses a private schema in the existing `uptick-staging` Supabase project, as explicitly authorized by the founder. The laptop demo remains fully local.
 
@@ -13,19 +13,19 @@ The demo creates sample records only. It sends no SMS and does not create real m
 1. Open the pilot demo address.
 2. Open the private founder-access file delivered on this laptop. Copy its demo access key into **Founder demo access key**.
 3. Click **Open my rehearsal**. Use one browser for the rehearsal.
-4. Follow the numbered Demo Studio sections. Start with member entry and use the displayed fictional phone number and ZIP.
+4. Follow the numbered Demo Studio steps; one step is shown at a time. Start with member entry and use the displayed fictional phone number and ZIP.
 5. Open the simulated private access link. Claim the backed weekly benefit.
 6. Return to Demo Studio. Open the staff QR destination and record the sample redemption.
 7. Open the merchant and operator results to see the recorded event.
 8. Report the sample stockout. Issue the sample recovery, then complete its redemption.
-9. Use **Reset my rehearsal** to return to the starting fixture. Reset clears sample activity, rotates the browser rehearsal credential, and clears member/operator sign-ins.
+9. Open **Reset or finish this demo**, then use **Reset my rehearsal** to return to the starting fixture. Reset clears sample activity, rotates the browser rehearsal credential, and clears member/operator sign-ins.
 10. Use **End rehearsal & lock** when done. The browser lease also expires after eight hours.
 
 If another browser has an active rehearsal, end it there before opening a new one. Do not enter actual customer information. The normal hosted login, account-management endpoints, Twilio callbacks, and scheduled jobs are unavailable in this deployment.
 
 ## Laptop and offline fallback
 
-The existing `DEMO_RUNBOOK.md` covers the local launcher and reset. `output/pdf/uptick-founder-demo.pdf` is the offline fallback; `docs/demo/screenshots/final/` contains the captured journey. Neither requires the hosted demo to be available.
+The existing `DEMO_RUNBOOK.md` covers the local launcher and reset. `output/pdf/uptick-cloud-demo-guide.pdf` is the refreshed cloud walkthrough; `docs/demo/screenshots/cloud-refresh/` contains its captured journey. The earlier `output/pdf/uptick-founder-demo.pdf` and `docs/demo/screenshots/final/` remain the complete laptop fallback. Neither requires the hosted demo to be available.
 
 ## Isolation and deployment controls
 

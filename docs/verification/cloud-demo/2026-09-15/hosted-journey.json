@@ -1,0 +1,38 @@
+{
+  "verifiedAt": "2026-09-15",
+  "origin": "https://pilot.upticklocal.com",
+  "journeySource": "e670b6e4c36c2029e4e1fb217ded6033bf8f29c9",
+  "memberEntry": true,
+  "promotionalOptIn": false,
+  "simulatedAccess": true,
+  "backedBenefit": true,
+  "claim": true,
+  "staffQr": true,
+  "merchantAndOperatorResults": true,
+  "originalRedemptionEastern": "2026-09-15 15:27:12",
+  "stockout": true,
+  "backedRecovery": true,
+  "recoveryRedemptionEastern": "2026-09-15 15:30:18",
+  "completedCounts": [1, 1, 1, 1, 1],
+  "afterResetCounts": [0, 0, 0, 0, 0],
+  "oldPassInvalidated": true,
+  "normalMembers": 0,
+  "afterResetProviderAssociatedSampleMessages": 0,
+  "normalTableGrantsForDemoRole": 0,
+  "protectedNormalTables": 95,
+  "beforeFingerprint": "f9b5d642fe1708d49bbab165c461282d",
+  "afterFingerprint": "f9b5d642fe1708d49bbab165c461282d",
+  "fingerprintExclusions": [
+    "scheduled_job_runs",
+    "scheduled_job_leases",
+    "rate_limits"
+  ],
+  "readiness": {
+    "DEMO_READINESS": "GREEN",
+    "SOFTWARE_REAL_ENROLLMENT_READINESS": "GREEN",
+    "TWILIO_MESSAGING_READINESS": "YELLOW",
+    "HOSTED_COMMISSIONING": "RED",
+    "MARKET_CELL_READINESS": "RED",
+    "REAL_ENROLLMENT": "RED"
+  }
+}

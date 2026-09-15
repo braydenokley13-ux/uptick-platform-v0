@@ -843,11 +843,11 @@
   box-shadow: 0 14px 40px rgba(20, 36, 55, 0.08);
 }
 .member-pass > .perk-illustration {
-  margin: 20px auto 10px;
+  margin: 16px auto 14px;
 }
 .member-pass > h1 {
   font:
-    650 40px/1.05 "Geist Sans",
+    650 30px/1.15 "Geist Sans",
     sans-serif;
   color: #142437;
   text-align: center;
@@ -868,7 +868,7 @@
 }
 .member-perforation {
   border-top: 1px dashed #cfd9e1;
-  margin: 30px -30px;
+  margin: 22px -30px;
   position: relative;
 }
 .member-perforation:before,
@@ -1303,4 +1303,35 @@
       transform: translateY(-5px) rotate(1deg);
     }
   }
+}
+
+.member-main:has(.member-pass) {
+  padding-top: 28px;
+}
+.member-pass > .perk-illustration.compact {
+  width: 95px;
+  height: 95px;
+}
+.member-pass > .perk-illustration.compact .perk-orbit.outer {
+  width: 90px;
+  height: 90px;
+}
+.member-pass > .perk-illustration.compact .perk-orbit.inner {
+  width: 70px;
+  height: 70px;
+}
+.member-pass > .perk-illustration.compact svg {
+  width: 40px;
+  height: 40px;
+}
+.member-pass .member-tap-instructions > .member-round-icon {
+  display: none;
+}
+.member-counter-help {
+  margin-top: 18px;
+  text-align: left;
+}
+.member-counter-help > summary {
+  font-size: 12px;
+  color: var(--muted);
 }
