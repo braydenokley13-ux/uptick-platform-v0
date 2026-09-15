@@ -35,17 +35,17 @@ export default async function Policy({
             <p>
               Uptick operates a bounded local membership pilot. This page
               explains the information used to admit adult members, issue a
-              backed featured benefit, support fulfillment, and manage optional
-              text messages.
+              backed featured benefit, support fulfillment, send a requested
+              access text, and manage separately chosen promotional messages.
             </p>
             <h2>What we collect</h2>
             <p>
               Membership and admission status, the benefit issued to you, the
               public source associated with the membership, claim and redemption
-              records, consent choices, and message delivery status if you opt
-              into SMS. We use limited request information to protect the
-              service from abuse. We do not need your name, precise location,
-              receipt photos, or contact list.
+              records, consent choices, and message delivery status for
+              requested access or optional promotional SMS. We use limited
+              request information to protect the service from abuse. We do not
+              need your name, precise location, receipt photos, or contact list.
             </p>
             <h2>How information is used</h2>
             <p>
@@ -65,10 +65,23 @@ export default async function Policy({
             </p>
             <h2>Text message consent</h2>
             <p>
-              Uptick Local Membership SMS is optional and separate from
-              membership access. We do not sell or share your mobile opt-in
-              information for third parties’ independent marketing. Twilio
-              processes messaging data to send texts and report status.
+              Entering your own mobile number and submitting an access request
+              asks Uptick Local to send one secure access link. That requested
+              informational message does not create recurring promotional
+              consent. Recurring automated Uptick Local promotional texts are a
+              separate, optional choice presented with an unchecked checkbox.
+            </p>
+            <p>
+              Mobile numbers and messaging opt-in or consent data are not shared
+              with third parties or affiliates for marketing or promotional
+              purposes. Twilio processes messaging data to send Uptick Local
+              texts and report status.
+            </p>
+            <p>
+              Message frequency varies. A published weekly release may create
+              one featured-benefit notice, and service, transactional, or
+              support activity may create additional messages. Message and data
+              rates may apply.
             </p>
             <h2>Retention and your choices</h2>
             <p>
@@ -122,11 +135,21 @@ export default async function Policy({
               unit. Contact support if a location cannot honor an issued benefit
               so the recorded recovery process can be used.
             </p>
-            <h2>No SMS or purchase requirement</h2>
+            <h2>Requested access and optional promotional SMS</h2>
             <p>
-              Member access is available through the private web experience.
-              Optional Uptick Local SMS is not required for membership, and no
-              purchase is required to use the featured benefit.
+              Submitting your own mobile number asks Uptick Local to send one
+              secure access link. That requested message is separate from
+              recurring automated promotional texts. The promotional choice is
+              optional and unchecked; declining it does not block membership or
+              an already issued benefit. No purchase is required to join or use
+              the featured benefit.
+            </p>
+            <p>
+              Promotional message frequency varies. A published weekly release
+              may create one featured-benefit notice, and service,
+              transactional, or support activity may create additional messages.
+              Message and data rates may apply. Reply STOP to stop texts or HELP
+              for help.
             </p>
             <h2>Using the service</h2>
             <p>
@@ -141,36 +164,48 @@ export default async function Policy({
         {policy === "sms" && (
           <>
             <p>
-              Messages identify the participating merchant “via Uptick.” A US
-              sender number does not display an arbitrary brand name; look for
-              that identification in the message body.
+              Uptick Local sends messages to Uptick Local members. A
+              participating merchant may fulfill a benefit, but it does not
+              become the sender or receive the member’s phone number or Uptick
+              Local SMS consent for its own marketing.
             </p>
-            <h2>Your requested pass</h2>
+            <h2>Your requested access link</h2>
             <p>
-              If you opt into Uptick Local Membership SMS, a message may include
-              a private link to your issued benefit. Web access remains
-              available without SMS. Message and data rates may apply. Delivery
-              depends on your carrier and cannot be guaranteed.
+              Entering your own mobile number and submitting an access request
+              asks Uptick Local to send one secure access link. This is a
+              requested informational message. It does not create recurring
+              promotional consent, and Uptick sends it even when the optional
+              promotional checkbox remains unchecked. Message and data rates may
+              apply. Delivery depends on your carrier and cannot be guaranteed.
             </p>
-            <h2>Featured-benefit and service messages</h2>
+            <h2>Optional promotional messages</h2>
             <p>
-              Members who opt in may receive a notice when a featured weekly
-              benefit is published. Service, transactional, or support activity
-              may create additional messages. Message frequency varies. Uptick
-              SMS consent does not become consent for a participating merchant.
+              Members who separately select the optional, initially unchecked
+              promotional checkbox and confirm that choice on the private access
+              page may receive recurring automated promotional texts. Message
+              frequency varies. A published weekly release may create one
+              featured-benefit notice, and service, transactional, or support
+              activity may create additional messages. Message and data rates
+              may apply.
             </p>
             <h2>Stop, start, and help</h2>
             <p>
-              Reply STOP to stop Uptick Local Membership texts. STOP preserves
-              membership and already issued benefits, which remain available
-              through the private web experience. Reply START to ask the carrier
-              to remove its sender block. START does not provide SMS consent,
-              enroll a member, or restore any marketing choice. Reply HELP for
-              the configured support response.
+              Reply STOP to stop Uptick Local texts. STOP preserves membership
+              and already issued benefits, which remain available through the
+              private web experience. Reply START to ask the carrier to remove
+              its sender block. START does not provide SMS consent, enroll a
+              member, or restore any promotional choice. Reply HELP for help or
+              contact the support address below.
             </p>
             <p>
-              A participating merchant does not receive Uptick membership
-              consent or operate a member list through Uptick.
+              Uptick does not offer keyword opt-in. Texting START or another
+              keyword does not subscribe you to recurring promotional texts;
+              that choice must be made through the private Uptick web flow.
+            </p>
+            <p>
+              A participating merchant does not receive member phone numbers or
+              Uptick Local SMS consent, and it does not operate an Uptick member
+              list.
             </p>
             <h2>Didn’t get your text?</h2>
             <p>

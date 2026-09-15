@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "demo": "node --import tsx scripts/demo.ts",
+    "demo:reset": "node --import tsx scripts/demo.ts --reset",
     "predev": "node scripts/check-disk.mjs 256 development",
     "dev": "next dev --hostname 127.0.0.1",
     "prebuild": "node scripts/check-disk.mjs 768 build",

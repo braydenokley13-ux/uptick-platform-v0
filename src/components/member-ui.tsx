@@ -150,6 +150,7 @@ export function DropCard({
             latitude={supply.latitude}
             longitude={supply.longitude}
             supplyId={supply.id}
+            available={supply.destination_available}
           />
         )}
       </article>
@@ -241,6 +242,7 @@ export async function NetworkPass({
                   <NavigationLinks
                     address={recovery.member_snapshot.address}
                     passToken={token}
+                    available={data.destinationAvailable}
                   />
                 )}
               </>
@@ -258,11 +260,7 @@ export async function NetworkPass({
               <Check size={42} />
             </span>
             <p className="eyebrow">UPTICK REDEEMED</p>
-            <h1>
-              Good things.
-              <br />
-              <em>Enjoy yours.</em>
-            </h1>
+            <h1>Redemption recorded.</h1>
             <p>{claim.snapshot.reward}</p>
             <strong>
               {new Date(claim.redeemed_at!).toLocaleString("en-US", {
@@ -383,6 +381,7 @@ export async function NetworkPass({
             latitude={supply.latitude}
             longitude={supply.longitude}
             passToken={token}
+            available={data.destinationAvailable}
           />
         )}
       </article>

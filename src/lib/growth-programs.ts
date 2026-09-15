@@ -684,14 +684,27 @@ export async function approveGrowthProgramVersion(
       version.approved_version &&
       version.approved_version !== data.programVersion
     ) {
-      const [issued] = await tx.query<{ id: string }>(
-        "select id from fulfillment_grants where source_program_id=$1 limit 1",
+      const [issued] = await tx.query<{
+        last_week: string | null;
+        count: number;
+      }>(
+        "select max(week_key) last_week,count(*)::int count from fulfillment_grants where source_program_id=$1",
         [data.programId],
       );
-      if (issued)
+      if (issued.last_week && dateValue(version.starts_on) <= issued.last_week)
         throw new RequestError(
-          "This Program already has issued member obligations. Create a new Program for prospective weeks instead of amending it.",
+          "This Program already has issued member obligations. The amended version must start after the last issued week; historical versions and grants stay unchanged.",
         );
+      if (issued.count) {
+        const [{ planned }] = await tx.query<{ planned: number }>(
+          "select coalesce(sum(planned_placements),0)::int planned from growth_program_week_plans where program_id=$1 and program_version=$2",
+          [data.programId, data.programVersion],
+        );
+        if (issued.count + planned > Number(version.benefit_ceiling))
+          throw new RequestError(
+            "The amended lifetime benefit ceiling must cover issued history plus prospective placements.",
+          );
+      }
     }
 
     const weekPlans = await tx.query<{
@@ -699,6 +712,10 @@ export async function approveGrowthProgramVersion(
       planned_placements: number;
     }>(
       "select week_key,planned_placements from growth_program_week_plans where program_id=$1 and program_version=$2 order by week_key",
+      [data.programId, data.programVersion],
+    );
+    await tx.query(
+      "select s.id from network_drop_supplies s where exists(select 1 from program_supply_links l where l.supply_id=s.id and l.program_id=$1 and l.program_version=$2) order by s.id for update",
       [data.programId, data.programVersion],
     );
     const supplyRows = await tx.query<{
@@ -734,7 +751,7 @@ export async function approveGrowthProgramVersion(
       supply_dependency: string;
       fallback_dependency: string | null;
     }>(
-      "select l.week_key,s.id supply_id,s.state,s.inventory_policy,s.quantity,(select coalesce(sum(a.delta),0)::int from supply_adjustments a where a.supply_id=s.id) inventory_adjustment,pws.committed_quantity,t.exact_item,t.required_spend,t.member_fee,t.funder_organization_id,t.fulfiller_organization_id,t.data_kind,d.state readiness_state,d.owner_approved_by,d.primary_manager,d.primary_contact,d.backup_contact,d.stock_confirmed_at,d.exact_item_confirmed,d.staff_instructions_confirmed,d.shifts_briefed_at,d.valid_hours_confirmed,d.qr_rehearsed_at,d.support_escalation,d.valid_until,(select count(*)::int from redemption_points rp join redemption_credentials rc on rc.point_id=rp.id where rp.organization_id=s.organization_id and rp.location_id=s.location_id and rp.state='active' and rp.exposure='staff' and rc.state='active' and rc.credential_type='qr') active_staff_qr,f.state fallback_state,f.usable_capacity fallback_capacity,t.dependency_key supply_dependency,f.dependency_key fallback_dependency from program_supply_links l join network_drop_supplies s on s.id=l.supply_id join pilot_supply_terms t on t.supply_id=s.id left join pilot_week_supplies pws on pws.run_id=$3 and pws.week_key=l.week_key and pws.supply_id=l.supply_id left join destination_readiness d on d.supply_id=s.id left join pilot_supply_fallbacks f on f.supply_id=s.id where l.program_id=$1 and l.program_version=$2",
+      "select l.week_key,s.id supply_id,s.state,s.inventory_policy,s.quantity,(select coalesce(sum(a.delta),0)::int from supply_adjustments a where a.supply_id=s.id) inventory_adjustment,pws.committed_quantity,t.exact_item,t.required_spend,t.member_fee,t.funder_organization_id,t.fulfiller_organization_id,t.data_kind,d.state readiness_state,d.owner_approved_by,d.primary_manager,d.primary_contact,d.backup_contact,d.stock_confirmed_at,d.exact_item_confirmed,d.staff_instructions_confirmed,d.shifts_briefed_at,d.valid_hours_confirmed,d.qr_rehearsed_at,d.support_escalation,d.valid_until,(select count(*)::int from redemption_points rp join redemption_credentials rc on rc.point_id=rp.id where rp.organization_id=s.organization_id and rp.location_id=s.location_id and rp.state='active' and rp.exposure='staff' and rc.state='active' and rc.credential_type='qr') active_staff_qr,f.state fallback_state,f.usable_capacity fallback_capacity,t.dependency_key supply_dependency,f.dependency_key fallback_dependency from program_supply_links l join network_drop_supplies s on s.id=l.supply_id join pilot_supply_terms t on t.supply_id=s.id left join effective_pilot_week_supplies pws on pws.run_id=$3 and pws.week_key=l.week_key and pws.supply_id=l.supply_id left join destination_readiness d on d.supply_id=s.id left join pilot_supply_fallbacks f on f.supply_id=s.id where l.program_id=$1 and l.program_version=$2",
       [data.programId, data.programVersion, data.runId],
     );
     const capacity: Record<
@@ -849,7 +866,7 @@ export async function approveGrowthProgramVersion(
     const booked = new Map(
       bookedRows.map((row) => [dateValue(row.week_key), Number(row.booked)]),
     );
-    const backed = await pilotCapacity(tx, run);
+    const backed = await pilotCapacity(tx, run, { reviewingCommercial: true });
     const [{ admitted }] = await tx.query<{ admitted: number }>(
       "select count(*)::int admitted from pilot_admissions where run_id=$1",
       [run.id],
@@ -1166,7 +1183,7 @@ export async function growthProgramWorkspace(db: DB, actor: Actor) {
         [organizationId],
       ),
       db.query<Record<string, unknown>>(
-        "select l.program_id,l.program_version,l.week_key,s.id supply_id,s.state,t.exact_item,t.size_label,t.usable_hours,t.funder_organization_id,t.fulfiller_organization_id,o.name fulfiller_name,(select count(*)::int from fulfillment_grants g join weekly_releases r2 on r2.id=g.release_id where g.source_program_id=l.program_id and g.source_program_version=l.program_version and g.supply_id=s.id and g.week_key=l.week_key and r2.run_id=a.run_id and g.data_kind=r.data_kind) issued,(select count(*)::int from fulfillment_grants g join weekly_releases r2 on r2.id=g.release_id where g.source_program_id=l.program_id and g.source_program_version=l.program_version and g.supply_id=s.id and g.week_key=l.week_key and r2.run_id=a.run_id and g.data_kind=r.data_kind and g.state in ('claimed','redeemed')) claims,(select count(*)::int from fulfillment_grants g join weekly_releases r2 on r2.id=g.release_id where g.source_program_id=l.program_id and g.source_program_version=l.program_version and g.supply_id=s.id and g.week_key=l.week_key and r2.run_id=a.run_id and g.data_kind=r.data_kind and g.state='redeemed') redemptions,t.data_kind from program_supply_links l join growth_programs p on p.id=l.program_id and p.approved_version=l.program_version join growth_program_versions v on v.program_id=p.id and v.version=l.program_version join growth_program_approvals a on a.program_id=l.program_id and a.program_version=l.program_version and a.decision='approved' join pilot_runs r on r.id=a.run_id join network_drop_supplies s on s.id=l.supply_id join pilot_supply_terms t on t.supply_id=s.id join organizations o on o.id=t.fulfiller_organization_id where (p.buyer_organization_id=$1 or v.funder_organization_id=$1 or v.fulfiller_organization_id=$1) and t.data_kind=r.data_kind union all select null program_id,null program_version,coalesce((select min(g.week_key) from fulfillment_grants g where g.supply_id=s.id and g.data_kind=t.data_kind),s.starts_at::date::text) week_key,s.id supply_id,s.state,t.exact_item,t.size_label,t.usable_hours,t.funder_organization_id,t.fulfiller_organization_id,o.name fulfiller_name,(select count(*)::int from fulfillment_grants g where g.supply_id=s.id and g.data_kind=t.data_kind and g.source_program_id is null) issued,(select count(*)::int from fulfillment_grants g where g.supply_id=s.id and g.data_kind=t.data_kind and g.source_program_id is null and g.state in ('claimed','redeemed')) claims,(select count(*)::int from fulfillment_grants g where g.supply_id=s.id and g.data_kind=t.data_kind and g.source_program_id is null and g.state='redeemed') redemptions,t.data_kind from network_drop_supplies s join pilot_supply_terms t on t.supply_id=s.id join organizations o on o.id=t.fulfiller_organization_id where s.state in ('approved','paused','ended') and (t.funder_organization_id=$1 or t.fulfiller_organization_id=$1) and not exists(select 1 from program_supply_links l where l.supply_id=s.id) order by week_key,supply_id",
+        "select l.program_id,l.program_version,l.week_key,s.id supply_id,s.state,t.exact_item,t.size_label,t.usable_hours,t.funder_organization_id,t.fulfiller_organization_id,o.name fulfiller_name,(select count(*)::int from fulfillment_grants g join weekly_releases r2 on r2.id=g.release_id where g.source_program_id=l.program_id and g.source_program_version=l.program_version and g.supply_id=s.id and g.week_key=l.week_key and r2.run_id=a.run_id and g.data_kind=r.data_kind) issued,(select count(*)::int from fulfillment_grants g join weekly_releases r2 on r2.id=g.release_id where g.source_program_id=l.program_id and g.source_program_version=l.program_version and g.supply_id=s.id and g.week_key=l.week_key and r2.run_id=a.run_id and g.data_kind=r.data_kind and g.state in ('claimed','redeemed')) claims,(select count(*)::int from fulfillment_grants g join weekly_releases r2 on r2.id=g.release_id where g.source_program_id=l.program_id and g.source_program_version=l.program_version and g.supply_id=s.id and g.week_key=l.week_key and r2.run_id=a.run_id and g.data_kind=r.data_kind and g.state='redeemed') redemptions,t.data_kind from program_supply_links l join growth_programs p on p.id=l.program_id join growth_program_versions v on v.program_id=p.id and v.version=l.program_version join growth_program_approvals a on a.program_id=l.program_id and a.program_version=l.program_version and a.decision='approved' join pilot_runs r on r.id=a.run_id join network_drop_supplies s on s.id=l.supply_id join pilot_supply_terms t on t.supply_id=s.id join organizations o on o.id=t.fulfiller_organization_id where (p.buyer_organization_id=$1 or v.funder_organization_id=$1 or v.fulfiller_organization_id=$1) and t.data_kind=r.data_kind union all select null program_id,null program_version,coalesce(organic_week.week_key,s.starts_at::date::text) week_key,s.id supply_id,s.state,t.exact_item,t.size_label,t.usable_hours,t.funder_organization_id,t.fulfiller_organization_id,o.name fulfiller_name,(select count(*)::int from fulfillment_grants g where g.supply_id=s.id and g.data_kind=t.data_kind and g.week_key=organic_week.week_key and g.source_program_id is null) issued,(select count(*)::int from fulfillment_grants g where g.supply_id=s.id and g.data_kind=t.data_kind and g.week_key=organic_week.week_key and g.source_program_id is null and g.state in ('claimed','redeemed')) claims,(select count(*)::int from fulfillment_grants g where g.supply_id=s.id and g.data_kind=t.data_kind and g.week_key=organic_week.week_key and g.source_program_id is null and g.state='redeemed') redemptions,t.data_kind from network_drop_supplies s join pilot_supply_terms t on t.supply_id=s.id join organizations o on o.id=t.fulfiller_organization_id left join lateral (select g.week_key from fulfillment_grants g where g.supply_id=s.id and g.data_kind=t.data_kind and g.source_program_id is null union select w.week_key from effective_pilot_week_supplies w where w.supply_id=s.id) organic_week on true where s.state in ('approved','paused','ended') and (t.funder_organization_id=$1 or t.fulfiller_organization_id=$1) and not exists(select 1 from program_supply_links l where l.supply_id=s.id) order by week_key,supply_id",
         [organizationId],
       ),
     ]);

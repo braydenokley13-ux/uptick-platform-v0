@@ -1,0 +1,68 @@
+.demo-studio {
+  max-width: 1120px;
+  padding: 48px 24px 80px;
+  margin: auto;
+}
+.demo-studio header {
+  max-width: 760px;
+  margin-bottom: 36px;
+}
+.demo-studio h1 {
+  font-size: clamp(42px, 7vw, 76px);
+  line-height: 1;
+  margin: 20px 0;
+}
+.demo-studio p {
+  line-height: 1.65;
+}
+.demo-scenes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.demo-scenes article,
+.demo-ledger {
+  background: #faf8f4;
+  border: 1px solid #dcd9d1;
+  border-radius: 16px;
+  padding: 24px;
+}
+.demo-scenes h2 {
+  font-size: 29px;
+  margin: 12px 0;
+}
+.demo-scenes .button {
+  margin: 8px 0;
+}
+.demo-qr {
+  width: 130px;
+  margin: 12px 0;
+}
+.demo-qr svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.demo-ledger {
+  margin: 24px 0;
+}
+.demo-ledger dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+}
+.demo-ledger dd {
+  font-size: 32px;
+  margin: 5px 0;
+}
+@media (max-width: 640px) {
+  .demo-studio {
+    padding: 30px 16px;
+  }
+  .demo-scenes {
+    grid-template-columns: 1fr;
+  }
+  .demo-scenes article {
+    padding: 20px;
+  }
+}

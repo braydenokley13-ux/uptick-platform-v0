@@ -1,7 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import type { PilotPromiseOperations } from "@/lib/pilot-promise";
 
 export type PilotPromiseControlsProps = {
@@ -47,14 +53,19 @@ function ControlForm({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const requestKey = useRef<string | null>(null);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
     setNotice("");
     setError("");
     try {
-      await save(action(new FormData(event.currentTarget)));
+      await save({
+        ...action(new FormData(event.currentTarget)),
+        idempotencyKey: (requestKey.current ||= crypto.randomUUID()),
+      });
       setNotice("Saved with an audit record.");
+      requestKey.current = null;
       router.refresh();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Please try again.");
@@ -186,8 +197,8 @@ export function PilotPromiseControls({
           <textarea name="usableHours" required />
         </label>
         <label>
-          Primary dependency key
-          <input name="dependencyKey" required placeholder="cold-brew-tank-a" />
+          Primary equipment or stock resource
+          <input name="dependencyKey" required placeholder="Cold brew tank A" />
         </label>
         <label>
           Required member spend
@@ -250,15 +261,32 @@ export function PilotPromiseControls({
           <input name="sizeLabel" required />
         </label>
         <label>
-          Independent dependency key
+          Separate fallback equipment or stock resource
           <input name="dependencyKey" required />
         </label>
+        <details>
+          <summary>Review primary resources before choosing a fallback</summary>
+          {supplies
+            .filter((s) => s.dependency_key)
+            .map((s) => (
+              <p key={String(s.id)}>
+                {String(s.merchant)} · {String(s.exact_item || s.reward)}:{" "}
+                {String(s.dependency_key)}
+              </p>
+            ))}
+          <p>
+            Changing the spelling does not create an independent resource.
+            Confirm that the fallback remains usable if the primary equipment or
+            stock fails.
+          </p>
+        </details>
         <label>
           Usable fallback units
           <input name="usableCapacity" type="number" min="1" required />
         </label>
         <label>
-          Cashier instructions
+          Cashier instructions and why this remains usable if the primary
+          resource fails
           <textarea name="instructions" minLength={10} required />
         </label>
         <OrganizationInput
@@ -365,12 +393,21 @@ export function PilotPromiseControls({
           occurredAt: instant(form, "occurredAt"),
           owner: value(form, "owner"),
           note: value(form, "note"),
-          idempotencyKey: value(form, "idempotencyKey"),
         })}
       >
         <label>
-          Fulfillment grant ID
-          <input name="grantId" required />
+          Issued member benefit
+          <select name="grantId" required defaultValue="">
+            <option value="" disabled>
+              Choose the member’s issued benefit
+            </option>
+            {data.grants.map((grant) => (
+              <option key={grant.id} value={grant.id}>
+                {grant.week_key} · Member {grant.member_id.slice(-8)} ·{" "}
+                {grant.merchant} · {grant.reward}
+              </option>
+            ))}
+          </select>
         </label>
         <label>
           Incident type
@@ -406,15 +443,11 @@ export function PilotPromiseControls({
           Observed details
           <textarea name="note" maxLength={2000} />
         </label>
-        <label>
-          Idempotency key
-          <input name="idempotencyKey" minLength={8} required />
-        </label>
       </ControlForm>
 
       <ControlForm
         title="Issue backed recovery"
-        help="Use the original redeemed pass. The recovery does not create another weekly benefit or paid placement."
+        help="Keep the original benefit and pass. A failed remedy can be superseded with recorded evidence; each attempt remains in history and creates no additional paid placement."
         action={(form) => ({
           action: "issue_recovery",
           incidentId: value(form, "incidentId"),
@@ -424,6 +457,9 @@ export function PilotPromiseControls({
           payerOrganizationId: value(form, "payerOrganizationId"),
           payerEvidence: value(form, "payerEvidence"),
           expiresAt: instant(form, "expiresAt"),
+          supersedesRecoveryId: value(form, "supersedesRecoveryId") || null,
+          failureReason: value(form, "failureReason") || undefined,
+          physicalHandoff: value(form, "physicalHandoff") || undefined,
         })}
       >
         <label>
@@ -439,6 +475,40 @@ export function PilotPromiseControls({
             ))}
           </select>
         </label>
+        <details>
+          <summary>Replace a failed or expired remedy</summary>
+          <label>
+            Current remedy to replace
+            <select name="supersedesRecoveryId" defaultValue="">
+              <option value="">First remedy — no predecessor</option>
+              {data.recoveries
+                .filter((r) => !r.superseded_at)
+                .map((r) => (
+                  <option key={String(r.id)} value={String(r.id)}>
+                    Member {String(r.member_id).slice(-8)} ·{" "}
+                    {String(record(r.member_snapshot).merchant)} ·{" "}
+                    {String(r.state)} · expires {String(r.expires_at)}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <label>
+            Failure evidence
+            <textarea name="failureReason" minLength={10} maxLength={1500} />
+          </label>
+          <label>
+            Physical handoff of that remedy
+            <select name="physicalHandoff" defaultValue="">
+              <option value="">Choose when replacing a remedy</option>
+              <option value="not_received">
+                Member reports item was not received
+              </option>
+              <option value="unknown">
+                Unknown — do not assume successful handoff
+              </option>
+            </select>
+          </label>
+        </details>
         <label>
           Remedy type
           <select name="remedyType" defaultValue="same_counter">
@@ -488,6 +558,22 @@ export function PilotPromiseControls({
           <input name="expiresAt" type="datetime-local" required />
         </label>
       </ControlForm>
+      <section className="panel network-panel">
+        <h3>Recovery attempt history</h3>
+        <p>
+          Recorded redemption is digital evidence. It does not prove physical
+          handoff.
+        </p>
+        {data.recoveries.map((r) => (
+          <p key={String(r.id)}>
+            Member {String(r.member_id).slice(-8)} ·{" "}
+            {String(record(r.member_snapshot).merchant)} · {String(r.state)} ·{" "}
+            {r.superseded_at
+              ? "Superseded — history preserved"
+              : "Current remedy"}
+          </p>
+        ))}
+      </section>
     </div>
   );
 }

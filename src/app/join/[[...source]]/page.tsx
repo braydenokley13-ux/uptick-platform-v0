@@ -9,6 +9,7 @@ import { MemberFrame, PerkIllustration } from "@/components/member-ui";
 import { JoinUptick, RecoverMemberAccess } from "@/components/member-controls";
 import { Badge } from "@/components/ui";
 import Link from "next/link";
+import { demoMode } from "@/lib/demo-guard";
 export const dynamic = "force-dynamic";
 export default async function JoinPage({
   params,
@@ -112,7 +113,7 @@ export default async function JoinPage({
             We’ll text a one-time private link to confirm your phone and open
             your membership.
           </p>
-          <JoinUptick sourceToken={sourceToken} />
+          <JoinUptick sourceToken={sourceToken} demo={demoMode()} />
           <p className="member-already">
             Already a member? Use the same number to get a fresh private link.
           </p>

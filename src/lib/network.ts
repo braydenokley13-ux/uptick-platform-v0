@@ -4,6 +4,8 @@ import { id, token, hash, encrypt } from "./security";
 import { RequestError } from "./http";
 import { memberAccess, type Member } from "./membership-identity";
 import { demandEvent } from "./demand-events";
+import { memberServiceStatus } from "./member-service";
+import { locationAvailable } from "./location-outages";
 export * from "./membership-identity";
 export { demandEvent } from "./demand-events";
 
@@ -37,6 +39,7 @@ export type Supply = {
   timezone: string;
   is_demo: boolean;
   drive_minutes: number | null;
+  destination_available: boolean;
   latitude: string | null;
   longitude: string | null;
   customer_value: string | null;
@@ -53,6 +56,7 @@ export type Allocation = {
 };
 export type NetworkRecovery = {
   id: string;
+  target_location_id: string;
   state: "issued" | "redeemed";
   remedy_type: "same_counter" | "replacement_supply";
   expires_at: string;
@@ -76,7 +80,7 @@ export type NetworkGrant = {
   expires_at: string;
   member_snapshot: Snapshot & Record<string, unknown>;
 };
-export const supplySelect = `select s.*,o.title,v.qualification,v.reward,v.terms,g.name merchant,g.timezone,g.is_demo,l.address,l.latitude,l.longitude,ml.drive_minutes,p.customer_value,p.reward_cost from network_drop_supplies s join offers o on o.id=s.offer_id join offer_versions v on v.offer_id=s.offer_id and v.version=s.offer_version join organizations g on g.id=s.organization_id join locations l on l.id=s.location_id join market_locations ml on ml.market_id=s.market_id and ml.location_id=s.location_id left join offer_product_metadata p on p.offer_id=s.offer_id and p.version=s.offer_version`;
+export const supplySelect = `select s.*,o.title,v.qualification,v.reward,v.terms,g.name merchant,g.timezone,g.is_demo,l.address,l.latitude,l.longitude,ml.drive_minutes,(ml.active and not exists(select 1 from location_outages outage where outage.location_id=s.location_id and outage.closed_at is null)) destination_available,p.customer_value,p.reward_cost from network_drop_supplies s join offers o on o.id=s.offer_id join offer_versions v on v.offer_id=s.offer_id and v.version=s.offer_version join organizations g on g.id=s.organization_id join locations l on l.id=s.location_id join market_locations ml on ml.market_id=s.market_id and ml.location_id=s.location_id left join offer_product_metadata p on p.offer_id=s.offer_id and p.version=s.offer_version`;
 async function supplyUsages(db: DB, supplyIds: string[], at = new Date()) {
   if (!supplyIds.length) return new Map<string, SupplyUsage>();
   const rows = await db.query<{
@@ -110,13 +114,13 @@ async function supplyUsages(db: DB, supplyIds: string[], at = new Date()) {
        from fulfillment_grants where supply_id=any($1::text[]) group by supply_id
      ), commitments as (
        select ws.supply_id,max(ws.committed_quantity)::int committed
-       from pilot_week_supplies ws join pilot_runs r on r.id=ws.run_id
+       from effective_pilot_week_supplies ws join pilot_runs r on r.id=ws.run_id
        where ws.supply_id=any($1::text[]) and r.state in ('enrolling','live','paused')
        group by ws.supply_id
      ), recovery_usage as (
        select replacement_supply_id supply_id,count(*)::int recoveries
        from recovery_grants where replacement_supply_id=any($1::text[])
-        and (state='redeemed' or expires_at>$2) group by replacement_supply_id
+        and (state='redeemed' or (superseded_at is null and expires_at>$2)) group by replacement_supply_id
      )
      select s.id,s.quantity,s.inventory_policy,coalesce(a.adjustment,0) adjustment,
       coalesce(cu.claimed,0) claimed,coalesce(cu.redeemed,0) redeemed,
@@ -187,7 +191,7 @@ export async function eligibleDrops(db: DB, memberId: string, at = new Date()) {
   );
   if (!member) return [];
   const supplies = await db.query<Supply>(
-    `${supplySelect} where s.market_id=$1 and s.state='approved' and ml.active and s.starts_at<=$2 and s.expires_at>$2 and not exists(select 1 from claims c where c.customer_id=$3 and c.offer_id=s.offer_id) order by s.expires_at,s.id`,
+    `${supplySelect} where s.market_id=$1 and s.state='approved' and ml.active and not exists(select 1 from location_outages outage where outage.location_id=s.location_id and outage.closed_at is null) and s.starts_at<=$2 and s.expires_at>$2 and not exists(select 1 from claims c where c.customer_id=$3 and c.offer_id=s.offer_id) order by s.expires_at,s.id`,
     [member.market_id, at.toISOString(), member.customer_id],
   );
   const usages = await supplyUsages(
@@ -226,7 +230,7 @@ export async function allocationView(db: DB, allocation: Allocation) {
   const [recovery] = grant
     ? await db.query<NetworkRecovery>(
         `select r.* from recovery_grants r join fulfillment_incidents i on i.id=r.incident_id
-         where i.grant_id=$1 order by r.issued_at desc limit 1`,
+         where i.grant_id=$1 and r.superseded_at is null order by r.issued_at desc limit 1`,
         [grant.id],
       )
     : [];
@@ -274,6 +278,8 @@ export async function allocateMember(
       [memberId, week],
     );
     if (existing) return allocationView(tx, existing);
+    if ((await memberServiceStatus(tx, memberId))?.blocks_future_release)
+      return null;
     // Real pilot benefits are published only by releaseWeeklyBenefits, which
     // atomically creates the allocation and its inventory-backed grant.
     if (member.data_kind === "real") return null;
@@ -745,7 +751,7 @@ export async function networkPass(db: DB, credential: string) {
   const [recovery] = grant
     ? await db.query<NetworkRecovery>(
         `select r.* from recovery_grants r join fulfillment_incidents i on i.id=r.incident_id
-         where i.grant_id=$1 order by r.issued_at desc limit 1`,
+         where i.grant_id=$1 and r.superseded_at is null order by r.issued_at desc limit 1`,
         [grant.id],
       )
     : [];
@@ -755,5 +761,9 @@ export async function networkPass(db: DB, credential: string) {
     supply,
     grant: grant || null,
     recovery: recovery || null,
+    destinationAvailable: await locationAvailable(
+      db,
+      recovery?.target_location_id || supply.location_id,
+    ),
   };
 }

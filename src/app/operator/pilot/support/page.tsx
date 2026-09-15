@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { randomUUID } from "node:crypto";
 import { requireActor } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { memberSupportQueue } from "@/lib/member-experience";
@@ -10,7 +11,16 @@ import "@/components/network-operations.css";
 export const dynamic = "force-dynamic";
 export default async function PilotSupport() {
   const actor = await requireActor(true),
-    requests = await memberSupportQueue(await getDb(), actor);
+    db = await getDb(),
+    requests = await memberSupportQueue(db, actor);
+  const members = await db.query<{
+    id: string;
+    phone_hint: string;
+    data_kind: string;
+    service_kind: string;
+  }>(
+    "select m.id,right(c.phone,4) phone_hint,m.data_kind,coalesce(s.kind,'participating') service_kind from uptick_members m join customers c on c.id=m.customer_id left join member_service_status s on s.member_id=m.id order by m.created_at desc limit 500",
+  );
   return (
     <Shell actor={actor} active="pilot/support" name="Member support">
       <div className="network-operations">
@@ -94,6 +104,71 @@ export default async function PilotSupport() {
           ))}
         </section>
         <NetworkMemberLookup />
+        <p>
+          <Link href="/operator/pilot/privacy">
+            Privacy requests, account data exports, corrections and erasure →
+          </Link>
+        </p>
+        <section className="panel network-panel">
+          <h2>Member participation and account access</h2>
+          <p>
+            Keep the original cohort denominator. Withdrawal, inaccessibility
+            and suspension stop future releases; they never count as
+            fulfillment. Geography changes are recorded for review. Promotional
+            STOP remains separate.
+          </p>
+          <PilotForm
+            action="member-service"
+            extra={{ requestKey: randomUUID() }}
+            button="Record account status"
+          >
+            <label>
+              Member
+              <select name="memberId" required>
+                <option value="">Choose a member</option>
+                {members.map((member) => (
+                  <option key={member.id} value={member.id}>
+                    Phone ending {member.phone_hint} · {member.id.slice(-8)} ·{" "}
+                    {member.data_kind} · {member.service_kind}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Status
+              <select name="kind" required>
+                <option value="withdrawn">
+                  Voluntary withdrawal — verified member request
+                </option>
+                <option value="suspended">
+                  Service suspension — revoke account access
+                </option>
+                <option value="deletion_pending">
+                  Verified deletion request — revoke access pending privacy
+                  review
+                </option>
+                <option value="inaccessible">
+                  Inaccessible — stop future release pending support
+                </option>
+                <option value="geography_changed">
+                  Geography changed — preserve existing obligations
+                </option>
+                <option value="resumed">
+                  Resume future participation — verified member request
+                </option>
+              </select>
+            </label>
+            <label>
+              Reason and evidence
+              <textarea
+                name="reason"
+                required
+                minLength={10}
+                maxLength={1500}
+              />
+            </label>
+          </PilotForm>
+        </section>
       </div>
     </Shell>
   );

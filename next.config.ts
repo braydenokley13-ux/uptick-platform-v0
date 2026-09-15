@@ -2,6 +2,10 @@ import type { NextConfig } from "next";
 const config: NextConfig = {
   serverExternalPackages: ["@electric-sql/pglite", "postgres", "twilio"],
   poweredByHeader: false,
+  outputFileTracingIncludes: {
+    "/*": ["./db/migrations/*.sql"],
+  },
+  devIndicators: process.env.UPTICK_DEMO_MODE === "true" ? false : undefined,
   turbopack: {},
   experimental:
     process.env.UPTICK_LOW_DISK === "true"
@@ -12,7 +16,9 @@ const config: NextConfig = {
     return config;
   },
   logging: {
-    incomingRequests: { ignore: [/\/(p|t|u|tap)\//] },
+    incomingRequests: {
+      ignore: [/\/(p|t|u|tap|phone-change)\//, /\/account\/recovery/],
+    },
     browserToTerminal: false,
     serverFunctions: false,
   },

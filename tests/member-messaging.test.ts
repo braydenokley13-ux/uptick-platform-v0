@@ -94,6 +94,8 @@ function staging() {
   process.env.CRON_SECRET = "c".repeat(64);
   process.env.MESSAGING_APPROVED = "true";
   process.env.LEGAL_APPROVED = "true";
+  process.env.MEMBER_ACCESS_SMS_ENABLED = "true";
+  process.env.MEMBER_PROMOTIONAL_SMS_ENABLED = "true";
   process.env.BUSINESS_LEGAL_NAME = "Test Uptick";
   process.env.SUPPORT_EMAIL = "support@uptick.example";
   process.env.TWILIO_ACCOUNT_SID = `AC${"a".repeat(32)}`;

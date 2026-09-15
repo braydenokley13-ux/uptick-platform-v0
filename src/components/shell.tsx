@@ -120,6 +120,9 @@ export function Shell({
                 Secure workspace
               </Badge>
             )}
+            {!localMode() && (
+              <Link href="/account/security">Account security</Link>
+            )}
             <ActionButton action="logout" secondary>
               Sign out
             </ActionButton>

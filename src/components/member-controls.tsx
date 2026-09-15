@@ -26,16 +26,25 @@ type Result = {
   codes?: string[];
 };
 async function action(body: object): Promise<Result> {
-  const response = await fetch("/api/member", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  let response: Response;
+  try {
+    response = await fetch("/api/member", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw Error(
+      "The connection was interrupted. Check the current page before trying again; your request may already have completed.",
+    );
+  }
   let result: Result;
   try {
     result = await response.json();
   } catch {
-    throw Error("The connection was interrupted. Please try again.");
+    throw Error(
+      "The server returned an unreadable response. Check the current page before trying again; your request may already have completed.",
+    );
   }
   if (!response.ok) throw Error(result.error || "Please try again.");
   return result;
@@ -43,9 +52,11 @@ async function action(body: object): Promise<Result> {
 export function JoinUptick({
   sourceToken,
   referralToken,
+  demo = false,
 }: {
   sourceToken?: string;
   referralToken?: string;
+  demo?: boolean;
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
@@ -117,6 +128,8 @@ export function JoinUptick({
             autoComplete="tel-national"
             inputMode="tel"
             placeholder="(201) 555-0123"
+            defaultValue={demo ? "2025550123" : ""}
+            readOnly={demo}
           />
         </div>
       </label>
@@ -131,6 +144,7 @@ export function JoinUptick({
             pattern="[0-9]{5}"
             maxLength={5}
             placeholder="10583"
+            defaultValue={demo ? "10583" : ""}
           />
         </label>
         <label>
@@ -446,7 +460,7 @@ export function MemberPreferences({
       </div>
       <label className="member-consent">
         <input name="subscribed" type="checkbox" defaultChecked={subscribed} />
-        <span>Keep my Uptick membership texts on.</span>
+        <span>Send me optional promotional Uptick texts.</span>
       </label>
       <p className="member-disclosure">{MARKETING_SMS_DISCLOSURE}</p>
       <button disabled={busy} className="button">
@@ -523,35 +537,126 @@ export function RecoverMemberAccess() {
 export function MemberAccountControls() {
   const router = useRouter();
   const [codes, setCodes] = useState<string[]>([]);
-  const [message, setMessage] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [feedback, setFeedback] = useState<{
+    kind: "error" | "status";
+    text: string;
+  } | null>(null);
+  const [operation, setOperation] = useState<
+    "withdrawal" | "recovery-codes" | "signout" | null
+  >(null);
+  const busy = operation !== null;
+  const withdrawalKey = useRef<string | null>(null);
+  const errorMessage = useRef<HTMLParagraphElement>(null);
+
+  useEffect(() => {
+    if (feedback?.kind === "error") errorMessage.current?.focus();
+  }, [feedback]);
+
   return (
-    <section className="member-share">
+    <section className="member-share" aria-busy={busy}>
+      <details className="member-fine-details">
+        <summary>Withdraw from future weekly benefits</summary>
+        <p>
+          Withdrawal stops future weekly releases for you. Already-issued
+          benefits, their recovery, and support remain available. Turning
+          promotional texts off is a separate choice above.
+        </p>
+        <form
+          className="member-join-form"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            const form = new FormData(event.currentTarget);
+            const requestKey = withdrawalKey.current || crypto.randomUUID();
+            withdrawalKey.current = requestKey;
+            setOperation("withdrawal");
+            setFeedback(null);
+            try {
+              const result = await action({
+                action: "withdraw",
+                reason: form.get("reason"),
+                requestKey,
+              });
+              withdrawalKey.current = null;
+              setFeedback({
+                kind: "status",
+                text: result.message || "Withdrawal recorded.",
+              });
+              router.refresh();
+            } catch (error) {
+              setFeedback({
+                kind: "error",
+                text:
+                  error instanceof Error ? error.message : "Please try again.",
+              });
+            } finally {
+              setOperation(null);
+            }
+          }}
+        >
+          <label>
+            Note for Uptick support
+            <textarea
+              name="reason"
+              minLength={10}
+              maxLength={1500}
+              required
+              disabled={busy}
+              defaultValue="I choose to stop receiving future weekly benefits."
+              onChange={() => {
+                withdrawalKey.current = null;
+              }}
+            />
+          </label>
+          <label className="member-consent">
+            <input
+              type="checkbox"
+              required
+              disabled={busy}
+              onChange={() => {
+                withdrawalKey.current = null;
+              }}
+            />
+            <span>I want to withdraw from future weekly releases.</span>
+          </label>
+          <button type="submit" className="button secondary" disabled={busy}>
+            {operation === "withdrawal"
+              ? "Recording withdrawal…"
+              : "Confirm withdrawal"}
+          </button>
+        </form>
+      </details>
       <h2>Keep access without SMS</h2>
       <p>
         Create one-use recovery codes, print or save them somewhere private, and
         use one with your current phone number if this browser session is lost.
       </p>
       <button
+        type="button"
         className="button secondary"
         disabled={busy}
         onClick={async () => {
-          setBusy(true);
-          setMessage("");
+          setOperation("recovery-codes");
+          setFeedback(null);
           try {
             const result = await action({ action: "recovery-codes" });
             setCodes(result.codes || []);
-            setMessage(
-              "These codes replace any older unused codes. Each works once.",
-            );
+            setFeedback({
+              kind: "status",
+              text: "These codes replace any older unused codes. Each works once.",
+            });
           } catch (error) {
-            setMessage(error instanceof Error ? error.message : "Try again.");
+            setFeedback({
+              kind: "error",
+              text: error instanceof Error ? error.message : "Try again.",
+            });
           } finally {
-            setBusy(false);
+            setOperation(null);
           }
         }}
       >
-        {busy ? "Creating…" : "Create new recovery codes"}
+        {operation === "recovery-codes"
+          ? "Creating…"
+          : "Create new recovery codes"}
       </button>
       {codes.length > 0 && (
         <div className="member-share-result">
@@ -562,21 +667,44 @@ export function MemberAccountControls() {
               </li>
             ))}
           </ol>
-          <button className="text-link" onClick={() => window.print()}>
+          <button
+            type="button"
+            className="text-link"
+            disabled={busy}
+            onClick={() => window.print()}
+          >
             Print these codes
           </button>
         </div>
       )}
-      {message && <p role="status">{message}</p>}
+      {feedback?.kind === "status" && <p role="status">{feedback.text}</p>}
+      {feedback?.kind === "error" && (
+        <p ref={errorMessage} tabIndex={-1} role="alert" className="form-error">
+          {feedback.text}
+        </p>
+      )}
       <button
+        type="button"
         className="text-link"
+        disabled={busy}
         onClick={async () => {
-          const result = await action({ action: "signout" });
-          router.push(result.redirect || "/join");
-          router.refresh();
+          setOperation("signout");
+          setFeedback(null);
+          try {
+            const result = await action({ action: "signout" });
+            router.push(result.redirect || "/join");
+            router.refresh();
+          } catch (error) {
+            setFeedback({
+              kind: "error",
+              text: error instanceof Error ? error.message : "Try again.",
+            });
+          } finally {
+            setOperation(null);
+          }
         }}
       >
-        Sign out of this browser
+        {operation === "signout" ? "Signing out…" : "Sign out of this browser"}
       </button>
     </section>
   );
@@ -683,13 +811,23 @@ export function NavigationLinks({
   longitude,
   supplyId,
   passToken,
+  available = true,
 }: {
   address: string;
   latitude?: string | number | null;
   longitude?: string | number | null;
   supplyId?: string;
   passToken?: string;
+  available?: boolean;
 }) {
+  const [error, setError] = useState("");
+  if (!available)
+    return (
+      <p role="status" className="fine">
+        This destination is temporarily unavailable. Please do not travel there.
+        Your benefit remains recorded; contact Uptick support for recovery.
+      </p>
+    );
   const links = navigationOptions({ address, latitude, longitude });
   if (!links.length)
     return (
@@ -709,19 +847,30 @@ export function NavigationLinks({
             href={link.url}
             target="_blank"
             rel="noopener noreferrer"
-            onClick={() => {
-              if (passToken)
-                void action({
-                  action: "pass-directions",
-                  token: passToken,
-                  provider: link.provider,
-                }).catch(() => {});
-              else if (supplyId)
-                void action({
-                  action: "directions",
-                  supplyId,
-                  provider: link.provider,
-                }).catch(() => {});
+            onClick={async (event) => {
+              event.preventDefault();
+              setError("");
+              try {
+                if (passToken)
+                  await action({
+                    action: "pass-directions",
+                    token: passToken,
+                    provider: link.provider,
+                  });
+                else if (supplyId)
+                  await action({
+                    action: "directions",
+                    supplyId,
+                    provider: link.provider,
+                  });
+                window.location.assign(link.url);
+              } catch (cause) {
+                setError(
+                  cause instanceof Error
+                    ? cause.message
+                    : "Directions are temporarily unavailable.",
+                );
+              }
             }}
           >
             {link.name}
@@ -730,6 +879,7 @@ export function NavigationLinks({
           </a>
         ))}
       </div>
+      {error && <p role="alert">{error}</p>}
       <p className="fine">
         Opens your chosen map. Uptick doesn’t track your trip.
       </p>

@@ -1,5 +1,7 @@
 import { getActor } from "@/lib/auth";
 import { getDb } from "@/lib/db";
+import { amendPilotSupply } from "@/lib/pilot-supply-amendments";
+import { recordMemberServiceEvent } from "@/lib/member-service";
 import {
   apiError,
   assertSameOrigin,
@@ -30,6 +32,11 @@ export async function POST(request: Request) {
     let message = "Saved. The pilot record has been updated.",
       redirect: string | undefined;
     switch (body.action) {
+      case "member-service":
+        await recordMemberServiceEvent(db, actor, body);
+        message =
+          "Account status recorded. Original cohort and issued benefit history are preserved.";
+        break;
       case "run-create": {
         const runId = await createPilotRun(db, actor, body);
         redirect = `/operator/pilot?run=${encodeURIComponent(runId)}`;
@@ -37,6 +44,11 @@ export async function POST(request: Request) {
       }
       case "supply-commit":
         await commitPilotSupply(db, actor, body);
+        break;
+      case "supply-amend":
+        await amendPilotSupply(db, actor, body);
+        message =
+          "Future supply replaced. Original commitment and issued history are preserved. Any pending commercial version still requires approval.";
         break;
       case "admit": {
         const result = await admitPilotMember(db, actor, body);

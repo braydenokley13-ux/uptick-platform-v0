@@ -335,7 +335,22 @@ export async function verifyNetworkPostgres(db: DB) {
   );
   await prepareMembershipWeek(db, 2);
   assert.ok(prepared.reduce((n, value) => n + value, 0) <= 4);
-  assert.equal(await count("member_messages"), 4);
+  assert.equal(
+    (
+      await db.query<{ n: number }>(
+        "select count(*)::int n from member_messages where purpose='drop'",
+      )
+    )[0].n,
+    4,
+  );
+  assert.equal(
+    (
+      await db.query<{ n: number }>(
+        "select count(*)::int n from member_messages where purpose='opt_in_confirmation'",
+      )
+    )[0].n,
+    4,
+  );
   assert.equal(
     (await db.query("select id from member_access where purpose='drop'"))
       .length,

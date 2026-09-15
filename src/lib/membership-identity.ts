@@ -1,10 +1,13 @@
 import type { DB } from "./db";
+import { assertMemberAccountAccess } from "./member-service";
+import { assertPrivacyEnrollmentReady } from "./privacy-admin";
 import { rateLimit } from "./domain";
 import { appUrl, localMode } from "./config";
 import { id, token, hash, encrypt, normalizePhone } from "./security";
 import { RequestError } from "./http";
 import { demandEvent } from "./demand-events";
 import { uptickEnvironment } from "./environment";
+import { demoMode, assertDemoEnvironment } from "./demo-guard";
 import { createMemberSession, memberSession } from "./member-session";
 import {
   MARKETING_SMS_DISCLOSURE,
@@ -57,7 +60,11 @@ const zip = (value: string) => {
   return value;
 };
 
-function enrollmentDataKind() {
+function enrollmentDataKind(existingVerifiedMember = false) {
+  if (demoMode()) {
+    assertDemoEnvironment();
+    return "demo" as const;
+  }
   const environment = uptickEnvironment();
   if (environment === "development" && localMode()) return "internal" as const;
   if (environment === "staging") return "internal" as const;
@@ -78,7 +85,8 @@ function enrollmentDataKind() {
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(process.env.SUPPORT_EMAIL || "");
   if (
     !canonical ||
-    process.env.PILOT_ENROLLMENT_ENABLED !== "true" ||
+    (!existingVerifiedMember &&
+      process.env.PILOT_ENROLLMENT_ENABLED !== "true") ||
     !legalIdentity
   )
     throw new RequestError(
@@ -134,8 +142,11 @@ export async function requestMemberAccess(
   },
 ) {
   const phone = normalizePhone(input.phone);
+  if (demoMode() && !/^\+1\d{3}55501\d{2}$/.test(phone))
+    throw new RequestError(
+      "Use a fictional demo number with 555-0100 through 555-0199. No real phone is needed.",
+    );
   await rateLimit(db, `member-access:${hash(phone)}`, 6, 3600);
-  const dataKind = enrollmentDataKind();
   // Existing local fixtures predate the adult field. Hosted/public enrollment
   // always supplies an explicit true value and cannot use this local fixture path.
   const ageAttested =
@@ -155,6 +166,15 @@ export async function requestMemberAccess(
       "select * from uptick_members where customer_id=$1 for update",
       [customer.id],
     );
+    const existingVerifiedMember =
+      !!member?.verified_at && member.data_kind === "real";
+    const dataKind = enrollmentDataKind(existingVerifiedMember);
+    if (dataKind === "real" && !existingVerifiedMember) {
+      await assertPrivacyEnrollmentReady(tx);
+      await (
+        await import("./release-readiness")
+      ).assertRealEnrollmentCommissioned(tx);
+    }
     if (!member && !input.homeZip)
       throw new RequestError("Enter your home ZIP to join Uptick.");
     const homeZip = zip(input.homeZip || member.home_zip),
@@ -187,6 +207,7 @@ export async function requestMemberAccess(
         dedupKey: `requested:${member.id}`,
       });
     }
+    await assertMemberAccountAccess(tx, member.id);
     const credential = token();
     const [access] = await tx.query<Access>(
       `insert into member_access(id,member_id,token_hash,token_encrypted,expires_at,consent_requested,age_attested,disclosure,home_zip,work_zip,source_id)
@@ -264,6 +285,7 @@ export async function memberAccess(
     [memberId],
   );
   if (!member) throw new RequestError("This membership is unavailable.", 404);
+  await assertMemberAccountAccess(db, member.id);
   return { access, member };
 }
 
@@ -272,6 +294,9 @@ async function confirmMemberAccessInTransaction(
   credential: string,
   acceptMarketing: boolean,
 ) {
+  await tx.query(
+    "select singleton from growth_program_coordination where singleton=true for update",
+  );
   const access = await accessByCredential(tx, credential);
   if (!access || access.purpose !== "access")
     throw new RequestError("This private Uptick link is not valid.", 404);
@@ -282,6 +307,7 @@ async function confirmMemberAccessInTransaction(
     [access.member_id],
   );
   if (!member) throw new RequestError("This membership is unavailable.", 404);
+  await assertMemberAccountAccess(tx, member.id);
   if (!access.confirmed_at) {
     await tx.query("update member_access set confirmed_at=now() where id=$1", [
       access.id,
@@ -327,6 +353,15 @@ async function confirmMemberAccessInTransaction(
         "update uptick_members set age_confirmed_at=coalesce(age_confirmed_at,now()) where id=$1",
         [member.id],
       );
+      if (access.consent_requested)
+        await recordMemberConsent(
+          tx,
+          member.id,
+          acceptMarketing,
+          "private-membership-confirmation",
+          access.disclosure,
+          acceptMarketing ? "opt_in" : "declined",
+        );
       await demandEvent(tx, {
         kind: "member_access_confirmed",
         memberId: member.id,
@@ -359,6 +394,9 @@ export async function exchangeMemberAccess(
   acceptMarketing: boolean,
 ) {
   return db.transaction(async (tx) => {
+    await tx.query(
+      "select singleton from growth_program_coordination where singleton=true for update",
+    );
     const access = await accessByCredential(tx, credential);
     if (!access || access.purpose !== "access")
       throw new RequestError("This private Uptick link is not valid.", 404);
@@ -393,11 +431,21 @@ export async function recordMemberConsent(
   disclosure = MEMBERSHIP_DISCLOSURE,
   action: ConsentAction = accepted ? "opt_in" : "opt_out",
 ) {
+  // Callers hold a transaction. Serializing the member makes concurrent web
+  // preference updates observe the last committed promotional choice.
+  await db.query("select id from uptick_members where id=$1 for update", [
+    memberId,
+  ]);
+  const [previous] = await db.query<{ accepted: boolean }>(
+    "select accepted from member_consents where member_id=$1 and consent_purpose='promotional_membership_sms' order by sequence desc limit 1",
+    [memberId],
+  );
+  const consentId = id();
   await db.query(
     `insert into member_consents(id,member_id,accepted,disclosure_version,disclosure,source_ui,consent_purpose,consent_action)
      values($1,$2,$3,$4,$5,$6,$7,$8)`,
     [
-      id(),
+      consentId,
       memberId,
       accepted,
       MEMBERSHIP_DISCLOSURE_VERSION,
@@ -407,6 +455,36 @@ export async function recordMemberConsent(
       action,
     ],
   );
+  if (accepted && action === "opt_in" && !previous?.accepted) {
+    const environment = uptickEnvironment();
+    if (!environment)
+      throw new RequestError(
+        "Set a valid environment before recording promotional consent.",
+      );
+    const [recipient] = await db.query<{ phone: string }>(
+      "select c.phone from uptick_members m join customers c on c.id=m.customer_id where m.id=$1",
+      [memberId],
+    );
+    await db.query(
+      `insert into member_messages(id,member_id,purpose,consent_id,sender_id,timezone,scheduled_at,expires_at,environment,recipient_encrypted,recipient_hint)
+      select $1,m.id,'opt_in_confirmation',$3,(select id from member_senders where active),'America/New_York',now(),now()+interval '24 hours',$4,$5,$6
+      from uptick_members m where m.id=$2 and m.verified_at is not null and m.state='active'
+      on conflict(consent_id) do nothing`,
+      [
+        id(),
+        memberId,
+        consentId,
+        environment,
+        encrypt(recipient.phone),
+        recipient.phone.slice(-4),
+      ],
+    );
+  }
+  if (!accepted)
+    await db.query(
+      "update member_messages set state='suppressed',suppression_reason='Promotional consent withdrawn.',updated_at=now() where member_id=$1 and purpose in ('drop','opt_in_confirmation') and state='queued'",
+      [memberId],
+    );
 }
 
 export async function memberPreferences(
@@ -426,6 +504,16 @@ export async function memberPreferences(
        where id=$1`,
       [member.id, homeZip, workZip, await resolveMarket(tx, homeZip, workZip)],
     );
+    if (member.home_zip !== homeZip || member.work_zip !== workZip)
+      await tx.query(
+        "insert into member_service_events(id,member_id,kind,reason,actor_id,actor_kind,request_key) values($1,$2,'geography_changed',$3,$2,'member',$4)",
+        [
+          id(),
+          member.id,
+          "Member updated home/work ZIP preferences; existing pilot obligations are preserved.",
+          id(),
+        ],
+      );
     await recordMemberConsent(
       tx,
       member.id,

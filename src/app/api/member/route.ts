@@ -44,6 +44,9 @@ import {
   revokeMemberSession,
 } from "@/lib/member-session";
 import { reportMemberFulfillmentIncident } from "@/lib/pilot-promise";
+import { recordMemberServiceEvent } from "@/lib/member-service";
+import { assertLocationAvailable } from "@/lib/location-outages";
+import { createPrivacyRequest } from "@/lib/privacy-admin";
 export const runtime = "nodejs";
 const credentialSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
 async function setMemberSessionCookie(value: string) {
@@ -75,6 +78,8 @@ export async function POST(request: Request) {
           "recovery-codes",
           "recover",
           "signout",
+          "withdraw",
+          "privacy-request",
           "support-queue",
           "resolve-support",
         ])
@@ -117,7 +122,10 @@ export async function POST(request: Request) {
           "Membership text requests are not available in this environment yet.",
           503,
         );
-      const environmentBlock = smsEnvironmentBlock(normalizePhone(input.phone));
+      const environmentBlock = smsEnvironmentBlock(
+        normalizePhone(input.phone),
+        "access",
+      );
       if (environmentBlock)
         throw new RequestError(
           "This number is not enabled for membership text requests in this environment.",
@@ -193,6 +201,10 @@ export async function POST(request: Request) {
       const passCredential = credentialSchema.parse(data.token);
       const pass = await networkPass(db, passCredential);
       if (!pass) throw new RequestError("Open your Uptick pass.", 403);
+      await assertLocationAvailable(
+        db,
+        pass.recovery?.target_location_id || pass.supply.location_id,
+      );
       const provider = z.enum(["apple", "google", "waze"]).parse(data.provider);
       await demandEvent(db, {
         kind: "directions_requested",
@@ -222,6 +234,35 @@ export async function POST(request: Request) {
     const credential = await accountCredential();
     await rateLimit(db, `member-session:${hash(credential)}`, 120, 3600);
     const { member } = await memberAccess(db, credential, true);
+    if (action === "privacy-request") {
+      await createPrivacyRequest(
+        db,
+        { memberId: member.id },
+        { ...data, memberId: member.id },
+      );
+      return reply({
+        ok: true,
+        message:
+          "Your privacy request is recorded. Uptick support will verify the request before taking action.",
+      });
+    }
+    if (action === "withdraw") {
+      await recordMemberServiceEvent(
+        db,
+        { memberId: member.id },
+        {
+          memberId: member.id,
+          kind: "withdrawn",
+          reason: data.reason,
+          requestKey: data.requestKey,
+        },
+      );
+      return reply({
+        ok: true,
+        message:
+          "You have withdrawn from future weekly releases. Already-issued benefits and support remain available. Contact Uptick support if you wish to return.",
+      });
+    }
     if (action === "signout") {
       await revokeMemberSession(db, credential);
       (await cookies()).delete(MEMBER_SESSION_COOKIE);
@@ -336,6 +377,8 @@ export async function POST(request: Request) {
     );
     if (!context)
       throw new RequestError("This Drop is not in your Uptick choices.", 403);
+    if (action === "directions")
+      await assertLocationAvailable(db, context.location_id);
     const provider =
       action === "directions"
         ? z.enum(["apple", "google", "waze"]).parse(data.provider)

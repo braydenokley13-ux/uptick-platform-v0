@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   ArrowRight,
   LoaderCircle,
@@ -95,7 +96,6 @@ export function LoginForm({ local }: { local: boolean }) {
         action: "login",
         email: f.get("email"),
         password: f.get("password"),
-        mfaCode: f.get("mfaCode"),
       });
       router.push(r.redirect);
     } catch (e) {
@@ -126,16 +126,6 @@ export function LoginForm({ local }: { local: boolean }) {
             autoComplete="current-password"
           />
         </label>
-        <label>
-          Authenticator code (operators with MFA)
-          <input
-            name="mfaCode"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            pattern="[0-9]{6}"
-            maxLength={6}
-          />
-        </label>
         {error && (
           <p role="alert" className="error">
             {error}
@@ -146,6 +136,12 @@ export function LoginForm({ local }: { local: boolean }) {
           <ArrowRight size={17} />
         </button>
       </form>
+      {!local && (
+        <p>
+          <Link href="/account/recovery">Forgot your password?</Link> ·{" "}
+          <Link href="/account/security">Account security</Link>
+        </p>
+      )}
       {local && (
         <div className="local-access">
           <p className="eyebrow">LOCAL DEVELOPMENT · SAMPLE BUSINESSES</p>

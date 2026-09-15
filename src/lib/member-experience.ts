@@ -1,4 +1,5 @@
 import type { DB } from "./db";
+import { memberServiceStatus } from "./member-service";
 import { id, token, hash, encrypt, decrypt, maskPhone } from "./security";
 import { audit, authorize, weekKey, type Actor } from "./domain";
 import { RequestError } from "./http";
@@ -62,9 +63,11 @@ export async function memberHome(
 ) {
   const viewedAt = asOf.toISOString();
   const identity = await memberAccess(db, credential);
+  const serviceStatus = await memberServiceStatus(db, identity.member.id);
   if (!identity.access.confirmed_at)
     return {
       ...identity,
+      serviceStatus,
       current: null,
       saved: null,
       shareableSupplyId: undefined,
@@ -130,7 +133,7 @@ export async function memberHome(
        join claims c on c.id=mc.claim_id
        join member_allocations a on a.id=mc.allocation_id
        join market_cells k on k.id=a.market_id
-      where r.member_id=$1 and r.state='issued' and r.expires_at>$2::timestamptz
+      where r.member_id=$1 and r.superseded_at is null and r.state='issued' and r.expires_at>$2::timestamptz
       order by r.issued_at desc,r.id desc limit 10`,
     [identity.member.id, viewedAt],
   );
@@ -162,6 +165,7 @@ export async function memberHome(
     : current?.options[0];
   return {
     ...identity,
+    serviceStatus,
     current,
     saved,
     shareableSupplyId: shareable?.shareable ? shareable.id : undefined,
@@ -254,7 +258,10 @@ export async function memberSupportQueue(db: DB, actor: Actor) {
   };
   const redactCredentials = (value: string | null) =>
     value
-      ? value.replace(/\b[A-Za-z0-9_-]{43}\b/g, "[private credential redacted]")
+      ? value.replace(
+          /(?<![A-Za-z0-9_-])[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/g,
+          "[private credential redacted]",
+        )
       : null;
   return rows.map((row) => ({
     id: row.id,

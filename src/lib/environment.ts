@@ -43,7 +43,11 @@ export function simulatedTransport() {
     process.env.SMS_TRANSPORT === "development"
   );
 }
-export function smsEnvironmentBlock(phone?: string) {
+export type MemberSmsClass = "access" | "promotion";
+export function smsEnvironmentBlock(
+  phone?: string,
+  messageClass?: MemberSmsClass,
+) {
   const environment = uptickEnvironment();
   if (!environment) return "Set a valid UPTICK_ENV before delivery.";
   if (simulatedTransport()) return null;
@@ -60,6 +64,17 @@ export function smsEnvironmentBlock(phone?: string) {
     process.env.PRODUCTION_DELIVERY_ENABLED !== "true"
   )
     return "Production delivery is not explicitly enabled.";
+  if (
+    messageClass &&
+    process.env[
+      messageClass === "access"
+        ? "MEMBER_ACCESS_SMS_ENABLED"
+        : "MEMBER_PROMOTIONAL_SMS_ENABLED"
+    ] !== "true"
+  )
+    return messageClass === "access"
+      ? "Requested access SMS is not enabled."
+      : "Promotional membership SMS is not enabled.";
   return null;
 }
 export function configuredSmsEnvironment() {

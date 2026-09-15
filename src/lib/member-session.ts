@@ -2,6 +2,7 @@ import type { DB } from "./db";
 import { localMode } from "./config";
 import { hash, id, normalizePhone, token } from "./security";
 import { RequestError } from "./http";
+import { assertMemberAccountAccess } from "./member-service";
 
 export const MEMBER_SESSION_COOKIE = "uptick-member-access";
 export const MEMBER_SESSION_SECONDS = 30 * 24 * 60 * 60;
@@ -34,6 +35,7 @@ export async function createMemberSession(
   memberId: string,
   sourceAccessId: string | null = null,
 ) {
+  await assertMemberAccountAccess(db, memberId);
   const credential = token();
   const [session] = await db.query<MemberSession>(
     `insert into member_sessions(id,member_id,source_access_id,token_hash,expires_at)

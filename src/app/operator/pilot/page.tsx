@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { randomUUID } from "node:crypto";
 import { requireActor } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import {
@@ -33,6 +34,45 @@ export default async function PilotPage({
     query = await searchParams,
     data = await pilotOperations(db, actor, query.run);
   const { run, detail } = data;
+  const [admissionChoices, programChoices, classificationChoices] =
+    await Promise.all([
+      db.query<{
+        id: string;
+        phone_hint: string;
+        home_zip: string;
+        data_kind: string;
+      }>(
+        "select m.id,right(c.phone,4) phone_hint,m.home_zip,m.data_kind from uptick_members m join customers c on c.id=m.customer_id where m.verified_at is not null and m.state='active' and m.market_id=$1 and m.data_kind=$2 and not exists(select 1 from member_erasure_records e where e.member_id=m.id) order by m.created_at desc limit 500",
+        [run?.market_id || null, run?.data_kind || null],
+      ),
+      db.query<{ id: string; name: string; buyer: string }>(
+        "select p.id,v.name,o.name buyer from growth_programs p join growth_program_versions v on v.program_id=p.id and v.version=p.current_version join organizations o on o.id=p.buyer_organization_id where p.market_id=$1 order by v.name",
+        [run?.market_id || null],
+      ),
+      db.query<{ entity: string; id: string; name: string; data_kind: string }>(
+        "select 'market_cells' entity,id,name,data_kind from market_cells union all select 'acquisition_partners',id,name,data_kind from acquisition_partners union all select 'acquisition_sources',id,name,data_kind from acquisition_sources order by entity,name",
+      ),
+    ]);
+  const payers = await db.query<{ id: string; name: string }>(
+    "select id,name from organizations where ($1::text<>'real' or not is_demo) order by name",
+    [run?.data_kind || "internal"],
+  );
+  const amendments = run
+    ? await db.query<{
+        id: string;
+        week_key: string;
+        previous: string;
+        replacement: string;
+        reason: string;
+        financial_evidence: string;
+        program_implications: string;
+        protection_review: string;
+        created_by: string;
+      }>(
+        "select a.*,old.name previous,next.name replacement from pilot_supply_amendments a join network_drop_supplies os on os.id=a.previous_supply_id join organizations old on old.id=os.organization_id join network_drop_supplies ns on ns.id=a.replacement_supply_id join organizations next on next.id=ns.organization_id where a.run_id=$1 order by a.created_at",
+        [run.id],
+      )
+    : [];
   return (
     <Shell actor={actor} active="pilot" name={run?.name || "Pilot operations"}>
       <div className="network-operations">
@@ -118,11 +158,19 @@ export default async function PilotPage({
               />
               <Metric
                 label="REMAINING ADMISSIONS"
-                value={Math.max(
-                  0,
-                  detail.capacity.capacity - detail.admissions.length,
-                )}
-                note={`Four-week capacity ${detail.capacity.capacity} · hard cap ${run.hard_cap}`}
+                value={
+                  run.cohort_frozen_at || run.state !== "enrolling"
+                    ? 0
+                    : Math.max(
+                        0,
+                        detail.capacity.capacity - detail.admissions.length,
+                      )
+                }
+                note={
+                  run.cohort_frozen_at
+                    ? "Admissions closed · original cohort is frozen"
+                    : `Four-week capacity ${detail.capacity.capacity} · hard cap ${run.hard_cap}`
+                }
               />
               <Metric
                 label="WAITLIST"
@@ -223,8 +271,18 @@ export default async function PilotPage({
                 </p>
                 <PilotForm action="admit" button="Check capacity and admit">
                   <label>
-                    Protected member record ID
-                    <input name="memberId" required />
+                    Verified member
+                    <select name="memberId" required defaultValue="">
+                      <option value="" disabled>
+                        Choose the member requesting admission
+                      </option>
+                      {admissionChoices.map((member) => (
+                        <option key={member.id} value={member.id}>
+                          Phone ending {member.phone_hint} · ZIP{" "}
+                          {member.home_zip} · {member.data_kind}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                 </PilotForm>
               </details>
@@ -317,6 +375,149 @@ export default async function PilotPage({
                   Prepare and publish this week’s backed benefits →
                 </Link>
               </p>
+              <details>
+                <summary>Replace unreleased future-week supply</summary>
+                <p>
+                  First prepare the replacement’s exact terms, stock, staff
+                  readiness and fallback. For paid supply, link the replacement
+                  to a prospective version of the same Growth Program. Save this
+                  amendment, then approve that version before the week is
+                  published.
+                </p>
+                <PilotForm
+                  action="supply-amend"
+                  extra={{ runId: run.id, requestKey: randomUUID() }}
+                  button="Record future-week replacement"
+                >
+                  <label>
+                    Future week
+                    <select name="weekKey" required>
+                      {pilotWeeks(run).map((week) => (
+                        <option key={week}>{week}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Current commitment
+                    <select name="previousSupplyId" required>
+                      <option value="">
+                        Choose the commitment being replaced
+                      </option>
+                      {detail.plans.map((plan) => (
+                        <option key={plan.supply_id} value={plan.supply_id}>
+                          {plan.week_key} · {plan.merchant} · {plan.reward}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Replacement supply
+                    <select name="replacementSupplyId" required>
+                      <option value="">
+                        Choose prepared, uncommitted supply
+                      </option>
+                      {data.supplies
+                        .filter(
+                          (supply) =>
+                            supply.market_id === run.market_id &&
+                            supply.data_kind === run.data_kind &&
+                            supply.state === "approved" &&
+                            !supply.week_key,
+                        )
+                        .map((supply) => (
+                          <option key={supply.id} value={supply.id}>
+                            {supply.merchant} · {supply.reward} ·{" "}
+                            {supply.quantity} units
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  <label>
+                    Replacement units
+                    <input
+                      name="quantity"
+                      type="number"
+                      min={1}
+                      max={200}
+                      required
+                    />
+                  </label>
+                  <label>
+                    Reason
+                    <textarea
+                      name="reason"
+                      minLength={10}
+                      maxLength={1500}
+                      required
+                    />
+                  </label>
+                  <label>
+                    Accountable payer
+                    <select name="payerOrganizationId" required>
+                      <option value="">Choose payer</option>
+                      {payers.map((organization) => (
+                        <option key={organization.id} value={organization.id}>
+                          {organization.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Costs and credits
+                    <textarea
+                      name="financialEvidence"
+                      placeholder="Record the agreed cost, or explain why it stays unchanged. Link any separately recorded credit."
+                      minLength={10}
+                      maxLength={1500}
+                      required
+                    />
+                  </label>
+                  <label>
+                    Growth Program implications
+                    <textarea
+                      name="programImplications"
+                      placeholder="Name the prospective Program version and approval needed, or record that this remains organic supply."
+                      minLength={10}
+                      maxLength={1500}
+                      required
+                    />
+                  </label>
+                  <label>
+                    Commercial protection review
+                    <textarea
+                      name="protectionReview"
+                      placeholder="Record how any location/category protection is handled. Payment cannot override suitability or existing obligations."
+                      minLength={10}
+                      maxLength={1500}
+                      required
+                    />
+                  </label>
+                </PilotForm>
+              </details>
+              {amendments.length > 0 && (
+                <details>
+                  <summary>
+                    View preserved supply amendment history ({amendments.length}
+                    )
+                  </summary>
+                  {amendments.map((amendment) => (
+                    <article key={amendment.id}>
+                      <h3>
+                        {amendment.week_key}: {amendment.previous} →{" "}
+                        {amendment.replacement}
+                      </h3>
+                      <p>{amendment.reason}</p>
+                      <p>Costs: {amendment.financial_evidence}</p>
+                      <p>Program: {amendment.program_implications}</p>
+                      <p>Protection: {amendment.protection_review}</p>
+                      <p className="fine">
+                        Recorded by {amendment.created_by}. Original commitment
+                        remains in history.
+                      </p>
+                    </article>
+                  ))}
+                </details>
+              )}
             </section>
             <section id="partners" className="panel network-panel">
               <p className="eyebrow">PARTNER DISTRIBUTION</p>
@@ -528,8 +729,15 @@ export default async function PilotPage({
                       <input name="occurredOn" type="date" required />
                     </label>
                     <label>
-                      Growth Program ID, if relevant
-                      <input name="programId" />
+                      Growth Program, if relevant
+                      <select name="programId" defaultValue="">
+                        <option value="">No Growth Program applies</option>
+                        {programChoices.map((program) => (
+                          <option key={program.id} value={program.id}>
+                            {program.name} · {program.buyer}
+                          </option>
+                        ))}
+                      </select>
                     </label>
                     <label>
                       Evidence/reference
@@ -789,32 +997,48 @@ export default async function PilotPage({
               a real pilot record. Records with existing member or pilot
               obligations cannot be relabeled here.
             </p>
-            <PilotForm action="classify" button="Record classification">
-              <label>
-                Record type
-                <select name="entity">
-                  <option value="market_cells">Market Cell</option>
-                  <option value="acquisition_partners">Partner</option>
-                  <option value="acquisition_sources">Source</option>
-                </select>
-              </label>
-              <label>
-                Record ID
-                <input name="entityId" required />
-              </label>
-              <label>
-                Classification
-                <select name="dataKind">
-                  {dataKinds.map((k) => (
-                    <option key={k}>{k}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Evidence
-                <input name="evidence" required />
-              </label>
-            </PilotForm>
+            {(
+              [
+                ["market_cells", "Market Cell"],
+                ["acquisition_partners", "Partner"],
+                ["acquisition_sources", "Source"],
+              ] as const
+            ).map(([entity, entityLabel]) => (
+              <PilotForm
+                key={entity}
+                action="classify"
+                extra={{ entity }}
+                button={`Record ${entityLabel.toLowerCase()} classification`}
+              >
+                <label>
+                  {entityLabel}
+                  <select name="entityId" required defaultValue="">
+                    <option value="" disabled>
+                      Choose the {entityLabel.toLowerCase()}
+                    </option>
+                    {classificationChoices
+                      .filter((record) => record.entity === entity)
+                      .map((record) => (
+                        <option key={record.id} value={record.id}>
+                          {record.name} · {record.data_kind}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <label>
+                  Classification
+                  <select name="dataKind">
+                    {dataKinds.map((k) => (
+                      <option key={k}>{k}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Evidence
+                  <input name="evidence" required />
+                </label>
+              </PilotForm>
+            ))}
           </details>
         </section>
       </div>
