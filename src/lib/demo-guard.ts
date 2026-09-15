@@ -1,7 +1,17 @@
 import { resolve, basename, dirname } from "node:path";
 import { lstatSync, realpathSync, readFileSync } from "node:fs";
+import { cloudDemoMode, assertCloudDemoEnvironment } from "./cloud-demo-guard";
 
 export const demoMode = () => process.env.UPTICK_DEMO_MODE === "true";
+export const sampleDemoMode = () => demoMode() || cloudDemoMode();
+export function assertSampleDemoEnvironment() {
+  if (cloudDemoMode()) return assertCloudDemoEnvironment();
+  return assertDemoEnvironment();
+}
+export function assertSampleDemoStorage() {
+  if (cloudDemoMode()) return assertCloudDemoEnvironment();
+  return assertDemoStorage();
+}
 
 // Run before choosing a database or transport, including when a DB is cached.
 export function assertDemoEnvironment(env: NodeJS.ProcessEnv = process.env) {

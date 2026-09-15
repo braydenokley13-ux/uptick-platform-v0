@@ -1,6 +1,9 @@
 import type { DB } from "./db";
 import type { Actor } from "./domain";
-import { assertDemoEnvironment, assertDemoStorage } from "./demo-guard";
+import {
+  assertSampleDemoEnvironment as assertDemoEnvironment,
+  assertSampleDemoStorage as assertDemoStorage,
+} from "./demo-guard";
 import { token } from "./security";
 import { marketWeekWindow } from "./network";
 import {

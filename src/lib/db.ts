@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { localMode } from "./config";
 import { demoMode, assertDemoStorage } from "./demo-guard";
+import { cloudDemoMode } from "./cloud-demo-guard";
 export type Row = Record<string, unknown>;
 export interface DB {
   query<T = Row>(sql: string, params?: unknown[]): Promise<T[]>;
@@ -40,6 +41,10 @@ function liteAdapter(client: PGlite): DB {
 }
 const globalDb = globalThis as unknown as { uptickDb?: Promise<DB> };
 export async function getDb() {
+  if (cloudDemoMode()) {
+    const { requestCloudDemoDb } = await import("./cloud-demo-db");
+    return requestCloudDemoDb();
+  }
   if (demoMode()) assertDemoStorage();
   // This reused project is operated only from the canonical deployment. Preview
   // builds may render static content but must not touch shared service records.
@@ -132,7 +137,7 @@ export async function migrate(db: DB) {
     });
   }
 }
-function splitSql(sql: string) {
+export function splitSql(sql: string) {
   const statements: string[] = [];
   let chunk = "";
   let dollar = false;

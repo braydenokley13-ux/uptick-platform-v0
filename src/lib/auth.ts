@@ -7,6 +7,7 @@ import {
   validatedAccountClaims,
 } from "./account-security";
 import { localMode } from "./config";
+import { cloudDemoMode } from "./cloud-demo-guard";
 import { sign, equal, encrypt, decrypt } from "./security";
 import { getDb } from "./db";
 import { pilotPersona, pilotPrincipal } from "./pilot-access";
@@ -38,6 +39,18 @@ export async function setSession(
   refreshToken?: string,
   recoveryOnly = false,
 ) {
+  if (cloudDemoMode()) {
+    if (
+      !["demo-operator", "demo-merchant"].includes(userId) ||
+      accessToken ||
+      refreshToken
+    )
+      throw new RequestError(
+        "Only sample personas are available in Cloud Demo Studio.",
+        403,
+      );
+    await getDb(); // Require the current isolated rehearsal lease before issuing a persona.
+  }
   await writeSession({
     userId,
     accessToken: accessToken ? encrypt(accessToken) : undefined,
@@ -76,6 +89,16 @@ async function verifiedSession(): Promise<Session | null> {
   try {
     const session = await signedSession();
     if (!session) return null;
+    if (cloudDemoMode()) {
+      if (
+        !["demo-operator", "demo-merchant"].includes(session.userId) ||
+        session.accessToken ||
+        session.pilotOrganizationId
+      )
+        return null;
+      await getDb();
+      return session;
+    }
     if (!localMode()) {
       if (
         typeof session.accessToken !== "string" ||

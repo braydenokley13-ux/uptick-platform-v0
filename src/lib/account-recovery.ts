@@ -1,7 +1,7 @@
 import { createClient, type SupportedStorage } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { appUrl, localMode } from "./config";
-import { demoMode } from "./demo-guard";
+import { sampleDemoMode as demoMode } from "./demo-guard";
 import { decrypt, encrypt } from "./security";
 import { RequestError } from "./http";
 import { accountRecoveryOptions } from "./account-security";

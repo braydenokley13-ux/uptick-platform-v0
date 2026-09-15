@@ -7,7 +7,10 @@ import { id, token, hash, encrypt, normalizePhone } from "./security";
 import { RequestError } from "./http";
 import { demandEvent } from "./demand-events";
 import { uptickEnvironment } from "./environment";
-import { demoMode, assertDemoEnvironment } from "./demo-guard";
+import {
+  sampleDemoMode as demoMode,
+  assertSampleDemoEnvironment as assertDemoEnvironment,
+} from "./demo-guard";
 import { createMemberSession, memberSession } from "./member-session";
 import {
   MARKETING_SMS_DISCLOSURE,

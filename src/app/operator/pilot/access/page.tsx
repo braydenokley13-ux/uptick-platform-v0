@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireActor } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { localMode } from "@/lib/config";
+import { cloudDemoMode } from "@/lib/cloud-demo-guard";
 import { Shell } from "@/components/shell";
 import { PageHeading } from "@/components/ui";
 import { PilotForm } from "@/components/pilot-form";
@@ -10,7 +11,7 @@ export const dynamic = "force-dynamic";
 export default async function AccountAccessPage() {
   const actor = await requireActor(true),
     db = await getDb();
-  const local = localMode();
+  const local = localMode() || cloudDemoMode();
   const businesses = await db.query<{ id: string; name: string }>(
     "select id,name from organizations order by name",
   );
@@ -44,7 +45,7 @@ export default async function AccountAccessPage() {
         </p>
         {local ? (
           <section className="panel network-panel">
-            <h2>Local sample identities</h2>
+            <h2>Sample identities</h2>
             <p>
               The isolated demo uses its own sample operator and merchant.
               Hosted account assignment is available only in the connected

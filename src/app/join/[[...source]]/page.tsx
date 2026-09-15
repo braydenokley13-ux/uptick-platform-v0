@@ -9,7 +9,7 @@ import { MemberFrame, PerkIllustration } from "@/components/member-ui";
 import { JoinUptick, RecoverMemberAccess } from "@/components/member-controls";
 import { Badge } from "@/components/ui";
 import Link from "next/link";
-import { demoMode } from "@/lib/demo-guard";
+import { sampleDemoMode as demoMode } from "@/lib/demo-guard";
 export const dynamic = "force-dynamic";
 export default async function JoinPage({
   params,

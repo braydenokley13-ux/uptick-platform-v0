@@ -1,7 +1,10 @@
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { getDb } from "@/lib/db";
-import { demoMode, assertDemoStorage } from "@/lib/demo-guard";
+import {
+  sampleDemoMode as demoMode,
+  assertSampleDemoStorage as assertDemoStorage,
+} from "@/lib/demo-guard";
 import { demoStockout, demoRecovery } from "@/lib/demo-studio";
 import { assertSameOrigin, apiError } from "@/lib/http";
 import { setSession } from "@/lib/auth";

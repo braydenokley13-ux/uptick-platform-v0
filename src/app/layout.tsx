@@ -6,7 +6,10 @@ import "@fontsource/geist-sans/600.css";
 import "@fontsource/geist-mono/400.css";
 import "@fontsource/newsreader/400-italic.css";
 import "./globals.css";
-import { demoMode, assertDemoEnvironment } from "@/lib/demo-guard";
+import {
+  sampleDemoMode as demoMode,
+  assertSampleDemoEnvironment as assertDemoEnvironment,
+} from "@/lib/demo-guard";
 export const metadata: Metadata = {
   title: "Uptick Local — Good things come around",
   description:

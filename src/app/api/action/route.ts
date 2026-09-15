@@ -1,10 +1,14 @@
+import { cloudDemoMode } from "@/lib/cloud-demo-guard";
 import { NextResponse } from "next/server";
 import { accountAuthClient, businessMembership } from "@/lib/account-security";
 import { z } from "zod";
 import { getDb } from "@/lib/db";
 import { seed } from "@/lib/seed";
 import { localMode } from "@/lib/config";
-import { demoMode, assertDemoStorage } from "@/lib/demo-guard";
+import {
+  sampleDemoMode as demoMode,
+  assertSampleDemoStorage as assertDemoStorage,
+} from "@/lib/demo-guard";
 import { getActor, setSession, logoutAccount } from "@/lib/auth";
 import {
   acceptClaim,
@@ -345,7 +349,9 @@ export async function POST(request: Request) {
         })
         .parse(data);
       await db.transaction(async (tx) => {
-        await tx.query("select pg_advisory_xact_lock(73418,1)");
+        await tx.query("select pg_advisory_xact_lock($1,1)", [
+          cloudDemoMode() ? 73419 : 73418,
+        ]);
         if (
           (
             await tx.query(

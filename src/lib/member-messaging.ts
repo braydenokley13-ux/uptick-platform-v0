@@ -1,3 +1,4 @@
+import { cloudDemoMode } from "./cloud-demo-guard";
 import twilio from "twilio";
 import type { DB } from "./db";
 import { memberServiceStatus } from "./member-service";
@@ -84,7 +85,9 @@ export async function configureMemberSender(
       "Enter the Uptick membership Messaging Service and its US sender number.",
     );
   return db.transaction(async (tx) => {
-    await tx.query("select pg_advisory_xact_lock(73418,1)");
+    await tx.query("select pg_advisory_xact_lock($1,1)", [
+      cloudDemoMode() ? 73419 : 73418,
+    ]);
     // A single operator organization lock serializes service replacements.
     await tx.query("select id from organizations where id=$1 for update", [
       actor.organizationId,

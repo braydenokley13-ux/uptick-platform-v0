@@ -5,7 +5,7 @@ import {
 } from "@supabase/supabase-js";
 import { z } from "zod";
 import type { DB } from "./db";
-import { demoMode } from "./demo-guard";
+import { sampleDemoMode as demoMode } from "./demo-guard";
 import { audit, type Actor } from "./domain";
 import { RequestError } from "./http";
 

@@ -3,6 +3,10 @@ import { z } from "zod";
 import { getDb } from "@/lib/db";
 import { localMode } from "@/lib/config";
 import {
+  cloudDemoMode,
+  assertCloudDemoEnvironment,
+} from "@/lib/cloud-demo-guard";
+import {
   assertSameOrigin,
   readJsonBody,
   requestRatePolicy,
@@ -115,8 +119,10 @@ export async function POST(request: Request) {
         })
         .parse(data);
       const readiness = await memberMessagingReadiness(db);
+      if (cloudDemoMode()) assertCloudDemoEnvironment();
       const development =
-        localMode() && process.env.SMS_TRANSPORT === "development";
+        (localMode() || cloudDemoMode()) &&
+        process.env.SMS_TRANSPORT === "development";
       if (!development && (!readiness.ready || readiness.simulated))
         throw new RequestError(
           "Membership text requests are not available in this environment yet.",

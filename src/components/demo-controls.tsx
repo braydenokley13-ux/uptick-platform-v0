@@ -8,9 +8,11 @@ type DemoResponse = { error?: string; redirect?: string };
 export function DemoButton({
   action,
   children,
+  endpoint = "/api/demo",
 }: {
   action: string;
   children: ReactNode;
+  endpoint?: string;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -33,7 +35,7 @@ export function DemoButton({
           try {
             let response: Response;
             try {
-              response = await fetch("/api/demo", {
+              response = await fetch(endpoint, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ action }),
@@ -79,5 +81,57 @@ export function DemoButton({
         </p>
       )}
     </div>
+  );
+}
+
+export function CloudDemoUnlock() {
+  const router = useRouter();
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  return (
+    <form
+      onSubmit={async (event) => {
+        event.preventDefault();
+        setBusy(true);
+        setError("");
+        const form = event.currentTarget;
+        const accessKey = new FormData(form).get("accessKey");
+        try {
+          const response = await fetch("/api/demo/cloud", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "unlock", accessKey }),
+          });
+          const result = await response.json();
+          if (!response.ok)
+            throw Error(result.error || "Could not open the rehearsal.");
+          form.reset();
+          router.push("/demo");
+          router.refresh();
+        } catch (cause) {
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "Could not connect. Try again.",
+          );
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <label htmlFor="demo-access">Founder demo access key</label>
+      <input
+        id="demo-access"
+        name="accessKey"
+        type="password"
+        required
+        maxLength={128}
+        autoComplete="current-password"
+      />
+      <button className="button" disabled={busy}>
+        {busy ? "Opening…" : "Open my rehearsal"}
+      </button>
+      {error && <p role="alert">{error}</p>}
+    </form>
   );
 }
