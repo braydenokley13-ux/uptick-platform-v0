@@ -109,7 +109,7 @@ test("one-time access exchange rejects replay while its revocable session remain
   );
 });
 
-test("a fresh login link cannot rewrite an existing member or silently opt them into marketing", async () => {
+test("a returning member keeps their geography and can explicitly opt in on the private confirmation", async () => {
   const first = await requestMemberAccess(db, {
     phone,
     homeZip: "10583",
@@ -130,7 +130,7 @@ test("a fresh login link cannot rewrite an existing member or silently opt them 
   );
   assert.deepEqual(
     consents.map((consent) => consent.accepted),
-    [false],
+    [false, true],
   );
 });
 
@@ -168,19 +168,23 @@ test("web help carries account context into an operator-only queue without a bea
     consentRequested: false,
   });
   const exchanged = await exchangeMemberAccess(db, requested.credential, false);
+  const leadingHyphenCredential = `-${"a".repeat(42)}`;
+  const trailingHyphenCredential = `${"b".repeat(42)}-`;
   await createMemberSupportRequest(
     db,
     exchanged.credential,
-    `The counter needs help ${exchanged.credential}`,
+    `The counter needs help ${exchanged.credential} ${leadingHyphenCredential} ${trailingHyphenCredential}`,
   );
   const queue = await memberSupportQueue(db, operator);
   assert.equal(queue.length, 1);
   assert.equal(
     queue[0].note,
-    "The counter needs help [private credential redacted]",
+    "The counter needs help [private credential redacted] [private credential redacted] [private credential redacted]",
   );
   assert.equal(queue[0].phoneHint, "••• ••• 0123");
   assert.ok(!JSON.stringify(queue[0]).includes(exchanged.credential));
+  assert.ok(!JSON.stringify(queue[0]).includes(leadingHyphenCredential));
+  assert.ok(!JSON.stringify(queue[0]).includes(trailingHyphenCredential));
   await assert.rejects(
     memberSupportQueue(db, { ...operator, role: "merchant" }),
     /access/,

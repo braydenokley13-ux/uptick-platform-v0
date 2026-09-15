@@ -1,10 +1,15 @@
+import { cloudDemoMode } from "@/lib/cloud-demo-guard";
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { accountAuthClient, businessMembership } from "@/lib/account-security";
 import { z } from "zod";
 import { getDb } from "@/lib/db";
 import { seed } from "@/lib/seed";
 import { localMode } from "@/lib/config";
-import { getActor, setSession, clearSession } from "@/lib/auth";
+import {
+  sampleDemoMode as demoMode,
+  assertSampleDemoStorage as assertDemoStorage,
+} from "@/lib/demo-guard";
+import { getActor, setSession, logoutAccount } from "@/lib/auth";
 import {
   acceptClaim,
   redeem,
@@ -60,8 +65,15 @@ export async function POST(request: Request) {
         typeof data.mode === "string" &&
         ["merchant", "operator", "second"].includes(data.mode)
       ) {
-        await seed(db);
-        await setSession(`local-${data.mode}`);
+        if (demoMode()) {
+          assertDemoStorage();
+          await setSession(
+            data.mode === "operator" ? "demo-operator" : "demo-merchant",
+          );
+        } else {
+          await seed(db);
+          await setSession(`local-${data.mode}`);
+        }
         return NextResponse.json({
           redirect: data.mode === "operator" ? "/operator/pilot" : "/merchant",
         });
@@ -74,65 +86,36 @@ export async function POST(request: Request) {
         10,
         3600,
       );
-      if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY)
-        throw new RequestError(
-          "Account sign-in is temporarily unavailable.",
-          503,
-        );
-      const client = createClient(
-        process.env.SUPABASE_URL,
-        process.env.SUPABASE_ANON_KEY,
-        { auth: { persistSession: false } },
-      );
+      const client = accountAuthClient();
       const { data: auth, error } = await client.auth.signInWithPassword({
         email,
         password,
       });
       if (error || !auth.session)
-        throw Error("Sign-in failed. Check your email and password.");
-      const [member] = await db.query<{ role: string }>(
-        "select role from memberships where user_id=$1 order by role desc limit 1",
-        [auth.user.id],
-      );
-      if (!member)
-        throw Error("Your account has not been assigned business access.");
-      let accessToken = auth.session.access_token;
-      if (
-        member.role === "operator" &&
-        process.env.OPERATOR_MFA_REQUIRED === "true"
-      ) {
-        const { data: factors, error: factorError } =
-          await client.auth.mfa.listFactors();
-        const factor = factors?.totp.find((f) => f.status === "verified");
-        if (factorError || !factor)
-          throw new RequestError(
-            "Enroll and verify an authenticator for this operator account before enabling pilot access.",
-            403,
-          );
-        const code = z
-          .string()
-          .regex(/^\d{6}$/, "Enter the six-digit code from your authenticator.")
-          .parse(data.mfaCode);
-        const { data: verified, error: mfaError } =
-          await client.auth.mfa.challengeAndVerify({
-            factorId: factor.id,
-            code,
-          });
-        if (mfaError || !verified)
-          throw new RequestError(
-            "Authenticator verification failed. Check the current code.",
-            401,
-          );
-        accessToken = verified.access_token;
+        throw new RequestError(
+          "Sign-in failed. Check your email and password.",
+          401,
+        );
+      try {
+        await businessMembership(db, auth.user.id);
+      } catch (error) {
+        await client.auth.signOut({ scope: "local" });
+        throw error;
       }
-      await setSession(auth.user.id, accessToken);
+      await setSession(
+        auth.user.id,
+        auth.session.access_token,
+        auth.session.refresh_token,
+      );
       return NextResponse.json({
-        redirect: member.role === "operator" ? "/operator/pilot" : "/merchant",
+        redirect: "/account/security",
       });
     }
     if (action === "logout") {
-      await clearSession();
-      return NextResponse.json({ redirect: "/login" });
+      const providerRevoked = await logoutAccount();
+      return NextResponse.json({
+        redirect: providerRevoked ? "/login" : "/login?logout=local-revocation",
+      });
     }
     if (action === "visit") {
       const sourceToken = z.string().min(1).max(100).parse(data.sourceToken);
@@ -366,7 +349,9 @@ export async function POST(request: Request) {
         })
         .parse(data);
       await db.transaction(async (tx) => {
-        await tx.query("select pg_advisory_xact_lock(73418,1)");
+        await tx.query("select pg_advisory_xact_lock($1,1)", [
+          cloudDemoMode() ? 73419 : 73418,
+        ]);
         if (
           (
             await tx.query(
@@ -402,31 +387,6 @@ export async function POST(request: Request) {
         ok: true,
         message: "Sender configuration saved.",
       });
-    }
-    if (action === "membership") {
-      const input = z
-        .object({
-          userId: z.string().uuid(),
-          organizationId: z.string().min(1).max(80),
-          role: z.enum(["merchant", "operator"]),
-          canExport: z.boolean(),
-        })
-        .parse(data);
-      await db.transaction(async (tx) => {
-        await tx.query(
-          "insert into memberships(user_id,organization_id,role,can_export) values($1,$2,$3,$4) on conflict(user_id,organization_id) do update set role=excluded.role,can_export=excluded.can_export",
-          [input.userId, input.organizationId, input.role, input.canExport],
-        );
-        await audit(
-          tx,
-          actor.id,
-          input.organizationId,
-          "membership.assigned",
-          input.userId,
-          { role: input.role, canExport: input.canExport },
-        );
-      });
-      return NextResponse.json({ ok: true, message: "Account access saved." });
     }
     throw Error("Unknown action.");
   } catch (error) {

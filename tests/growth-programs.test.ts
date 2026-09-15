@@ -153,11 +153,11 @@ async function approvedSupply(options: {
     [options.id, options.organizationId, options.locationId],
   );
   await db.query(
-    "insert into offer_versions(offer_id,version,qualification,reward,terms,starts_at,expires_at,limit_mode,quantity) values($1,1,'No purchase required','Free pilot item','One per admitted member','2030-01-07','2030-02-04','claim',$2)",
+    "insert into offer_versions(offer_id,version,qualification,reward,terms,starts_at,expires_at,limit_mode,quantity) values($1,1,'No purchase required','Free pilot item','One per admitted member','2030-01-07','2030-02-05','claim',$2)",
     [options.id, quantity],
   );
   await db.query(
-    "insert into network_drop_supplies(id,market_id,organization_id,location_id,offer_id,offer_version,state,starts_at,expires_at,inventory_policy,quantity,verification_mode,staff_instructions,fallback_plan,funding_source,approved_by,data_kind) values($1,$2,$3,$4,$1,1,'approved','2030-01-07','2030-02-04','claim',$5,'staff_tap','Present the staff QR after confirming the item.','Use the approved independent bottled substitute.','merchant','operator','internal')",
+    "insert into network_drop_supplies(id,market_id,organization_id,location_id,offer_id,offer_version,state,starts_at,expires_at,inventory_policy,quantity,verification_mode,staff_instructions,fallback_plan,funding_source,approved_by,data_kind) values($1,$2,$3,$4,$1,1,'approved','2030-01-07','2030-02-05','claim',$5,'staff_tap','Present the staff QR after confirming the item.','Use the approved independent bottled substitute.','merchant','operator','internal')",
     [
       options.id,
       options.marketId,

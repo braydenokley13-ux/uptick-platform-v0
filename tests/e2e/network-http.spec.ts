@@ -11,9 +11,39 @@ const routes = [
   "/api/pilot-promise",
   "/api/pilot-operations",
   "/api/growth-programs",
+  "/api/privacy",
+  "/api/readiness",
+  "/api/member/phone-change",
 ];
 const publicRoutes = ["/api/member", "/api/tap", "/api/acquisition-visit"];
 const unknownCredential = () => randomBytes(32).toString("base64url");
+
+test("privacy and commissioning stay private and member callbacks reject unsigned requests", async ({
+  request,
+}) => {
+  for (const route of [
+    "/api/privacy",
+    "/api/readiness",
+    "/api/member/privacy",
+  ]) {
+    const response =
+      route === "/api/readiness"
+        ? await request.post(route, {
+            headers: { origin },
+            data: { action: "commissioning" },
+          })
+        : await request.get(route);
+    expect([401, 403]).toContain(response.status());
+    expect(response.headers()["cache-control"]).toContain("no-store");
+  }
+  for (const kind of ["inbound", "status"]) {
+    const response = await request.post(`/api/member-twilio/${kind}`, {
+      form: { AccountSid: "ACinvalid", MessageSid: "SMinvalid" },
+    });
+    expect(response.status()).toBe(403);
+    expect(response.headers()["cache-control"]).toContain("no-store");
+  }
+});
 
 async function expectPrivateError(
   response: APIResponse,

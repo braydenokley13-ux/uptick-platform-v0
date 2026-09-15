@@ -1120,39 +1120,14 @@ async function BusinessDetail({
         </>
       )}
       <section className="panel">
-        <PanelTitle eyebrow="ACCOUNT ACCESS" title="Assign an existing user" />
+        <PanelTitle eyebrow="ACCOUNT ACCESS" title="Verified account access" />
         <p className="muted">
-          Create the user in the authentication provider first, then assign
-          their user ID here. This does not send an invitation or create a
-          password.
+          Assign accounts by verified email, check authenticator readiness, and
+          revoke access through the account-access screen.
         </p>
-        <SimpleForm
-          action="membership"
-          extra={{ organizationId: b.id }}
-          button="Save account access"
-        >
-          <div className="field-pair">
-            <label>
-              Authentication user ID
-              <input
-                name="userId"
-                required
-                placeholder="UUID from the auth provider"
-              />
-            </label>
-            <label>
-              Workspace role
-              <select name="role">
-                <option value="merchant">Merchant · this business</option>
-                <option value="operator">Operator · all businesses</option>
-              </select>
-            </label>
-          </div>
-          <label className="check-row">
-            <input type="checkbox" name="canExport" />
-            <span>Allow approved data exports.</span>
-          </label>
-        </SimpleForm>
+        <Link className="button secondary" href="/operator/pilot/access">
+          Manage account access
+        </Link>
         <div className="op-member-list">
           {members.map((m) => (
             <p key={m.user_id}>

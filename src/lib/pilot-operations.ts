@@ -4,6 +4,10 @@ import { audit, type Actor } from "./domain";
 import { id } from "./security";
 import { RequestError } from "./http";
 import { marketWeekWindow, supplyUsage } from "./network";
+import {
+  memberServiceStatus,
+  operationalPilotAudience,
+} from "./member-service";
 
 export const dataKinds = ["real", "internal", "demo", "synthetic"] as const;
 export type PilotRun = {
@@ -189,36 +193,113 @@ export async function commitPilotSupply(db: DB, actor: Actor, raw: unknown) {
     });
   });
 }
-export async function pilotCapacity(db: DB, run: PilotRun) {
+export async function pilotCapacity(
+  db: DB,
+  run: PilotRun,
+  options: { reviewingCommercial?: boolean } = {},
+) {
   const plans = await db.query<{
     week_key: string;
     supply_id: string;
     committed_quantity: number;
-    issued: number;
+    inventory: number;
+    competing: number;
+    eligible: boolean;
+    fallback_available: number;
+    commercial: boolean;
   }>(
-    "select p.*,(select count(*)::int from fulfillment_grants g join weekly_releases r on r.id=g.release_id where g.supply_id=p.supply_id and r.run_id=p.run_id) issued from pilot_week_supplies p join network_drop_supplies s on s.id=p.supply_id where p.run_id=$1 and s.state='approved'",
-    [run.id],
+    `select p.week_key,p.supply_id,p.committed_quantity,
+      coalesce(s.quantity,0)+(select coalesce(sum(delta),0)::int from supply_adjustments where supply_id=s.id) inventory,
+      exists(select 1 from program_supply_links pl where pl.supply_id=s.id) commercial,
+      greatest(0,coalesce(f.usable_capacity,0)-(select count(*)::int from recovery_grants rg where rg.fallback_id=f.id and (rg.state='redeemed' or (rg.superseded_at is null and rg.expires_at>now())))) fallback_available,
+      (s.state='approved' and s.inventory_policy<>'unlimited' and s.data_kind=$2 and t.data_kind=$2 and s.market_id=$3
+       and t.required_spend=0 and t.member_fee=0 and t.fulfiller_organization_id=s.organization_id
+       and s.starts_at <= (p.week_key::date::timestamp at time zone m.timezone)
+       and s.expires_at >= ((p.week_key::date+7)::timestamp at time zone m.timezone)
+       and d.state='ready' and length(trim(d.owner_approved_by))>0
+       and length(trim(d.primary_manager))>0 and length(trim(d.primary_contact))>0 and length(trim(d.backup_contact))>0
+       and d.stock_confirmed_at<=now() and d.stock_confirmed_at>=now()-interval '72 hours'
+       and d.exact_item_confirmed and d.staff_instructions_confirmed and d.valid_hours_confirmed
+       and d.shifts_briefed_at<=now() and d.qr_rehearsed_at<=now() and length(trim(d.support_escalation))>0
+       and d.valid_until >= ((p.week_key::date+7)::timestamp at time zone m.timezone)
+       and f.state='approved' and regexp_replace(lower(f.dependency_key),'[^a-z0-9]','','g')<>regexp_replace(lower(t.dependency_key),'[^a-z0-9]','','g')
+       and exists(select 1 from redemption_points rp join redemption_credentials rc on rc.point_id=rp.id where rp.organization_id=s.organization_id and rp.location_id=s.location_id and rp.state='active' and rp.exposure='staff' and rc.state='active' and rc.credential_type='qr')
+       and exists(select 1 from market_locations ml where ml.market_id=s.market_id and ml.location_id=s.location_id and ml.active and not exists(select 1 from location_outages outage where outage.location_id=s.location_id and outage.closed_at is null))) eligible,
+      ((select count(*)::int from member_claims mc join claims c on c.id=mc.claim_id
+         where mc.supply_id=s.id and mc.grant_id is null and
+          (c.state='redeemed' or (c.state='active' and (mc.reserved_until is null or mc.reserved_until>now())
+           and (c.snapshot->>'expires_at')::timestamptz>now())))
+       +(select count(*)::int from recovery_grants rg where rg.replacement_supply_id=s.id
+          and (rg.state='redeemed' or (rg.superseded_at is null and rg.expires_at>now())))
+       +(select count(*)::int from fulfillment_grants g join weekly_releases r on r.id=g.release_id
+          where g.supply_id=s.id and (r.run_id is distinct from p.run_id or r.week_key<>p.week_key)
+           and (g.state='redeemed' or g.expires_at>now()))) competing
+     from effective_pilot_week_supplies p join network_drop_supplies s on s.id=p.supply_id
+     join market_cells m on m.id=s.market_id
+     left join pilot_supply_terms t on t.supply_id=s.id left join destination_readiness d on d.supply_id=s.id left join pilot_supply_fallbacks f on f.supply_id=s.id
+     where p.run_id=$1`,
+    [run.id, run.data_kind, run.market_id],
   );
+  // Work from unclamped inventory. supplyUsage.remaining has already removed
+  // this pilot's reservation and clamps shortages to zero, so adding a whole
+  // commitment to it can fabricate units. Issued grants for this same plan are
+  // part of its commitment; they must not be subtracted a second time.
   const quantities = await Promise.all(
-    plans.map(async (p) => ({
-      week_key: p.week_key,
-      quantity: Math.min(
-        p.committed_quantity,
-        (await supplyUsage(db, p.supply_id)).remaining! +
-          (["enrolling", "live", "paused"].includes(run.state)
-            ? p.committed_quantity
-            : p.issued),
-      ),
-    })),
+    plans.map(async (p) => {
+      let programId: string | null = null,
+        commercialCapacity: number | null = null;
+      if (p.commercial && !options.reviewingCommercial) {
+        try {
+          const program = await (
+            await import("./pilot-promise")
+          ).programForSupply(db, p.supply_id, p.week_key, run.id, 0);
+          programId = program!.program_id;
+          commercialCapacity = program!.remaining_capacity;
+        } catch (error) {
+          if (!(error instanceof RequestError)) throw error;
+          commercialCapacity = 0;
+        }
+      }
+      return {
+        week_key: p.week_key,
+        supply_id: p.supply_id,
+        programId,
+        commercialCapacity,
+        quantity: p.eligible
+          ? Math.max(
+              0,
+              Math.min(
+                p.committed_quantity,
+                p.inventory - p.competing,
+                p.fallback_available,
+                commercialCapacity ?? Infinity,
+              ),
+            )
+          : 0,
+      };
+    }),
   );
-  const weeks = pilotWeeks(run).map((week) => ({
-    week,
-    capacity: quantities
-      .filter((q) => q.week_key === week)
-      .reduce((n, q) => n + q.quantity, 0),
-  }));
+  const weeks = pilotWeeks(run).map((week) => {
+    const groups = new Map<string, { quantity: number; limit: number }>();
+    for (const supply of quantities.filter((q) => q.week_key === week)) {
+      const group = groups.get(supply.programId || supply.supply_id) || {
+        quantity: 0,
+        limit: supply.commercialCapacity ?? Infinity,
+      };
+      group.quantity += supply.quantity;
+      groups.set(supply.programId || supply.supply_id, group);
+    }
+    return {
+      week,
+      capacity: [...groups.values()].reduce(
+        (n, group) => n + Math.min(group.quantity, group.limit),
+        0,
+      ),
+    };
+  });
   return {
     weeks,
+    supplies: quantities,
     capacity: Math.min(run.hard_cap, ...weeks.map((w) => w.capacity)),
   };
 }
@@ -229,6 +310,9 @@ export async function tryAdmitMemberInTransaction(
   state: "admitted" | "waitlisted" | "unavailable";
   runId?: string;
 }> {
+  await tx.query(
+    "select singleton from growth_program_coordination where singleton=true for update",
+  );
   const [member] = await tx.query<{
     market_id: string;
     state: string;
@@ -241,6 +325,8 @@ export async function tryAdmitMemberInTransaction(
     return { state: "unavailable" };
   if (member.data_kind === "real" && !member.age_confirmed_at)
     return { state: "unavailable" };
+  if ((await memberServiceStatus(tx, memberId))?.blocks_future_release)
+    return { state: "unavailable" };
   // The run lock serializes all admissions, including independent signup workers.
   const [run] = await tx.query<PilotRun>(
     "select * from pilot_runs where market_id=$1 and data_kind=$2 and state='enrolling' and cohort_frozen_at is null order by starts_on limit 1 for update",
@@ -252,6 +338,16 @@ export async function tryAdmitMemberInTransaction(
   );
   if (existing) return { state: "admitted", runId: existing.run_id };
   if (!run) return { state: "unavailable" };
+  if (member.data_kind === "real")
+    await (
+      await import("./release-readiness")
+    ).assertRealEnrollmentCommissioned(tx);
+  // Supply pauses, adjustments and other inventory users take these same row
+  // locks. An admission therefore sees one serialized set of backing facts.
+  await tx.query(
+    "select s.id from network_drop_supplies s join effective_pilot_week_supplies p on p.supply_id=s.id where p.run_id=$1 order by s.id for update of s",
+    [run.id],
+  );
   const [{ n }] = await tx.query<{ n: number }>(
     "select count(*)::int n from pilot_admissions where run_id=$1",
     [run.id],
@@ -299,6 +395,9 @@ export async function setPilotState(db: DB, actor: Actor, raw: unknown) {
     })
     .parse(raw);
   await db.transaction(async (tx) => {
+    await tx.query(
+      "select singleton from growth_program_coordination where singleton=true for update",
+    );
     const run = await loadPilotRun(tx, d.runId, true);
     const transitions: Record<string, string[]> = {
       draft: ["enrolling", "paused"],
@@ -315,10 +414,37 @@ export async function setPilotState(db: DB, actor: Actor, raw: unknown) {
       );
     const checklist = { ...run.checklist, ...d.checklist };
     if (["enrolling", "live"].includes(d.state)) {
+      if (run.data_kind === "real")
+        await (
+          await import("./release-readiness")
+        ).assertRealEnrollmentCommissioned(tx);
       const capacity = await pilotCapacity(tx, run);
-      if (capacity.capacity < run.target_members)
+      const published = run.cohort_frozen_at
+        ? await tx.query<{ week_key: string }>(
+            "select week_key from weekly_releases where run_id=$1",
+            [run.id],
+          )
+        : [];
+      const operational = run.cohort_frozen_at
+        ? await operationalPilotAudience(tx, run.id)
+        : null;
+      const requiredMembers = operational
+        ? operational.included.length
+        : run.target_members;
+      const currentWeek = marketWeekWindow(new Date(), run.timezone!).weekKey;
+      const upcoming = run.cohort_frozen_at
+        ? capacity.weeks.filter(
+            (w) =>
+              w.week >= currentWeek &&
+              !published.some((p) => p.week_key === w.week),
+          )
+        : capacity.weeks;
+      const available = upcoming.length
+        ? Math.min(...upcoming.map((w) => w.capacity))
+        : requiredMembers;
+      if (available < requiredMembers)
         throw new RequestError(
-          `Four-week supply backs ${capacity.capacity} members; the recorded target is ${run.target_members}. Confirm more supply or create a smaller run before admission.`,
+          `Four-week supply backs ${available} members for the unreleased operating weeks; ${requiredMembers} are required. Confirm backing before continuing. Issued history remains unchanged.`,
         );
       const missing = launchChecks.filter((key) => !checklist[key]);
       if (missing.length)
@@ -721,7 +847,7 @@ export async function pilotOperations(
     quantity: number;
     week_key: string | null;
   }>(
-    "select s.id,s.market_id,v.reward,o.name merchant,s.state,t.data_kind,s.quantity,p.week_key from network_drop_supplies s join organizations o on o.id=s.organization_id join offer_versions v on v.offer_id=s.offer_id and v.version=s.offer_version join pilot_supply_terms t on t.supply_id=s.id left join pilot_week_supplies p on p.supply_id=s.id order by s.created_at desc",
+    "select s.id,s.market_id,v.reward,o.name merchant,s.state,t.data_kind,s.quantity,p.week_key from network_drop_supplies s join organizations o on o.id=s.organization_id join offer_versions v on v.offer_id=s.offer_id and v.version=s.offer_version join pilot_supply_terms t on t.supply_id=s.id left join effective_pilot_week_supplies p on p.supply_id=s.id order by s.created_at desc",
   );
   if (!run) return { runs, run, markets, sources, supplies, detail: null };
   const [
@@ -756,11 +882,18 @@ export async function pilotOperations(
       merchant: string;
       reward: string;
     }>(
-      "select p.*,o.name merchant,v.reward from pilot_week_supplies p join network_drop_supplies s on s.id=p.supply_id join organizations o on o.id=s.organization_id join offer_versions v on v.offer_id=s.offer_id and v.version=s.offer_version where p.run_id=$1 order by p.week_key,o.name",
+      "select p.*,o.name merchant,v.reward from effective_pilot_week_supplies p join network_drop_supplies s on s.id=p.supply_id join organizations o on o.id=s.organization_id join offer_versions v on v.offer_id=s.offer_id and v.version=s.offer_version where p.run_id=$1 order by p.week_key,o.name",
       [run.id],
     ),
-    db.query<{ member_id: string; admitted_at: string; source: string | null }>(
-      "select a.member_id,a.admitted_at,s.name source from pilot_admissions a left join acquisition_sources s on s.id=a.source_id where a.run_id=$1 order by a.admitted_at",
+    db.query<{
+      member_id: string;
+      admitted_at: string;
+      source: string | null;
+      phone_hint: string;
+      home_zip: string;
+      data_kind: string;
+    }>(
+      "select a.member_id,a.admitted_at,s.name source,right(c.phone,4) phone_hint,m.home_zip,m.data_kind from pilot_admissions a join uptick_members m on m.id=a.member_id join customers c on c.id=m.customer_id left join acquisition_sources s on s.id=a.source_id where a.run_id=$1 order by a.admitted_at",
       [run.id],
     ),
     db.query<{ member_id: string; reason: string }>(
@@ -792,7 +925,7 @@ export async function pilotOperations(
       [run.id],
     ),
     db.query<{ merchant: string; state: string | null }>(
-      "select o.name merchant,r.state from pilot_week_supplies p join network_drop_supplies s on s.id=p.supply_id join organizations o on o.id=s.organization_id left join destination_readiness r on r.supply_id=s.id left join pilot_supply_fallbacks f on f.supply_id=s.id where p.run_id=$1 and s.expires_at>now() and (s.state<>'approved' or r.state is distinct from 'ready' or r.valid_until<=now() or f.state is distinct from 'approved')",
+      "select o.name merchant,r.state from effective_pilot_week_supplies p join network_drop_supplies s on s.id=p.supply_id join organizations o on o.id=s.organization_id left join destination_readiness r on r.supply_id=s.id left join pilot_supply_fallbacks f on f.supply_id=s.id where p.run_id=$1 and s.expires_at>now() and (s.state<>'approved' or r.state is distinct from 'ready' or r.valid_until<=now() or f.state is distinct from 'approved')",
       [run.id],
     ),
     db.query<{ job_key: string; state: string; last_success: string | null }>(

@@ -1,3 +1,5 @@
+> **Historical record.** This document describes an earlier implementation or review checkpoint. Use [current release truth](../REAL_ENROLLMENT_RELEASE_TRUTH.md) for this candidate’s fixes, evidence, verdicts and remaining gates. Earlier test counts, demo instructions and unresolved-gap statements are not current unless carried forward there.
+
 # Founder document sources
 
 These scripts generate the founder-facing DOCX files and their PDFs. They exist

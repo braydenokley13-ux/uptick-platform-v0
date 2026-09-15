@@ -6,6 +6,8 @@ import { getDb } from "@/lib/db";
 import { decrypt } from "@/lib/security";
 import { memberHome } from "@/lib/member-experience";
 import { MEMBER_SESSION_COOKIE } from "@/lib/member-session";
+import { MemberPrivacyRequest } from "@/components/member-privacy";
+import { memberPrivacyRequests } from "@/lib/privacy-admin";
 import {
   DropCard,
   MemberFrame,
@@ -108,6 +110,12 @@ export default async function YourUptick({
             subscribed={data.marketingSubscribed}
           />
           <MemberAccountControls />
+          <MemberPrivacyRequest
+            requests={await memberPrivacyRequests(
+              await getDb(),
+              data.member.id,
+            )}
+          />
         </section>
       ) : view === "history" ? (
         <section className="member-history">
@@ -163,7 +171,11 @@ export default async function YourUptick({
               <br />
               <em>Uptick this week?</em>
             </h1>
-            <p>Your free membership stays active with or without texts.</p>
+            <p>
+              {data.serviceStatus?.blocks_future_release
+                ? "Your future weekly releases are paused. Already-issued benefits and support remain available."
+                : "Your free membership stays active with or without promotional texts."}
+            </p>
           </header>
 
           {earlierRecoveries.length > 0 && (
@@ -245,7 +257,7 @@ export default async function YourUptick({
             <section className="member-saved">
               <p className="eyebrow">
                 {saved.state === "redeemed"
-                  ? "THIS WEEK, ENJOYED"
+                  ? "REDEMPTION RECORDED"
                   : "YOUR UPTICK IS SAVED"}
               </p>
               <PerkIllustration reward={saved.snapshot.reward} />
@@ -263,6 +275,15 @@ export default async function YourUptick({
             </section>
           ) : current?.options.length ? (
             <DropCard supply={current.options[0]} available />
+          ) : data.serviceStatus?.blocks_future_release ? (
+            <div className="member-empty">
+              <h2>Future weekly benefits are paused.</h2>
+              <p>
+                Account status: {data.serviceStatus.kind.replaceAll("_", " ")}.
+                Your original pilot record stays intact. Contact Uptick support
+                if you want to return.
+              </p>
+            </div>
           ) : data.admission.state === "waitlisted" ? (
             <div className="member-empty">
               <h2>You’re a member and on the pilot waitlist.</h2>
@@ -296,6 +317,7 @@ export default async function YourUptick({
             recoveryState={currentRecoveryStatus || null}
           />
           {data.admission.state === "admitted" &&
+            !data.serviceStatus?.blocks_future_release &&
             ["pilot", "live"].includes(data.market?.state || "") && (
               <MemberInvite supplyId={data.shareableSupplyId} />
             )}

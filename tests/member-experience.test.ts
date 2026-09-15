@@ -121,6 +121,14 @@ async function count(table: string) {
     await db.query<{ n: number }>(`select count(*)::int n from ${table}`)
   )[0].n;
 }
+async function messageCount(purpose: "drop" | "opt_in_confirmation") {
+  return (
+    await db.query<{ n: number }>(
+      "select count(*)::int n from member_messages where purpose=$1",
+      [purpose],
+    )
+  )[0].n;
+}
 async function invitation(cap = 5) {
   await supply("shared", { cap });
   const owner = await join();
@@ -136,7 +144,8 @@ test("referral links disclose only market and perk, preserve their market, and r
   assert.equal(landing.referral.market, "Near market");
   assert.ok(!("member_id" in landing.referral));
   assert.ok(!JSON.stringify(landing).includes(owner.member.id));
-  assert.equal(await count("member_messages"), 0);
+  assert.equal(await messageCount("drop"), 0);
+  assert.equal(await messageCount("opt_in_confirmation"), 1);
   assert.equal(
     (
       await db.query(
@@ -284,7 +293,8 @@ test("notification preparation pages through existing released allocations only"
   assert.equal(await prepareMembershipWeek(db, 2), 2);
   assert.equal(await prepareMembershipWeek(db, 2), 1);
   assert.equal(await prepareMembershipWeek(db, 2), 0);
-  assert.equal(await count("member_messages"), 3);
+  assert.equal(await messageCount("drop"), 3);
+  assert.equal(await messageCount("opt_in_confirmation"), 5);
   assert.equal(
     (await db.query("select id from member_access where purpose='drop'"))
       .length,
@@ -295,7 +305,7 @@ test("notification preparation pages through existing released allocations only"
     new Set(
       (
         await db.query<{ member_id: string }>(
-          "select member_id from member_messages",
+          "select member_id from member_messages where purpose='drop'",
         )
       ).map((row) => row.member_id),
     ),
@@ -313,7 +323,8 @@ test("overlapping scheduler runs create one credential and message per member we
     results.reduce((total, value) => total + value, 0),
     2,
   );
-  assert.equal(await count("member_messages"), 2);
+  assert.equal(await messageCount("drop"), 2);
+  assert.equal(await messageCount("opt_in_confirmation"), 2);
   assert.equal(
     (await db.query("select id from member_access where purpose='drop'"))
       .length,
@@ -351,7 +362,8 @@ test("weekly preparation rechecks a choice made after allocation before creating
     },
   };
   assert.equal(await prepareMembershipWeek(raced), 0);
-  assert.equal(await count("member_messages"), 0);
+  assert.equal(await messageCount("drop"), 0);
+  assert.equal(await messageCount("opt_in_confirmation"), 1);
   assert.equal(
     (await db.query("select id from member_access where purpose='drop'"))
       .length,
@@ -376,7 +388,8 @@ test("weekly preparation keeps an issued allocation visible after geography chan
     },
   };
   assert.equal(await prepareMembershipWeek(raced), 1);
-  assert.equal(await count("member_messages"), 1);
+  assert.equal(await messageCount("drop"), 1);
+  assert.equal(await messageCount("opt_in_confirmation"), 1);
   assert.equal(
     (await db.query("select id from member_access where purpose='drop'"))
       .length,

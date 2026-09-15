@@ -2,10 +2,30 @@
 
 This is an adult, four-week local membership pilot. Default target: 150 admitted members; absolute cap: 200. Marketing text consent is optional. A membership is not the same as admission to a backed pilot cohort.
 
+## Release-status authority
+
+This playbook explains operating procedure. It does not declare a release ready. Use [Real-enrollment release truth](REAL_ENROLLMENT_RELEASE_TRUTH.md) for the current candidate, hosted evidence, open blockers and the enrollment decision.
+
+Any earlier dated readiness statement, test count, screenshot or hosted check is stale for the current release verdict unless that truth record explicitly carries it forward.
+
+## Operator map and operating order
+
+Work through the operator pages in this order so that an earlier safety check is not hidden by a later operational action:
+
+1. Open `/operator/pilot/settings`, headed **Know what is ready.** Review software and migration integrity, Twilio and messaging, hosted commissioning evidence, market-cell readiness and real-enrollment controls.
+2. Open `/operator/pilot`, headed **Today’s pilot work.** Choose **Open pilot**, then start with **Today** and **NEEDS ACTION**.
+3. Use **Supply** to approve backed supply and preserve amendments. Use **Destination readiness, incidents and recovery** for readiness, weekly releases, incidents, remedies and outages.
+4. Use **Members & support** for member messages, support resolutions and participation/account status.
+5. Follow **Privacy requests, account data exports, corrections and erasure** for verified privacy work.
+6. Use **Check message delivery** to inspect provider acceptance, delivery, failure and callback evidence.
+7. Reconcile **Partners**, **Economics** and **Scorecard** only after member promises and safety actions are accounted for.
+
+Records such as supply amendments, member dispositions, privacy actions, incidents, recoveries and ledger reversals are append-only operating history. Add the correcting event instead of rewriting the old one.
+
 ## Before admitting a real member
 
 1. Open the canonical operator site at `https://pilot.upticklocal.com/login`. Use your own operator account. Never use a preview deployment for shared pilot data.
-2. Confirm the release with the technical owner. Record its Git SHA and migration list in the pilot run. Keep real enrollment and promotional delivery disabled until commissioning is signed off.
+2. Confirm the candidate in [Real-enrollment release truth](REAL_ENROLLMENT_RELEASE_TRUTH.md). Record its Git SHA and migration list in the pilot run. Keep real enrollment and promotional delivery disabled until the current candidate is signed off there.
 3. Resolve the legal entity, business notice address, and exact monitored support/privacy email. The current supplied email spelling is awaiting confirmation. Record approval of the public policies; do not claim legal review unless it occurred.
 4. Enroll and test operator MFA, preserve recovery access with the founder, and verify that a revoked provider session stops working. Enable the operator MFA requirement only after the account has a working factor.
 5. Open **Market**. Confirm one real Market Cell, its ZIPs, participating locations and travel expectations. Classify real, internal, demo and synthetic records explicitly. Do not relabel old events to make the scorecard look better.
@@ -38,12 +58,60 @@ This is an adult, four-week local membership pilot. Default target: 150 admitted
 6. The member reuses the original pass for the recovery. Keep the original attempt and its evidence. Never fabricate a successful original redemption to get around a recovery block.
 7. Staff completes the remedy and records its redemption. Confirm the actual handoff with the member when needed. Record actual cost in the economic ledger; a payer assignment by itself is not proof of payment.
 
+### When an issued remedy also fails or expires
+
+1. Open **Readiness and recovery controls**, find the incident and expand **Replace a failed or expired remedy**.
+2. Select **Current remedy to replace** and record **Failure evidence**. State whether the member reports that no item was received or whether physical handoff is unknown. Do not infer delivery from a digital redemption.
+3. Choose an available same-counter fallback or an independently backed replacement. Recheck exact terms, current inventory, hours, staff QR readiness and expiry.
+4. Record **Recovery payer**, payer evidence, and the new expiry. Issue one backed replacement.
+5. Review **Recovery attempt history**. The prior remedy must remain marked as superseded history; do not edit it into success.
+
+### When a whole location is unavailable
+
+1. Open **Destination readiness, incidents and recovery**, then find **Whole-location failure**.
+2. Record the cause, time and owner, then choose **Stop routing and open outage**. This stops new routing; it does not erase issued promises.
+3. Use **Open this member’s recovery incident** for every affected issued promise. Give each member an individually backed remedy with a named payer and evidence.
+4. When immediate incident work is complete, choose **Close outage; keep routing paused**. Closing the outage is not permission to route members back to the location.
+5. Recheck stock, hours, staffing, QR operation and independent fallback. Save new readiness evidence, then reactivate the destination and supply from the supply controls only when those checks pass.
+
+## When member participation or account access changes
+
+Open **Members & support**, find **Member participation and account access**, select the evidence-backed status, and choose **Record account status**.
+
+- **Voluntary withdrawal — verified member request** stops future releases while preserving the fixed cohort and existing obligations.
+- **Service suspension — revoke account access** stops future releases and removes account access while support resolves the reason.
+- **Verified deletion request — revoke access pending privacy review** records the disposition and routes the request through the privacy workflow.
+- **Inaccessible — stop future release pending support** prevents another benefit release until access is resolved.
+- **Geography changed — preserve existing obligations** keeps existing promises visible while suitability is reviewed.
+- **Resume future participation — verified member request** resumes only after the member request and underlying issue are verified.
+
+Do not remove any of these members from the original admitted denominator. A carrier STOP controls text delivery separately; it does not withdraw the membership or erase issued benefits.
+
 ## When a member needs access
 
 1. Ask them to open **Your Uptick** in the browser where they confirmed membership.
 2. If that browser session is lost, use a saved one-time recovery code. The member should save these privately from Preferences before needing them.
 3. A fresh requested access text is available only where transactional messaging is configured and the number is deliverable. STOP can block even requested texts at the carrier; never treat START as new marketing consent.
 4. If all access methods fail, route the case to the monitored support owner for identity verification and documented recovery. Do not share someone else's private link or claim to have a fully automated identity-recovery process that has not been commissioned.
+
+## When a member makes a privacy or account-data request
+
+1. Open **Members & support**, then **Privacy requests, account data exports, corrections and erasure**.
+2. Under **Record a member request**, choose the exact request type and select **Record privacy request**. Supported flows include data access/export, correction, deletion of account identifiers, and revocation of sessions and recovery codes.
+3. Verify the requester through the approved process and choose **Record identity verification**. Never use knowledge of a phone number alone as proof of identity.
+4. For an access request, use **Download this member’s data** only after verification and provide it through the approved protected channel.
+5. For a phone correction, choose **Verify a requested phone change**, then **Send requested number verification**. The one-use verification is sent only to the proposed number, expires after 15 minutes, and the verified change must be applied within 24 hours. When applying it, use the checkbox that revokes prior sessions, recovery codes and private links and keeps promotional SMS off.
+6. For deletion, record the approved retention decision and review personal notes before erasure. Use **Remove personal note details** where required, then **Erase verified account identifiers**. Preserve the minimum cohort, commitment and audit evidence required by the approved policy.
+7. For other completed requests, choose **Complete verified request** and retain the action record. Never mark a request complete solely because it was opened or acknowledged.
+
+## When messaging is failed, undelivered or uncertain
+
+1. Open **Check message delivery**, headed **Know what happened.** Select the member message under **Recent messages**.
+2. Read **Selected message** and **Provider callback history** together. Provider acceptance means the provider took the request; it does not prove carrier delivery or member receipt.
+3. Match the exact provider message identifier to the protected provider record. Preserve callback order and evidence for `failed`, `undelivered`, `unknown` or delayed outcomes.
+4. Do not blindly retry an uncertain message. A provider may have accepted it even when the application did not receive a conclusive response. Resolve requested-access messages through support and keep web/recovery-code access available.
+5. For promotional messages, check the global production gate, the promotional class gate, member consent and suppression state. When STOP or consent is uncertain, keep the member suppressed.
+6. Record the support outcome separately. Do not change a provider outcome or invent delivery to close the queue.
 
 ## Every Sunday/Monday
 
@@ -54,6 +122,20 @@ This is an adult, four-week local membership pilot. Default target: 150 admitted
 5. Inspect issued grants and Today's uncovered-member warning. Opening a member page never creates a new grant.
 6. Check message preparation and dispatch separately. Only opted-in, unsuppressed members receive promotional messages after carrier/legal/environment gates are open. Everyone admitted retains web access to issued benefits.
 7. Reconcile incidents, recoveries, credits, costs and labor for the week. A revised Program cannot rewrite already issued promises.
+
+### When future-week supply must change
+
+1. Open **Supply** and expand **Replace unreleased future-week supply**. Only an unreleased future week can be amended this way.
+2. Select the future week and current commitment. Enter the replacement supply, replacement units, reason, accountable payer, costs and credits, Growth Program implications and commercial protection review.
+3. Choose **Record future-week replacement**.
+4. Open **View preserved supply amendment history**. Confirm the original commitment remains in history and the replacement covers the full admitted cohort before the weekly release is published.
+
+## After a restore or service interruption
+
+1. Follow [Pilot data recovery and commissioning](PILOT_RECOVERY_RUNBOOK.md). Restore to an isolated destination and reconcile records before touching the canonical service.
+2. Reconcile the fixed cohort, member dispositions, privacy requests, supply amendments, issued promises, incidents, recoveries, outages, message suppressions, callbacks, partner outcomes and economics.
+3. Keep admissions, promotional messaging and affected routing paused until their separate checks pass.
+4. Record the current release and recovery evidence in [Real-enrollment release truth](REAL_ENROLLMENT_RELEASE_TRUTH.md). A previous successful rehearsal or readiness screen does not establish the current candidate’s verdict.
 
 ## After four weeks
 

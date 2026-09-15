@@ -1,5 +1,12 @@
 import Link from "next/link";
-import { ArrowUpRight, ArrowRight, Coffee, Check, MapPin } from "lucide-react";
+import {
+  ArrowUpRight,
+  ArrowRight,
+  Coffee,
+  Check,
+  MapPin,
+  ShieldCheck,
+} from "lucide-react";
 import type { ReactNode } from "react";
 export function Brand({ small = false }: { small?: boolean }) {
   return (
@@ -8,9 +15,13 @@ export function Brand({ small = false }: { small?: boolean }) {
       className={`brand ${small ? "small" : ""}`}
       aria-label="Uptick Local home"
     >
-      <span className="brand-dot" />
+      <ShieldCheck
+        className="brand-mark"
+        strokeWidth={1.8}
+        aria-hidden="true"
+      />
       <span>
-        uptick<span className="brand-local">LOCAL</span>
+        Uptick<span className="brand-local">Local</span>
       </span>
     </Link>
   );

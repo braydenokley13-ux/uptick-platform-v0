@@ -1,3 +1,5 @@
+> **Historical record.** This document describes an earlier implementation or review checkpoint. Use [current release truth](REAL_ENROLLMENT_RELEASE_TRUTH.md) for this candidate’s fixes, evidence, verdicts and remaining gates. Earlier test counts, demo instructions and unresolved-gap statements are not current unless carried forward there.
+
 # Refoundation QA record — September 10, 2026
 
 This record covers the current Uptick membership refoundation. [VERIFICATION.md](VERIFICATION.md) describes the older merchant-first baseline and its successful production build; it is historical evidence, not verification of the latest integration.

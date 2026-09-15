@@ -9,21 +9,29 @@ import {
   ArrowUpRight,
   LifeBuoy,
   ShieldCheck,
+  Play,
+  MessageSquare,
+  PackageCheck,
+  MoreHorizontal,
 } from "lucide-react";
 import { Brand, Badge } from "./ui";
 import { ActionButton } from "./forms";
 import type { Actor } from "@/lib/domain";
-import { localMode } from "@/lib/config";
+import { sampleDemoMode } from "@/lib/demo-guard";
 const merchantLinks = [
   ["program", "Program", ClipboardCheck],
   ["fulfillment", "Fulfillment", Store],
   ["results", "Results", ChartNoAxesCombined],
 ] as const;
 const operatorLinks = [
-  ["pilot", "Today", LayoutDashboard],
-  ["network/markets", "Market", Radio],
+  ["pilot", "Overview", LayoutDashboard],
+  ["pilot/support", "Members", Users],
+  ["pilot/fulfillment", "Store operations", PackageCheck],
+] as const;
+const moreLinks = [
+  ["network/markets", "Markets", Radio],
   ["programs", "Programs", ClipboardCheck],
-  ["pilot/support", "Members & support", Users],
+  ["network/messaging", "Messaging", MessageSquare],
   ["pilot/settings", "Settings", ShieldCheck],
 ] as const;
 export function Shell({
@@ -38,6 +46,7 @@ export function Shell({
   children: React.ReactNode;
 }) {
   const operator = actor.role === "operator";
+  const demo = sampleDemoMode();
   const base = operator ? "/operator" : "/merchant";
   return (
     <div className="app-shell">
@@ -62,6 +71,28 @@ export function Shell({
                 {active === path && <span className="nav-dot" />}
               </Link>
             ),
+          )}
+          {operator && (
+            <details
+              className="nav-more"
+              open={moreLinks.some(([path]) => active === path)}
+            >
+              <summary>
+                <MoreHorizontal size={18} />
+                More tools
+              </summary>
+              {moreLinks.map(([path, label, Icon]) => (
+                <Link
+                  href={`${base}/${path}`}
+                  key={path}
+                  className={active === path ? "nav-item active" : "nav-item"}
+                  aria-current={active === path ? "page" : undefined}
+                >
+                  <Icon size={18} strokeWidth={1.6} />
+                  <span>{label}</span>
+                </Link>
+              ))}
+            </details>
           )}
         </nav>
         <div className="sidebar-bottom">
@@ -110,9 +141,11 @@ export function Shell({
             <strong>{name}</strong>
           </div>
           <div>
-            {localMode() ? (
+            {demo ? (
               <div className="local-workspace-label">
-                <Badge>Local sample</Badge>
+                <Link href="/demo" className="demo-return">
+                  <Play size={14} /> Demo studio
+                </Link>
               </div>
             ) : (
               <Badge tone="mint">
@@ -120,6 +153,7 @@ export function Shell({
                 Secure workspace
               </Badge>
             )}
+            {!demo && <Link href="/account/security">Account security</Link>}
             <ActionButton action="logout" secondary>
               Sign out
             </ActionButton>

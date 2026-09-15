@@ -6,6 +6,8 @@ import { demandEvent } from "./demand-events";
 import { RequestError } from "./http";
 import { marketWeekWindow, supplyUsage, type Allocation } from "./network";
 import { id } from "./security";
+import { operationalPilotAudience } from "./member-service";
+import { recommendPilotAssignments } from "./pilot-assignment";
 
 const dataKind = z.enum(["real", "internal", "demo", "synthetic"]);
 const key = z.string().trim().min(1).max(100);
@@ -264,7 +266,10 @@ export async function savePilotFallback(db: DB, actor: Actor, raw: unknown) {
       throw new RequestError(
         "Define the fallback before approving this supply.",
       );
-    if (input.dependencyKey === supply.dependency_key)
+    if (
+      input.dependencyKey.toLowerCase().replace(/[^a-z0-9]/g, "") ===
+      supply.dependency_key.toLowerCase().replace(/[^a-z0-9]/g, "")
+    )
       throw new RequestError(
         "The fallback must use a different underlying resource than the primary item.",
       );
@@ -477,6 +482,8 @@ type ReleaseInput = {
   dataKind: "real" | "internal" | "demo" | "synthetic";
   requestKey: string;
   assignments: ReleaseAssignment[];
+  recommendationFingerprint?: string;
+  overrideReason?: string;
 };
 
 const releaseInput = z.object({
@@ -485,10 +492,12 @@ const releaseInput = z.object({
   weekKey,
   dataKind,
   requestKey: z.string().trim().min(8).max(200),
-  assignments: z
-    .array(z.object({ memberId: key, supplyId: key }))
-    .min(1)
-    .max(200),
+  recommendationFingerprint: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional(),
+  overrideReason: z.string().trim().min(10).max(1500).optional(),
+  assignments: z.array(z.object({ memberId: key, supplyId: key })).max(200),
 });
 
 function releaseFingerprint(input: ReleaseInput) {
@@ -499,6 +508,8 @@ function releaseFingerprint(input: ReleaseInput) {
         marketId: input.marketId,
         weekKey: input.weekKey,
         dataKind: input.dataKind,
+        recommendationFingerprint: input.recommendationFingerprint,
+        overrideReason: input.overrideReason,
         assignments: [...input.assignments].sort(
           (a, b) =>
             a.memberId.localeCompare(b.memberId) ||
@@ -607,6 +618,7 @@ type ReleaseSupply = {
   fallback_capacity: number;
   fallback_dependency: string;
   active_staff_qr: number;
+  location_active: boolean;
 };
 
 async function primaryObligations(db: DB, supplyId: string, at: Date) {
@@ -624,13 +636,13 @@ async function primaryObligations(db: DB, supplyId: string, at: Date) {
          and (mc.reserved_until is null or mc.reserved_until>$2)
          and (c.snapshot->>'expires_at')::timestamptz>$2))) legacy_used,
       (select count(*)::int from recovery_grants r where r.replacement_supply_id=$1
-       and (r.state='redeemed' or r.expires_at>$2)) recoveries`,
+       and (r.state='redeemed' or (r.superseded_at is null and r.expires_at>$2))) recoveries`,
     [supplyId, at.toISOString()],
   );
   return row;
 }
 
-async function programForSupply(
+export async function programForSupply(
   db: DB,
   supplyId: string,
   week: string,
@@ -651,28 +663,38 @@ async function programForSupply(
     benefit_ceiling: number | null;
     planned_placements: number | null;
     approved_for_run: boolean;
+    week_key: string;
   }>(
-    `select l.program_id,l.program_version,p.status,p.approved_version,
+    `select l.program_id,l.program_version,l.week_key,p.status,p.approved_version,
       v.benefit_ceiling,w.planned_placements,
       exists(select 1 from growth_program_approvals a where a.program_id=l.program_id
-       and a.program_version=l.program_version and a.run_id=$3 and a.decision='approved') approved_for_run
+       and a.program_version=l.program_version and a.run_id=$2 and a.decision='approved') approved_for_run
      from program_supply_links l
      join growth_programs p on p.id=l.program_id
      left join growth_program_versions v on v.program_id=l.program_id and v.version=l.program_version
      left join growth_program_week_plans w on w.program_id=l.program_id
       and w.program_version=l.program_version and w.week_key=l.week_key
-     where l.supply_id=$1 and l.week_key=$2
+     where l.supply_id=$1
      order by l.program_id,l.program_version`,
-    [supplyId, week, runId],
+    [supplyId, runId],
   );
   if (!links.length) return null;
-  if (links.length > 1)
+  const programIds = new Set(links.map((link) => link.program_id));
+  const effective = links.filter(
+    (link) =>
+      link.week_key === week && link.program_version === link.approved_version,
+  );
+  if (programIds.size > 1 || effective.length > 1)
     throw new RequestError(
-      "This supply is linked to more than one Growth Program version for this week. Resolve the commercial attribution before releasing.",
+      "This supply has conflicting Growth Program attribution. Resolve the commercial attribution before releasing.",
     );
-  const [program] = links;
+  // Older links are append-only evidence, not competing commercial versions.
+  // A commercial link in another week still makes this commercial supply;
+  // absence of an effective link must never turn paid supply into organic.
+  const [program] = effective;
   if (
     !runId ||
+    !program ||
     !program.approved_for_run ||
     program.approved_version === null ||
     program.approved_version !== program.program_version ||
@@ -690,9 +712,9 @@ async function programForSupply(
     week_total: number;
   }>(
     `select count(*)::int total,
-      count(*) filter(where week_key=$3)::int week_total
-     from fulfillment_grants where source_program_id=$1 and source_program_version=$2`,
-    [program.program_id, program.program_version, week],
+      count(*) filter(where week_key=$2)::int week_total
+     from fulfillment_grants where source_program_id=$1`,
+    [program.program_id, week],
   );
   if (total + newPlacements > program.benefit_ceiling)
     throw new RequestError(
@@ -702,7 +724,16 @@ async function programForSupply(
     throw new RequestError(
       "This release would exceed the Program's approved weekly placements.",
     );
-  return program;
+  return {
+    ...program,
+    remaining_capacity: Math.max(
+      0,
+      Math.min(
+        program.benefit_ceiling - total,
+        program.planned_placements - week_total,
+      ),
+    ),
+  };
 }
 
 export async function releaseWeeklyBenefits(
@@ -822,7 +853,7 @@ export async function releaseWeeklyBenefits(
     const sortedSupplyIds = [...new Set(supplyIds)].sort();
     const supplies = await tx.query<ReleaseSupply>(
       `select s.*,v.qualification,v.reward,v.terms,o.title,g.name merchant,g.is_demo,
-        l.address,m.timezone,t.exact_item,t.item_sku,t.size_label,t.usable_hours,
+        l.address,m.timezone,(ml.active and not exists(select 1 from location_outages outage where outage.location_id=s.location_id and outage.closed_at is null)) location_active,t.exact_item,t.item_sku,t.size_label,t.usable_hours,
         t.dependency_key,t.required_spend,t.member_fee,t.funder_organization_id,
         t.fulfiller_organization_id,d.state readiness_state,d.owner_approved_by,
         d.primary_manager,d.primary_contact,d.backup_contact,d.stock_confirmed_at,
@@ -839,6 +870,7 @@ export async function releaseWeeklyBenefits(
        join offer_versions v on v.offer_id=s.offer_id and v.version=s.offer_version
        join offers o on o.id=s.offer_id join organizations g on g.id=s.organization_id
        join locations l on l.id=s.location_id join market_cells m on m.id=s.market_id
+       join market_locations ml on ml.market_id=s.market_id and ml.location_id=s.location_id
        join pilot_supply_terms t on t.supply_id=s.id
        join destination_readiness d on d.supply_id=s.id
        join pilot_supply_fallbacks f on f.supply_id=s.id
@@ -888,14 +920,9 @@ export async function releaseWeeklyBenefits(
       throw new RequestError(
         "Every released member must be active, verified, adult-confirmed and in the same cohort classification.",
       );
-    if (run) {
-      const admissions = await tx.query<{
-        member_id: string;
-        data_kind: string;
-      }>(
-        "select member_id,data_kind from pilot_admissions where run_id=$1 order by member_id",
-        [run.id],
-      );
+    const audience = run ? await operationalPilotAudience(tx, run.id) : null;
+    if (audience) {
+      const admissions = audience.included;
       if (
         admissions.length !== sortedMemberIds.length ||
         admissions.some(
@@ -905,9 +932,11 @@ export async function releaseWeeklyBenefits(
         )
       )
         throw new RequestError(
-          "The release must exactly match the pilot run's fixed admitted cohort.",
+          "The release must exactly match the operational members of the fixed admitted cohort. Refresh the plan after an account-status change.",
         );
     }
+    if (!members.length && (!audience || !audience.admitted))
+      throw new RequestError("A weekly release needs an admitted cohort.");
 
     const supplyPrograms = new Map<
       string,
@@ -922,6 +951,7 @@ export async function releaseWeeklyBenefits(
         supply.market_id !== input.marketId ||
         supply.data_kind !== input.dataKind ||
         supply.state !== "approved" ||
+        !supply.location_active ||
         supply.inventory_policy === "unlimited" ||
         !supply.quantity ||
         Number(supply.required_spend) !== 0 ||
@@ -962,7 +992,7 @@ export async function releaseWeeklyBenefits(
         );
       const [{ used }] = await tx.query<{ used: number }>(
         `select count(*)::int used from recovery_grants
-         where fallback_id=$1 and (state='redeemed' or expires_at>now())`,
+         where fallback_id=$1 and (state='redeemed' or (superseded_at is null and expires_at>now()))`,
         [supply.fallback_id],
       );
       if (supply.fallback_capacity - used < assigned)
@@ -973,7 +1003,7 @@ export async function releaseWeeklyBenefits(
       let committed: number | null = null;
       if (run) {
         const [plan] = await tx.query<{ committed_quantity: number }>(
-          `select committed_quantity from pilot_week_supplies
+          `select committed_quantity from effective_pilot_week_supplies
            where run_id=$1 and week_key=$2 and supply_id=$3`,
           [run.id, input.weekKey, supply.id],
         );
@@ -1024,6 +1054,43 @@ export async function releaseWeeklyBenefits(
       supplyPrograms.set(supply.id, program);
     }
 
+    const recommendation = run
+      ? await recommendPilotAssignments(tx, run.id, input.weekKey)
+      : null;
+    if (recommendation) {
+      if (
+        input.recommendationFingerprint &&
+        input.recommendationFingerprint !== recommendation.fingerprint
+      )
+        throw new RequestError(
+          "The assignment facts changed. Generate and review the recommendation again.",
+        );
+      if (recommendation.unassigned.length)
+        throw new RequestError(
+          "Some members lack a suitable backed destination. Record travel relevance or repair capacity before releasing.",
+        );
+      for (const assignment of input.assignments) {
+        const candidate = recommendation.members
+          .find((m) => m.memberId === assignment.memberId)
+          ?.candidates.find((c) => c.supplyId === assignment.supplyId);
+        if (
+          !candidate?.reason.suitable ||
+          (input.dataKind === "real" && candidate.reason.unknownSuitability)
+        )
+          throw new RequestError(
+            "This destination is unsuitable or unreviewed for this member. Payment and manual overrides cannot bypass suitability.",
+          );
+        if (
+          recommendation.assignments.find(
+            (a) => a.memberId === assignment.memberId,
+          )?.supplyId !== assignment.supplyId &&
+          !input.overrideReason
+        )
+          throw new RequestError(
+            "Record a reason for changing the recommended assignment.",
+          );
+      }
+    }
     for (const member of members) {
       const assignment = input.assignments.find(
         (item) => item.memberId === member.id,
@@ -1058,6 +1125,11 @@ export async function releaseWeeklyBenefits(
         fingerprint,
       ],
     );
+    for (const excluded of audience?.excluded || [])
+      await tx.query(
+        "insert into weekly_release_exclusions(release_id,member_id,service_event_id) values($1,$2,$3)",
+        [releaseId, excluded.member_id, excluded.service_event_id],
+      );
     for (const member of [...members].sort((a, b) =>
       a.id.localeCompare(b.id),
     )) {
@@ -1133,6 +1205,13 @@ export async function releaseWeeklyBenefits(
             inventoryReserved: true,
             oneFeaturedUptick: true,
             reviewedBy: actor.id,
+            suitability:
+              recommendation?.members
+                .find((m) => m.memberId === member.id)
+                ?.candidates.find((c) => c.supplyId === supply.id)?.reason ||
+              null,
+            recommendationFingerprint: recommendation?.fingerprint || null,
+            overrideReason: input.overrideReason || null,
           },
         ],
       );
@@ -1337,6 +1416,9 @@ const recoveryInput = z.object({
   payerOrganizationId: key,
   payerEvidence: z.string().trim().min(3).max(1000),
   expiresAt: instant,
+  supersedesRecoveryId: key.nullable().default(null),
+  failureReason: z.string().trim().min(10).max(1500).optional(),
+  physicalHandoff: z.enum(["not_received", "unknown"]).optional(),
 });
 
 export async function issueIncidentRecovery(
@@ -1347,7 +1429,10 @@ export async function issueIncidentRecovery(
   requireOperator(actor);
   const input = recoveryInput.parse(raw);
   return db.transaction(async (tx) => {
-    const [incident] = await tx.query<{
+    await tx.query(
+      "select singleton from growth_program_coordination where singleton=true for update",
+    );
+    let [incident] = await tx.query<{
       id: string;
       grant_id: string;
       member_id: string;
@@ -1362,24 +1447,55 @@ export async function issueIncidentRecovery(
       remedy_type: string;
       fallback_id: string | null;
       replacement_supply_id: string | null;
-    }>("select * from recovery_grants where incident_id=$1", [incident.id]);
+      payer_organization_id: string;
+      payer_evidence: string;
+      expires_at: string;
+      original_grant_id: string;
+    }>(
+      input.supersedesRecoveryId
+        ? "select * from recovery_grants where supersedes_recovery_id=$1"
+        : "select * from recovery_grants where incident_id=$1 and supersedes_recovery_id is null",
+      [input.supersedesRecoveryId || incident.id],
+    );
     if (existing) {
       if (
+        existing.original_grant_id !== incident.grant_id ||
         existing.remedy_type !== input.remedyType ||
         existing.fallback_id !== input.fallbackId ||
-        existing.replacement_supply_id !== input.replacementSupplyId
+        existing.replacement_supply_id !== input.replacementSupplyId ||
+        existing.payer_organization_id !== input.payerOrganizationId ||
+        existing.payer_evidence !== input.payerEvidence ||
+        new Date(existing.expires_at).toISOString() !== input.expiresAt
       )
         throw new RequestError(
           "This incident already has a different recovery remedy.",
         );
+      if (input.supersedesRecoveryId) {
+        const [failure] = await tx.query<{
+          reason: string;
+          physical_handoff: string;
+        }>("select * from recovery_failures where successor_id=$1", [
+          existing.id,
+        ]);
+        if (
+          failure?.reason !== input.failureReason ||
+          failure?.physical_handoff !== input.physicalHandoff
+        )
+          throw new RequestError(
+            "This recovery attempt already has different failure evidence.",
+          );
+      }
       return existing.id;
     }
-    if (!["open", "recovering"].includes(incident.state))
+    if (
+      !["open", "recovering"].includes(incident.state) &&
+      !input.supersedesRecoveryId
+    )
       throw new RequestError(
         "This incident is no longer accepting a recovery remedy.",
       );
     const [grant] = await tx.query<FulfillmentGrant>(
-      "select * from fulfillment_grants where id=$1",
+      "select * from fulfillment_grants where id=$1 for update",
       [incident.grant_id],
     );
     const [mapping] = await tx.query<{ claim_id: string; state: string }>(
@@ -1390,14 +1506,50 @@ export async function issueIncidentRecovery(
     const [existingForGrant] = await tx.query<{
       id: string;
       incident_id: string;
+      state: string;
     }>(
-      "select id,incident_id from recovery_grants where original_grant_id=$1",
+      "select id,incident_id,state from recovery_grants where original_grant_id=$1 and superseded_at is null for update",
       [grant.id],
     );
-    if (existingForGrant)
+    if (existingForGrant && !input.supersedesRecoveryId)
       throw new RequestError(
         "This original fulfillment grant already has a backed recovery remedy.",
       );
+    if (input.supersedesRecoveryId) {
+      if (
+        !existingForGrant ||
+        existingForGrant.id !== input.supersedesRecoveryId ||
+        !input.failureReason ||
+        !input.physicalHandoff
+      )
+        throw new RequestError(
+          "Choose the current remedy and record its failure and physical-handoff evidence.",
+        );
+      // Release an unredeemed reservation inside this transaction. A redeemed
+      // predecessor still consumes stock conservatively, even if handoff is unknown.
+      await tx.query(
+        "update recovery_grants set superseded_at=now() where id=$1",
+        [existingForGrant.id],
+      );
+      if (!["open", "recovering"].includes(incident.state)) {
+        const nextIncidentId = id();
+        [incident] = await tx.query<typeof incident>(
+          `insert into fulfillment_incidents(id,grant_id,member_id,claim_id,supply_id,location_id,incident_type,severity,occurred_at,owner,report_note,idempotency_key,created_by)
+          values($1,$2,$3,$4,$5,$6,'other','high',now(),$7,$8,$9,$7) returning *`,
+          [
+            nextIncidentId,
+            grant.id,
+            grant.member_id,
+            mapping?.claim_id || null,
+            grant.supply_id,
+            grant.location_id,
+            actor.id,
+            input.failureReason,
+            `failed-recovery:${existingForGrant.id}`,
+          ],
+        );
+      }
+    }
     if (new Date(input.expiresAt) <= new Date())
       throw new RequestError("Choose a future recovery expiry.");
     const [payer] = await tx.query<{ id: string; is_demo: boolean }>(
@@ -1438,12 +1590,13 @@ export async function issueIncidentRecovery(
           support_escalation: string;
           valid_until: string | null;
           active_staff_qr: number;
+          location_active: boolean;
           expires_at: string;
           merchant: string;
           address: string;
         }
       >(
-        `select f.*,s.organization_id,s.location_id,s.expires_at,t.usable_hours,
+        `select f.*,s.organization_id,s.location_id,s.expires_at,(ml.active and not exists(select 1 from location_outages outage where outage.location_id=s.location_id and outage.closed_at is null)) location_active,t.usable_hours,
           t.dependency_key primary_dependency,d.state readiness_state,
           d.owner_approved_by,d.primary_manager,d.primary_contact,d.backup_contact,
           d.stock_confirmed_at,d.exact_item_confirmed,d.staff_instructions_confirmed,
@@ -1455,6 +1608,7 @@ export async function issueIncidentRecovery(
             and rp.state='active' and rp.exposure='staff' and rc.state='active'
             and rc.credential_type='qr') active_staff_qr
          from pilot_supply_fallbacks f join network_drop_supplies s on s.id=f.supply_id
+         join market_locations ml on ml.market_id=s.market_id and ml.location_id=s.location_id
          join pilot_supply_terms t on t.supply_id=s.id
          join destination_readiness d on d.supply_id=s.id
          join organizations o on o.id=s.organization_id join locations l on l.id=s.location_id
@@ -1463,6 +1617,7 @@ export async function issueIncidentRecovery(
       );
       if (
         !fallback ||
+        !fallback.location_active ||
         // 'exhausted' is a derived capacity observation, not a withdrawal of
         // the operator's approval. Availability is recomputed from actually
         // consumed and still-live reservations below, so a fallback whose
@@ -1496,7 +1651,7 @@ export async function issueIncidentRecovery(
         );
       const [{ used }] = await tx.query<{ used: number }>(
         `select count(*)::int used from recovery_grants
-         where fallback_id=$1 and (state='redeemed' or expires_at>now())`,
+         where fallback_id=$1 and (state='redeemed' or (superseded_at is null and expires_at>now()))`,
         [fallback.id],
       );
       if (used >= fallback.usable_capacity)
@@ -1543,7 +1698,7 @@ export async function issueIncidentRecovery(
       );
       const [replacement] = await tx.query<ReleaseSupply>(
         `select s.*,v.qualification,v.reward,v.terms,o.title,g.name merchant,g.is_demo,
-          l.address,m.timezone,t.exact_item,t.item_sku,t.size_label,t.usable_hours,
+          l.address,m.timezone,(ml.active and not exists(select 1 from location_outages outage where outage.location_id=s.location_id and outage.closed_at is null)) location_active,t.exact_item,t.item_sku,t.size_label,t.usable_hours,
           t.dependency_key,t.required_spend,t.member_fee,t.funder_organization_id,
           t.fulfiller_organization_id,d.state readiness_state,d.owner_approved_by,
           d.primary_manager,d.primary_contact,d.backup_contact,d.stock_confirmed_at,
@@ -1559,6 +1714,7 @@ export async function issueIncidentRecovery(
          join offer_versions v on v.offer_id=s.offer_id and v.version=s.offer_version
          join offers o on o.id=s.offer_id join organizations g on g.id=s.organization_id
          join locations l on l.id=s.location_id join market_cells m on m.id=s.market_id
+         join market_locations ml on ml.market_id=s.market_id and ml.location_id=s.location_id
          join pilot_supply_terms t on t.supply_id=s.id
          join destination_readiness d on d.supply_id=s.id
          join pilot_supply_fallbacks f on f.supply_id=s.id
@@ -1571,6 +1727,7 @@ export async function issueIncidentRecovery(
       );
       if (
         !replacement ||
+        !replacement.location_active ||
         replacement.id === grant.supply_id ||
         replacement.market_id !== grant.market_id ||
         replacement.data_kind !== grant.data_kind ||
@@ -1634,8 +1791,8 @@ export async function issueIncidentRecovery(
       `insert into recovery_grants(
         id,incident_id,original_grant_id,member_id,original_claim_id,remedy_type,
         fallback_id,replacement_supply_id,target_organization_id,target_location_id,
-        payer_organization_id,payer_evidence,member_snapshot,expires_at,data_kind,issued_by
-       ) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+        payer_organization_id,payer_evidence,member_snapshot,expires_at,data_kind,issued_by,supersedes_recovery_id
+       ) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
       [
         recoveryId,
         incident.id,
@@ -1653,8 +1810,20 @@ export async function issueIncidentRecovery(
         input.expiresAt,
         grant.data_kind,
         actor.id,
+        input.supersedesRecoveryId,
       ],
     );
+    if (input.supersedesRecoveryId)
+      await tx.query(
+        "insert into recovery_failures(recovery_id,successor_id,physical_handoff,reason,actor_id) values($1,$2,$3,$4,$5)",
+        [
+          input.supersedesRecoveryId,
+          recoveryId,
+          input.physicalHandoff,
+          input.failureReason,
+          actor.id,
+        ],
+      );
     await tx.query(
       "update fulfillment_incidents set state='recovering',resolution=$2 where id=$1",
       [incident.id, "Backed recovery issued; awaiting recorded use."],
@@ -1677,7 +1846,7 @@ export async function issueIncidentRecovery(
         countsAsPaidPlacement: false,
         payerOrganizationId: input.payerOrganizationId,
       },
-      dedupKey: `recovery:${incident.id}`,
+      dedupKey: `recovery:${recoveryId}`,
     });
     await audit(
       tx,
@@ -1705,9 +1874,10 @@ export async function pilotPromiseOperations(
   runId: string | null = null,
 ) {
   requireOperator(actor);
-  const [supplies, releases, incidents, recoveries] = await Promise.all([
-    db.query<Record<string, unknown>>(
-      `select s.id,s.market_id,s.organization_id,s.location_id,s.state,s.data_kind,
+  const [supplies, releases, incidents, recoveries, grants] = await Promise.all(
+    [
+      db.query<Record<string, unknown>>(
+        `select s.id,s.market_id,s.organization_id,s.location_id,s.state,s.data_kind,
         s.inventory_policy,s.quantity,s.starts_at,s.expires_at,o.title,g.name merchant,
         t.exact_item,t.item_sku,t.size_label,t.usable_hours,t.required_spend,t.member_fee,
         t.funder_organization_id,t.fulfiller_organization_id,
@@ -1720,34 +1890,45 @@ export async function pilotPromiseOperations(
        left join pilot_supply_terms t on t.supply_id=s.id
        left join destination_readiness d on d.supply_id=s.id
        left join pilot_supply_fallbacks f on f.supply_id=s.id
-       where ($1::text is null or exists(select 1 from pilot_week_supplies p where p.run_id=$1 and p.supply_id=s.id))
+       where ($1::text is null or exists(select 1 from effective_pilot_week_supplies p where p.run_id=$1 and p.supply_id=s.id))
        order by s.starts_at,s.id`,
-      [runId],
-    ),
-    db.query<WeeklyRelease>(
-      `select * from weekly_releases where ($1::text is null or run_id=$1)
+        [runId],
+      ),
+      db.query<WeeklyRelease>(
+        `select * from weekly_releases where ($1::text is null or run_id=$1)
        order by published_at desc limit 20`,
-      [runId],
-    ),
-    db.query<Record<string, unknown>>(
-      `select i.*,g.week_key,g.market_id,g.member_snapshot,g.state grant_state,
+        [runId],
+      ),
+      db.query<Record<string, unknown>>(
+        `select i.*,g.week_key,g.market_id,g.member_snapshot,g.state grant_state,
         r.id recovery_id,r.state recovery_state,r.remedy_type,r.expires_at recovery_expires_at
        from fulfillment_incidents i join fulfillment_grants g on g.id=i.grant_id
-       left join recovery_grants r on r.incident_id=i.id
+       left join recovery_grants r on r.incident_id=i.id and r.superseded_at is null
        where ($1::text is null or exists(select 1 from weekly_releases w where w.id=g.release_id and w.run_id=$1))
        order by i.occurred_at desc limit 100`,
-      [runId],
-    ),
-    db.query<Record<string, unknown>>(
-      `select r.*,i.incident_type,i.severity from recovery_grants r
+        [runId],
+      ),
+      db.query<Record<string, unknown>>(
+        `select r.*,i.incident_type,i.severity from recovery_grants r
        join fulfillment_incidents i on i.id=r.incident_id
        join fulfillment_grants g on g.id=r.original_grant_id
        where ($1::text is null or exists(select 1 from weekly_releases w where w.id=g.release_id and w.run_id=$1))
        order by r.issued_at desc limit 100`,
-      [runId],
-    ),
-  ]);
-  return { supplies, releases, incidents, recoveries };
+        [runId],
+      ),
+      db.query<{
+        id: string;
+        member_id: string;
+        week_key: string;
+        merchant: string;
+        reward: string;
+      }>(
+        "select g.id,g.member_id,g.week_key,o.name merchant,g.member_snapshot->>'reward' reward from fulfillment_grants g join organizations o on o.id=g.organization_id join weekly_releases w on w.id=g.release_id where ($1::text is null or w.run_id=$1) order by g.week_key desc,g.member_id limit 1000",
+        [runId],
+      ),
+    ],
+  );
+  return { supplies, releases, incidents, recoveries, grants };
 }
 
 export type PilotPromiseOperations = Awaited<
@@ -1766,7 +1947,7 @@ export function allocationGrantView(
     db.query<Record<string, unknown>>(
       `select i.*,r.id recovery_id,r.remedy_type,r.member_snapshot recovery_snapshot,
         r.expires_at recovery_expires_at,r.state recovery_state
-       from fulfillment_incidents i left join recovery_grants r on r.incident_id=i.id
+       from fulfillment_incidents i left join recovery_grants r on r.incident_id=i.id and r.superseded_at is null
        where i.grant_id=(select id from fulfillment_grants where allocation_id=$1)
        order by i.occurred_at desc`,
       [allocation.id],

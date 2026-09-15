@@ -51,6 +51,12 @@ beforeEach(async () => {
     "insert into market_locations(market_id,location_id,organization_id) values('market','counter','store')",
   );
   await db.query(
+    "insert into redemption_points(id,organization_id,location_id,name,exposure,created_by) values('counter-point','store','counter','Counter register','staff','op')",
+  );
+  await db.query(
+    "insert into redemption_credentials(id,point_id,public_token,credential_type,version,created_by) values('counter-qr','counter-point','counter-qr-token','qr',1,'op')",
+  );
+  await db.query(
     "insert into acquisition_partners(id,name,kind) values('partner','Residents','residential')",
   );
   await db.query("insert into partner_markets values('partner','market')");
@@ -71,7 +77,7 @@ const input = {
   budget: 100,
 };
 const weeks = ["2030-01-07", "2030-01-14", "2030-01-21", "2030-01-28"];
-async function supply(sid: string, quantity = 2) {
+async function supply(sid: string, quantity = 2, certified = true) {
   await db.query(
     "insert into offers(id,organization_id,location_id,kind,state,title) values($1,'store','counter','drop','review','Beverage')",
     [sid],
@@ -88,6 +94,34 @@ async function supply(sid: string, quantity = 2) {
     "insert into pilot_supply_terms(supply_id,exact_item,item_sku,size_label,usable_hours,dependency_key,funder_organization_id,fulfiller_organization_id,data_kind,created_by) values($1,'Bottled beverage','BOTTLE','16 oz','7 AM to 7 PM','cold-stock','store','store','internal','op')",
     [sid],
   );
+  await db.query(
+    `insert into pilot_supply_fallbacks(
+      id,supply_id,substitute_item,substitute_sku,size_label,dependency_key,
+      usable_capacity,instructions,payer_organization_id,state,approved_by,created_by
+     ) values($1,$2,'Sealed bottled beverage',$3,'16 oz',$4,$5,
+      'Provide the sealed substitute and scan the staff QR.','store','approved','op','op')`,
+    [
+      `${sid}-fallback`,
+      sid,
+      `${sid}-fallback-sku`,
+      `${sid}-sealed-stock`,
+      quantity,
+    ],
+  );
+  if (certified)
+    await db.query(
+      `insert into destination_readiness(
+        supply_id,organization_id,location_id,state,owner_approved_by,
+        primary_manager,primary_contact,backup_contact,stock_confirmed_at,
+        exact_item_confirmed,staff_instructions_confirmed,shifts_briefed_at,
+        valid_hours_confirmed,qr_rehearsed_at,support_escalation,valid_until,
+        updated_by
+       ) values($1,'store','counter','ready','op','Store Manager',
+        'manager@example.test','backup@example.test',now(),true,true,now(),true,
+        now(),'Escalate immediately to the pilot support owner.',
+        '2030-03-01','op')`,
+      [sid],
+    );
 }
 async function readyRun(count = 2) {
   const runId = await createPilotRun(db, actor, {
@@ -168,6 +202,44 @@ test("four-week admission uses smallest backed week and refuses caps above 200",
       supplyId: "one",
       quantity: 2,
     }),
+  );
+});
+test("admission capacity excludes a week whose destination has no readiness certification", async () => {
+  const runId = await createPilotRun(db, actor, input);
+  for (const [index, weekKey] of weeks.entries()) {
+    const supplyId = `uncertified-${index}`;
+    await supply(supplyId, 2, false);
+    await commitPilotSupply(db, actor, {
+      runId,
+      weekKey,
+      supplyId,
+      quantity: 2,
+    });
+  }
+
+  const capacity = await pilotCapacity(db, await loadPilotRun(db, runId));
+  assert.deepEqual(
+    capacity.weeks.map((week) => week.capacity),
+    [0, 0, 0, 0],
+  );
+  assert.equal(capacity.capacity, 0);
+  await assert.rejects(
+    setPilotState(db, actor, {
+      runId,
+      state: "enrolling",
+      checklist: Object.fromEntries(
+        [
+          "ownerAgreements",
+          "staffRehearsal",
+          "recoveryFunded",
+          "supportCoverage",
+          "partnerDistribution",
+          "privacyIdentity",
+          "releaseVerified",
+        ].map((key) => [key, true]),
+      ),
+    }),
+    /Four-week supply backs 0/,
   );
 });
 test("concurrent admissions stop at capacity; optional SMS and internal data never inflate a real cohort", async () => {

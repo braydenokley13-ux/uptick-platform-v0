@@ -14,3 +14,4 @@ private/
 # Generated document build directories
 private/founder/_build_*
 __pycache__/
+.demo-studio/

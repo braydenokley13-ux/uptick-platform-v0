@@ -1,6 +1,15 @@
 import { getActor } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import {
+  recommendPilotAssignments,
+  saveAssignmentReview,
+} from "@/lib/pilot-assignment";
+import { z } from "zod";
+import {
+  openLocationOutage,
+  closeLocationOutage,
+} from "@/lib/location-outages";
+import {
   apiError,
   assertSameOrigin,
   readJsonBody,
@@ -48,7 +57,27 @@ export async function POST(request: Request) {
     const data = await readJsonBody(request, 128000);
     const db = await getDb();
     let result: unknown;
-    if (data.action === "configure_supply")
+    if (data.action === "open_location_outage")
+      result = await openLocationOutage(db, actor, data);
+    else if (data.action === "close_location_outage")
+      result = await closeLocationOutage(db, actor, data);
+    else if (data.action === "recommend_assignments") {
+      const input = z
+        .object({
+          runId: z.string().min(1),
+          weekKey: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        })
+        .parse(data);
+      result = await recommendPilotAssignments(db, input.runId, input.weekKey);
+    } else if (data.action === "review_suitability")
+      result = await saveAssignmentReview(db, actor, {
+        ...data,
+        allDestinationsFit:
+          data.allDestinationsFit === true || data.allDestinationsFit === "on",
+        suitable: data.suitable === true || data.suitable === "true",
+        driveMinutes: data.driveMinutes === "" ? null : data.driveMinutes,
+      });
+    else if (data.action === "configure_supply")
       result = await configurePilotSupply(db, actor, data);
     else if (data.action === "save_fallback")
       result = await savePilotFallback(db, actor, data);

@@ -9,6 +9,7 @@ import {
   type Claim,
 } from "./domain";
 import { RequestError } from "./http";
+import { assertLocationAvailable } from "./location-outages";
 import { id, token } from "./security";
 import { NFC_PROFILE, nfcKey, verifyNtag424, type NfcProof } from "./nfc";
 import { supplyUsage } from "./network";
@@ -59,6 +60,7 @@ export type TapEvidence = {
 };
 type RecoveryGrant = {
   id: string;
+  original_grant_id: string;
   incident_id: string;
   original_claim_id: string;
   remedy_type: "same_counter" | "replacement_supply";
@@ -331,7 +333,7 @@ export async function tapPassView(
   );
   const [recovery] = await db.query<RecoveryGrant>(
     `select r.* from recovery_grants r
-     where r.original_claim_id=$1 order by r.issued_at desc limit 1`,
+     where r.original_claim_id=$1 and r.superseded_at is null order by r.issued_at desc limit 1`,
     [claim.id],
   );
   const recoveryAvailable =
@@ -403,6 +405,9 @@ export async function tapPassView(
 }
 
 async function lockedClaim(db: DB, privateToken: string) {
+  await db.query(
+    "select singleton from growth_program_coordination where singleton=true for update",
+  );
   const initial = await getPass(db, privateToken);
   const [offer] = await db.query<{ location_id: string; state: string }>(
     "select location_id,state from offers where id=$1 for update",
@@ -414,7 +419,7 @@ async function lockedClaim(db: DB, privateToken: string) {
   );
   const claim = await getPass(db, privateToken);
   const [recovery] = await db.query<RecoveryGrant>(
-    `select * from recovery_grants where original_claim_id=$1
+    `select * from recovery_grants where original_claim_id=$1 and superseded_at is null
      order by issued_at desc limit 1 for update`,
     [claim.id],
   );
@@ -437,13 +442,21 @@ async function finishRecovery(
   const { claim, recovery } = context;
   if (!recovery)
     throw new RequestError("This pass does not have an issued recovery.");
+  await assertLocationAvailable(db, recovery.target_location_id);
   const [existing] = await db.query<RecoveryEvidence>(
     "select * from recovery_redemptions where recovery_grant_id=$1",
     [recovery.id],
   );
   if (recovery.state === "redeemed")
     return { claim, recovery, evidence: existing || null, repeated: true };
-  if (!["active", "redeemed"].includes(claim.state))
+  const [earlierRecoveryUse] =
+    claim.state === "invalidated"
+      ? await db.query(
+          "select e.id from recovery_redemptions e join recovery_grants r on r.id=e.recovery_grant_id where r.original_grant_id=$1 and r.superseded_at is not null limit 1",
+          [recovery.original_grant_id],
+        )
+      : [];
+  if (!["active", "redeemed"].includes(claim.state) && !earlierRecoveryUse)
     throw new RequestError(
       "This original pass can no longer use its recovery.",
     );
@@ -471,7 +484,7 @@ async function finishRecovery(
     ],
   );
   const [updated] = await db.query<RecoveryGrant>(
-    "update recovery_grants set state='redeemed',redeemed_at=now() where id=$1 and state='issued' returning *",
+    "update recovery_grants set state='redeemed',redeemed_at=now() where id=$1 and state='issued' and superseded_at is null returning *",
     [recovery.id],
   );
   const [closedClaim] =
@@ -557,6 +570,7 @@ async function finishRedemption(
       "This pass cannot be redeemed. Check its status and dates.",
     );
   if (supply) {
+    await assertLocationAvailable(db, supply.location_id);
     if (
       supply.organization_id !== claim.organization_id ||
       supply.offer_id !== claim.offer_id ||

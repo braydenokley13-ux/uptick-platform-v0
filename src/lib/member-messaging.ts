@@ -1,7 +1,10 @@
+import { cloudDemoMode } from "./cloud-demo-guard";
 import twilio from "twilio";
 import type { DB } from "./db";
+import { memberServiceStatus } from "./member-service";
+import { privacyPhoneFingerprint } from "./privacy-admin";
 import { audit, authorize, isQuietHours, weekKey, type Actor } from "./domain";
-import { appUrl, messagingReady } from "./config";
+import { appUrl, messagingReady, localMode } from "./config";
 import {
   simulatedTransport,
   smsEnvironmentBlock,
@@ -15,9 +18,13 @@ import { recordMemberConsent } from "./membership-identity";
 export type MemberMessage = {
   id: string;
   member_id: string;
-  access_id: string;
+  access_id: string | null;
+  consent_id?: string | null;
+  phone_change_id?: string | null;
+  recipient_encrypted?: string | null;
+  recipient_hint?: string | null;
   sender_id: string | null;
-  purpose: "access" | "drop";
+  purpose: "access" | "drop" | "opt_in_confirmation" | "phone_change";
   allocation_id: string | null;
   week_key: string | null;
   timezone: string;
@@ -78,7 +85,9 @@ export async function configureMemberSender(
       "Enter the Uptick membership Messaging Service and its US sender number.",
     );
   return db.transaction(async (tx) => {
-    await tx.query("select pg_advisory_xact_lock(73418,1)");
+    await tx.query("select pg_advisory_xact_lock($1,1)", [
+      cloudDemoMode() ? 73419 : 73418,
+    ]);
     // A single operator organization lock serializes service replacements.
     await tx.query("select id from organizations where id=$1 for update", [
       actor.organizationId,
@@ -111,11 +120,21 @@ export async function memberMessagingReadiness(db: DB) {
     "select * from member_senders where active",
   );
   const environment = uptickEnvironment();
+  const transportReady =
+    simulatedTransport() || (platformReadiness().ready && !!sender?.approved);
+  const accessEnabled =
+    simulatedTransport() || process.env.MEMBER_ACCESS_SMS_ENABLED === "true";
+  const promotionEnabled =
+    simulatedTransport() ||
+    process.env.MEMBER_PROMOTIONAL_SMS_ENABLED === "true";
   return {
     environment,
     simulated: simulatedTransport(),
-    ready:
-      simulatedTransport() || (platformReadiness().ready && !!sender?.approved),
+    ready: transportReady && accessEnabled,
+    accessReady: transportReady && accessEnabled,
+    promotionalReady: transportReady && promotionEnabled,
+    accessEnabled,
+    promotionEnabled,
     sender: sender
       ? {
           serviceSid: sender.service_sid,
@@ -200,6 +219,12 @@ async function queueMemberMessageInTransaction(
   if (existing) return existing;
   const owner = await member(tx, access.member_id);
   if (!owner) throw new RequestError("Member was not found.");
+  const serviceStatus = await memberServiceStatus(tx, owner.id);
+  if (
+    serviceStatus?.blocks_account_access ||
+    (input.purpose === "drop" && serviceStatus?.blocks_future_release)
+  )
+    throw new RequestError("Account status does not permit this message.");
   if (new Date(access.expires_at) <= new Date())
     throw new RequestError("This access request has expired.");
   let sendAt = new Date(),
@@ -260,7 +285,7 @@ async function queueMemberMessageInTransaction(
     "select * from member_senders where active",
   );
   const [message] = await tx.query<MemberMessage>(
-    `insert into member_messages(id,member_id,access_id,sender_id,purpose,allocation_id,week_key,timezone,scheduled_at,expires_at,environment) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning *`,
+    `insert into member_messages(id,member_id,access_id,sender_id,purpose,allocation_id,week_key,timezone,scheduled_at,expires_at,environment,recipient_encrypted,recipient_hint) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) returning *`,
     [
       id(),
       owner.id,
@@ -275,6 +300,8 @@ async function queueMemberMessageInTransaction(
       sendAt.toISOString(),
       expiresAt.toISOString(),
       environment,
+      encrypt(owner.phone),
+      owner.phone.slice(-4),
     ],
   );
   return message;
@@ -288,7 +315,39 @@ export async function memberMessageEligibility(
     return "Message belongs to a different environment.";
   const owner = await member(db, message.member_id);
   if (!owner) return "Member was not found.";
-  const block = smsEnvironmentBlock(owner.phone);
+  const requestedAccess = ["access", "phone_change"].includes(message.purpose);
+  let recipient = message.recipient_encrypted
+    ? decrypt(message.recipient_encrypted)
+    : owner.phone;
+  if (message.purpose === "phone_change") {
+    const [change] = await db.query<{
+      new_phone_encrypted: string;
+      confirmed_at: string | null;
+      applied_at: string | null;
+      expires_at: string;
+    }>("select * from member_phone_changes where id=$1 and member_id=$2", [
+      message.phone_change_id,
+      owner.id,
+    ]);
+    if (
+      !change ||
+      change.confirmed_at ||
+      change.applied_at ||
+      new Date(change.expires_at) <= now
+    )
+      return "Phone correction verification expired or was already used.";
+    recipient = decrypt(change.new_phone_encrypted);
+    if (
+      message.recipient_encrypted &&
+      decrypt(message.recipient_encrypted) !== recipient
+    )
+      return "Phone correction recipient does not match.";
+  } else if (recipient !== owner.phone)
+    return "Account phone changed after this message was prepared.";
+  const block = smsEnvironmentBlock(
+    recipient,
+    requestedAccess ? "access" : "promotion",
+  );
   if (block) return block;
   if (new Date(message.expires_at) <= now) return "Message window has expired.";
   if (new Date(message.scheduled_at) > now) return "not_started";
@@ -297,21 +356,35 @@ export async function memberMessageEligibility(
     [message.access_id, owner.id],
   );
   if (
-    !access ||
-    access.purpose !== message.purpose ||
-    new Date(access.expires_at) <= now
+    ["access", "drop"].includes(message.purpose) &&
+    (!access ||
+      access.purpose !== message.purpose ||
+      new Date(access.expires_at) <= now)
   )
     return "Member access has expired or does not match.";
-  if (message.purpose === "access" && access.confirmed_at)
+  if (message.purpose === "access" && access?.confirmed_at)
     return "Member access was already used.";
+  const serviceStatus = await memberServiceStatus(db, owner.id);
+  if (
+    serviceStatus?.blocks_account_access ||
+    (!requestedAccess && serviceStatus?.blocks_future_release)
+  )
+    return "Account status does not permit this message.";
   const [globalSuppression] = await db.query<{ suppressed: boolean }>(
     "select suppressed from member_global_suppressions where phone=$1",
-    [owner.phone],
+    [recipient],
   );
   if (globalSuppression?.suppressed) return "Uptick program opt-out.";
+  if (process.env.PRIVACY_SUPPRESSION_KEY || localMode()) {
+    const [erasedSuppression] = await db.query<{ suppressed: boolean }>(
+      "select suppressed from privacy_phone_suppressions where phone_fingerprint=$1",
+      [privacyPhoneFingerprint(recipient)],
+    );
+    if (erasedSuppression?.suppressed) return "Uptick program opt-out.";
+  }
   const [suppression] = await db.query<{ suppressed: boolean }>(
     "select suppressed from member_suppressions where phone=$1 and sender_id=$2",
-    [owner.phone, message.sender_id],
+    [recipient, message.sender_id],
   );
   if (suppression?.suppressed) return "Uptick sender opt-out.";
   if (!simulatedTransport()) {
@@ -327,13 +400,23 @@ export async function memberMessageEligibility(
     )
       return "Uptick membership delivery is not ready.";
   }
-  if (message.purpose === "drop") {
+  if (!requestedAccess) {
     if (
       owner.state !== "active" ||
       !owner.verified_at ||
       !(await latestConsent(db, owner.id))
     )
       return "No current verified Uptick membership consent.";
+    if (isQuietHours(now, message.timezone)) return "quiet_hours";
+    if (message.purpose === "opt_in_confirmation") {
+      const [consent] = await db.query(
+        "select id from member_consents where id=$1 and member_id=$2 and accepted and consent_action='opt_in'",
+        [message.consent_id, owner.id],
+      );
+      return consent
+        ? null
+        : "Subscription confirmation has no matching affirmative consent.";
+    }
     if (weekKey(now, message.timezone) !== message.week_key)
       return "Drop week has passed.";
     if (isQuietHours(now, message.timezone)) return "quiet_hours";
@@ -369,7 +452,14 @@ export async function memberMessageEligibility(
   }
   return null;
 }
-export function memberMessageText(purpose: "access" | "drop", url: string) {
+export function memberMessageText(
+  purpose: MemberMessage["purpose"],
+  url: string,
+) {
+  if (purpose === "phone_change")
+    return `Uptick Local: Confirm the new phone number you asked support to use: ${url} This does not subscribe you to promotional texts. Reply STOP to stop texts. HELP for help.`;
+  if (purpose === "opt_in_confirmation")
+    return "Uptick Local: You're subscribed to recurring automated promotional texts about your weekly Uptick: usually 1 featured message per week. Msg & data rates may apply. Reply STOP to stop or HELP for help.";
   return purpose === "access"
     ? `Uptick Local: Your requested secure access link: ${url} Open it to confirm your phone and review your membership choices. Reply STOP to stop texts. HELP for help.`
     : `Uptick Local: Your featured Uptick is ready. See this week's free local benefit: ${url} No purchase required. Reply STOP to stop promotional texts. HELP for help.`;
@@ -417,6 +507,15 @@ export async function dispatchMemberMessages(
         );
         return { skip: true, message };
       }
+      if (!message.recipient_encrypted) {
+        const owner = await member(tx, message.member_id);
+        message.recipient_encrypted = encrypt(owner.phone);
+        message.recipient_hint = owner.phone.slice(-4);
+        await tx.query(
+          "update member_messages set recipient_encrypted=$2,recipient_hint=$3 where id=$1",
+          [message.id, message.recipient_encrypted, message.recipient_hint],
+        );
+      }
       await tx.query(
         "update member_messages set state=$2,updated_at=now() where id=$1",
         [message.id, simulatedTransport() ? "development" : "submitting"],
@@ -450,7 +549,6 @@ export async function dispatchMemberMessages(
       processed++;
       continue;
     }
-    const owner = await member(db, message.member_id);
     const [access] = await db.query<Access>(
       "select * from member_access where id=$1",
       [message.access_id],
@@ -459,11 +557,20 @@ export async function dispatchMemberMessages(
       "select * from member_senders where id=$1",
       [message.sender_id],
     );
+    const [phoneChange] =
+      message.purpose === "phone_change"
+        ? await db.query<{ token_encrypted: string }>(
+            "select token_encrypted from member_phone_changes where id=$1",
+            [message.phone_change_id],
+          )
+        : [];
     const body = memberMessageText(
       message.purpose,
-      message.purpose === "access"
-        ? `${appUrl()}/u/${decrypt(access.token_encrypted)}`
-        : `${appUrl()}/your-uptick`,
+      phoneChange
+        ? `${appUrl()}/phone-change/${decrypt(phoneChange.token_encrypted)}`
+        : message.purpose === "access"
+          ? `${appUrl()}/u/${decrypt(access.token_encrypted)}`
+          : `${appUrl()}/your-uptick`,
     );
     try {
       await db.query(
@@ -471,7 +578,7 @@ export async function dispatchMemberMessages(
         [message.id, encrypt(body)],
       );
       const result = await send({
-        to: owner.phone,
+        to: decrypt(message.recipient_encrypted!),
         messagingServiceSid: sender.service_sid,
         body,
         statusCallback: `${appUrl()}/api/member-twilio/status?message=${message.id}`,
@@ -505,7 +612,7 @@ export async function dispatchMemberMessages(
 }
 export async function dispatchRequestedMemberAccess(db: DB, messageId: string) {
   const [message] = await db.query<MemberMessage>(
-    "select * from member_messages where id=$1 and purpose='access'",
+    "select * from member_messages where id=$1 and purpose in ('access','phone_change')",
     [messageId],
   );
   if (!message)
@@ -623,12 +730,18 @@ export async function memberInbound(db: DB, fields: Record<string, string>) {
     if (!inserted.length)
       return {
         action: normalized,
+        shouldReply: false,
         reply:
           normalized === "HELP"
             ? memberHelpReply()
-            : "Uptick Local received your message. A support person will review it.",
+            : "Uptick Local received your message. A support person will review it. Reply STOP to stop texts.",
       };
     if (normalized === "STOP" || normalized === "START") {
+      if (process.env.PRIVACY_SUPPRESSION_KEY || localMode())
+        await tx.query(
+          "update privacy_phone_suppressions set suppressed=$2,updated_at=now() where phone_fingerprint=$1",
+          [privacyPhoneFingerprint(fields.From), normalized === "STOP"],
+        );
       await tx.query(
         "insert into member_suppressions(phone,sender_id,suppressed) values($1,$2,$3) on conflict(phone,sender_id) do update set suppressed=excluded.suppressed,updated_at=now()",
         [fields.From, sender.id, normalized === "STOP"],
@@ -651,7 +764,7 @@ export async function memberInbound(db: DB, fields: Record<string, string>) {
           [owner.id],
         );
       }
-      // START changes carrier suppression only. A fresh explicit consent action must resume membership.
+      // START clears suppression only. A fresh explicit choice must restore promotional consent.
     }
     if (normalized === "HELP" || normalized === "OTHER") {
       const [allocation] = owner
@@ -682,6 +795,9 @@ export async function memberInbound(db: DB, fields: Record<string, string>) {
     }
     return {
       action: normalized,
+      // Advanced Opt-Out already sent the configured provider keyword reply.
+      // We still reconcile suppression and create the support record above.
+      shouldReply: !fields.OptOutType,
       reply:
         normalized === "STOP"
           ? "Uptick Local promotional texts are stopped. Your membership and any issued Uptick stay active."
@@ -689,7 +805,7 @@ export async function memberInbound(db: DB, fields: Record<string, string>) {
             ? "Carrier blocking is cleared. Promotional texts remain off until you opt in again in Your Uptick preferences."
             : normalized === "HELP"
               ? memberHelpReply()
-              : "Uptick Local received your message. A support person will review it.",
+              : "Uptick Local received your message. A support person will review it. Reply STOP to stop texts.",
     };
   });
   return result;
@@ -701,7 +817,7 @@ function memberHelpReply() {
   )
     ? ` Email ${process.env.SUPPORT_EMAIL}.`
     : "";
-  return `Uptick Local help: open ${appUrl()}/your-uptick for your benefit and preferences.${support} Reply STOP to stop promotional texts.`;
+  return `Uptick Local help: visit ${appUrl()}/sms for support.${support} Reply STOP to stop texts.`;
 }
 export async function verifyMemberWebhook(request: Request, kind: string) {
   if (!["inbound", "status"].includes(kind))

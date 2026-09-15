@@ -1,3 +1,5 @@
+> **Historical record.** This document describes an earlier implementation or review checkpoint. Use [current release truth](REAL_ENROLLMENT_RELEASE_TRUTH.md) for this candidate’s fixes, evidence, verdicts and remaining gates. Earlier test counts, demo instructions and unresolved-gap statements are not current unless carried forward there.
+
 # Uptick Local — hosted commissioning record
 
 September 14, 2026. **The operating release is deployed for internal rehearsal. Real pilot enrollment and promotional delivery remain closed.** Both repositories' release pull requests are merged. The public website is also live after the user supplied specific publication approval.
