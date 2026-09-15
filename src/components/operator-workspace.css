@@ -1,0 +1,51 @@
+.fulfillment-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.operator-run-picker {
+  display: grid;
+  grid-template-columns: minmax(0, 420px) auto;
+  align-items: end;
+}
+
+.operator-clear-state,
+.operator-primary-action {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #bde5db;
+  border-radius: 12px;
+  background: #e8f6f2;
+}
+
+.operator-primary-action h3 {
+  margin-bottom: 6px;
+}
+
+.operator-primary-action .network-form {
+  margin-top: 14px;
+}
+
+.operator-advanced {
+  border-top: 1px solid var(--line);
+  margin-top: 20px;
+  padding-top: 12px;
+}
+
+.operator-advanced > summary {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+@media (max-width: 600px) {
+  .operator-run-picker {
+    grid-template-columns: 1fr;
+  }
+
+  .operator-run-picker .button,
+  .operator-primary-action .button {
+    width: 100%;
+  }
+}

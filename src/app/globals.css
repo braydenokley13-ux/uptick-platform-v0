@@ -2530,3 +2530,51 @@ td strong {
     transition-duration: 0.01ms !important;
   }
 }
+
+.nav-more {
+  margin-top: 12px;
+  border-top: 1px solid #ffffff15;
+  padding-top: 10px;
+}
+.nav-more > summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  color: #b8c7d7;
+  font-size: 12px;
+  padding: 12px 15px;
+  border-radius: 8px;
+}
+.nav-more > summary:after {
+  margin-left: auto;
+  font-size: 15px;
+}
+.nav-more > summary:hover {
+  background: #ffffff08;
+  color: white;
+}
+@media (max-width: 700px) {
+  .sidebar nav {
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+  .nav-more {
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+  .nav-more > summary {
+    min-height: 38px;
+    padding: 10px 12px;
+  }
+  .nav-more[open] {
+    background: #1b3044;
+    border-radius: 9px;
+    padding-bottom: 8px;
+  }
+  .nav-more .nav-item {
+    display: inline-flex;
+  }
+}

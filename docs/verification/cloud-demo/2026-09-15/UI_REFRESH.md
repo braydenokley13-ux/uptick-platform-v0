@@ -17,3 +17,11 @@ The founder's dashboard mockups inform the visual direction, not product scope. 
 TypeScript, ESLint, and whitespace checks pass. The dedicated local PostgreSQL cloud isolation verifier passes all checks, including the full recovery redemption and reset rollback. Browser inspection covered desktop Demo Studio, operator Today, and member enrollment at 390px, with document width equal to viewport width.
 
 Hosted journey screenshots and final deployment/CI evidence are recorded in DEPLOYMENT_STATUS.md after deployment. The UI refresh does not change database migrations or domain contracts.
+
+## Simpler task flow
+
+The follow-up usability pass separates the operator workspace into Overview, Weekly supply, Results, and Setup. Overview presents three task destinations and a small cohort summary; it does not render the setup forms. The complete launch checklist remains in Setup, with its outstanding count linked from Overview. Supply, partners, economics, admission and classification forms remain available in their appropriate views.
+
+Main navigation now presents Overview, Members, and Store operations. Markets, Programs, Messaging, and Settings remain under More tools. Fulfillment prioritizes active issues in DOM, keyboard, and visual order; support keeps unresolved work and lookup visible.
+
+Demo Studio presents one numbered step at a time, using a bookmarkable step URL. Its default step follows saved activity; it never marks a physical handoff complete from a digital redemption. Saved counters and reset/end controls remain explicitly available. All real enrollment/provider/business gates remain separate and closed as before.

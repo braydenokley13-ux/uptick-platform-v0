@@ -26,7 +26,11 @@ import { RequestError } from "@/lib/http";
 import { appUrl } from "@/lib/config";
 import "./studio.css";
 export const dynamic = "force-dynamic";
-export default async function DemoStudio() {
+export default async function DemoStudio({
+  searchParams,
+}: {
+  searchParams: Promise<{ step?: string }>;
+}) {
   if (!demoMode()) notFound();
   assertDemoStorage();
   let snapshot;
@@ -90,6 +94,29 @@ export default async function DemoStudio() {
     );
   }
   const { counts, qr } = snapshot;
+  const query = await searchParams;
+  const suggestedStep = counts.recoveries
+    ? 6
+    : counts.incidents
+      ? 6
+      : counts.redemptions
+        ? 4
+        : counts.claims
+          ? 3
+          : 1;
+  const requestedStep = Number(query.step);
+  const step =
+    Number.isInteger(requestedStep) && requestedStep >= 1 && requestedStep <= 6
+      ? requestedStep
+      : suggestedStep;
+  const stepNames = [
+    "Member entry",
+    "Claim benefit",
+    "Staff QR",
+    "See results",
+    "Report an issue",
+    "Recovery",
+  ];
   const staffPath = `/tap/${qr.public_token}`;
   const svg = await QRCode.toString(`${appUrl()}${staffPath}`, {
     type: "svg",
@@ -109,13 +136,11 @@ export default async function DemoStudio() {
             <Play size={14} /> DEMO STUDIO
           </span>
           <h1>
-            See the whole journey.
-            <br />
-            <span>Make it your own.</span>
+            Your Uptick <span>walkthrough.</span>
           </h1>
           <p>
-            From a member’s first benefit to a recovery that puts things right.
-            Follow the six steps below, then reset and go again.
+            One step at a time, in this browser. Come back here whenever you
+            need the next step.
           </p>
         </div>
         <div className="demo-safety">
@@ -128,150 +153,196 @@ export default async function DemoStudio() {
           </p>
         </div>
       </header>
-      <section className="demo-summary" aria-label="Saved sample activity">
-        {[
-          ["Claims", counts.claims],
-          ["Digital redemptions", counts.redemptions],
-          ["Reported issues", counts.incidents],
-          ["Recoveries issued", counts.recoveries],
-          ["Recoveries redeemed", counts.recovery_redemptions],
-        ].map(([label, value]) => (
-          <div key={label}>
-            <span>{label}</span>
-            <strong>{value}</strong>
-            <small>Sample activity</small>
-          </div>
-        ))}
-      </section>
-      <div className="demo-section-heading">
-        <div>
-          <p className="eyebrow">YOUR WALKTHROUGH</p>
-          <h2>One benefit. Every perspective.</h2>
-        </div>
-        <span>Follow steps 1–6 in this browser</span>
-      </div>
-      <section className="demo-scenes" aria-label="Demo steps">
-        <article id="step-1">
-          <div className="demo-card-top">
-            <span className="demo-icon">
-              <Play size={23} />
-            </span>
-            <span className="demo-step-number">01</span>
-          </div>
-          <span className="eyebrow">1 · MEMBER ENTRY</span>
-          <h2>Start with a member</h2>
-          <p>
-            The sample number and ZIP are filled in. Confirm the adult checkbox,
-            request your simulated access link, then open it. Promotional texts
-            are optional.
-          </p>
-          <DemoButton action="member">Open member journey</DemoButton>
-          <p className="fine">Sample: (202) 555-0123 · ZIP 10583</p>
-        </article>
-        <article id="step-2">
-          <div className="demo-card-top">
-            <span className="demo-icon">
-              <Coffee size={23} />
-            </span>
-            <span className="demo-step-number">02</span>
-          </div>
-          <span className="eyebrow">2 · BACKED BENEFIT</span>
-          <h2>Claim this week’s coffee</h2>
-          <p>
-            One 12 oz coffee, with no purchase or member payment. Open Your
-            Uptick and claim it to prepare the pass.
-          </p>
-          <Link className="button" href="/your-uptick">
-            Open Your Uptick
-          </Link>
-        </article>
-        <article id="step-3">
-          <div className="demo-card-top">
-            <span className="demo-icon">
-              <ScanLine size={23} />
-            </span>
-            <span className="demo-step-number">03</span>
-          </div>
-          <span className="eyebrow">3 · STAFF QR</span>
-          <h2>Record redemption</h2>
-          <p>
-            On the claimed pass, choose “Use this pass at Uptick Tap”. Return
-            here, open the sample staff QR in this same browser, and confirm.
-            The button follows the QR’s exact destination. On one laptop, it
-            stands in for scanning at a counter.
-          </p>
-          <div className="demo-qr" dangerouslySetInnerHTML={{ __html: svg }} />
-          <Link className="button" href={staffPath}>
-            Open staff QR destination
-          </Link>
-          <p className="fine">
-            Digital redemption records credential use. It does not prove a
-            purchase or physical handoff.
-          </p>
-        </article>
-        <article id="step-4">
-          <div className="demo-card-top">
-            <span className="demo-icon">
-              <ChartNoAxesCombined size={23} />
-            </span>
-            <span className="demo-step-number">04</span>
-          </div>
-          <span className="eyebrow">4 · RESULTS</span>
-          <h2>See the saved result</h2>
-          <p>The merchant and operator views use these same sample records.</p>
-          <DemoButton action="merchant">Open merchant view</DemoButton>
-          <DemoButton action="operator">Open operator view</DemoButton>
-        </article>
-        <article id="step-5">
-          <div className="demo-card-top">
-            <span className="demo-icon">
-              <CircleAlert size={23} />
-            </span>
-            <span className="demo-step-number">05</span>
-          </div>
-          <span className="eyebrow">5 · FULFILLMENT FAILURE</span>
-          <h2>The coffee ran out</h2>
-          <p>
-            Record a sample stockout before physical handoff. The original
-            digital evidence stays intact.
-          </p>
-          <DemoButton action="stockout">Report sample stockout</DemoButton>
-        </article>
-        <article id="step-6">
-          <div className="demo-card-top">
-            <span className="demo-icon">
-              <HeartHandshake size={23} />
-            </span>
-            <span className="demo-step-number">06</span>
-          </div>
-          <span className="eyebrow">6 · BACKED RECOVERY</span>
-          <h2>Make the member whole</h2>
-          <p>
-            Issue one sealed bottle of water from separate sample fallback
-            stock. Reopen the member’s pass and the staff QR to record recovery.
-          </p>
-          <DemoButton action="recovery">Issue sample recovery</DemoButton>
-          <Link className="text-link" href="/your-uptick">
-            Return to the member’s pass <ArrowRight size={15} />
-          </Link>
-        </article>
-      </section>
-      <section className="demo-ledger">
-        <h2>Saved sample evidence</h2>
-        <dl>
-          {Object.entries(counts).map(([label, count]) => (
+      <details className="demo-evidence-disclosure">
+        <summary>View saved sample activity</summary>
+        <section className="demo-summary" aria-label="Saved sample activity">
+          {[
+            ["Claims", counts.claims],
+            ["Digital redemptions", counts.redemptions],
+            ["Reported issues", counts.incidents],
+            ["Recoveries issued", counts.recoveries],
+            ["Recoveries redeemed", counts.recovery_redemptions],
+          ].map(([label, value]) => (
             <div key={label}>
-              <dt>{label.replaceAll("_", " ")}</dt>
-              <dd>{count}</dd>
+              <span>{label}</span>
+              <strong>{value}</strong>
+              <small>Sample activity</small>
             </div>
           ))}
-        </dl>
-        <p>
-          A recovery serves the original obligation. It is not another paid
-          placement or another member.
-        </p>
+        </section>
+      </details>
+      <nav className="demo-step-nav" aria-label="Demo journey">
+        {stepNames.map((name, index) => (
+          <Link
+            href={`/demo?step=${index + 1}`}
+            key={name}
+            aria-current={step === index + 1 ? "step" : undefined}
+          >
+            <span>{index + 1}</span>
+            <strong>{name}</strong>
+          </Link>
+        ))}
+      </nav>
+      <div className="demo-guided-heading">
+        <span className="eyebrow">STEP {step} OF 6</span>
+        <span>{stepNames[step - 1]}</span>
+      </div>
+      <section className="demo-scenes demo-guided" aria-label="Demo steps">
+        {step === 1 && (
+          <article id="step-1">
+            <div className="demo-card-top">
+              <span className="demo-icon">
+                <Play size={23} />
+              </span>
+              <span className="demo-step-number">01</span>
+            </div>
+            <span className="eyebrow">1 · MEMBER ENTRY</span>
+            <h2>Start with a member</h2>
+            <p>
+              The sample number and ZIP are filled in. Confirm the adult
+              checkbox, request your simulated access link, then open it.
+              Promotional texts are optional.
+            </p>
+            <DemoButton action="member">Open member journey</DemoButton>
+            <p className="fine">Sample: (202) 555-0123 · ZIP 10583</p>
+          </article>
+        )}
+        {step === 2 && (
+          <article id="step-2">
+            <div className="demo-card-top">
+              <span className="demo-icon">
+                <Coffee size={23} />
+              </span>
+              <span className="demo-step-number">02</span>
+            </div>
+            <span className="eyebrow">2 · BACKED BENEFIT</span>
+            <h2>Claim this week’s coffee</h2>
+            <p>
+              One 12 oz coffee, with no purchase or member payment. Open Your
+              Uptick and claim it to prepare the pass.
+            </p>
+            <Link className="button" href="/your-uptick">
+              Open Your Uptick
+            </Link>
+          </article>
+        )}
+        {step === 3 && (
+          <article id="step-3">
+            <div className="demo-card-top">
+              <span className="demo-icon">
+                <ScanLine size={23} />
+              </span>
+              <span className="demo-step-number">03</span>
+            </div>
+            <span className="eyebrow">3 · STAFF QR</span>
+            <h2>Record redemption</h2>
+            <p>
+              On the claimed pass, choose “Use this pass at Uptick Tap”. Return
+              here, open the sample staff QR in this same browser, and confirm.
+              The button follows the QR’s exact destination. On one laptop, it
+              stands in for scanning at a counter.
+            </p>
+            <div
+              className="demo-qr"
+              dangerouslySetInnerHTML={{ __html: svg }}
+            />
+            <Link className="button" href={staffPath}>
+              Open staff QR destination
+            </Link>
+            <p className="fine">
+              Digital redemption records credential use. It does not prove a
+              purchase or physical handoff.
+            </p>
+          </article>
+        )}
+        {step === 4 && (
+          <article id="step-4">
+            <div className="demo-card-top">
+              <span className="demo-icon">
+                <ChartNoAxesCombined size={23} />
+              </span>
+              <span className="demo-step-number">04</span>
+            </div>
+            <span className="eyebrow">4 · RESULTS</span>
+            <h2>See the saved result</h2>
+            <p>
+              The merchant and operator views use these same sample records.
+            </p>
+            <DemoButton action="merchant">Open merchant view</DemoButton>
+            <DemoButton action="operator">Open operator view</DemoButton>
+          </article>
+        )}
+        {step === 5 && (
+          <article id="step-5">
+            <div className="demo-card-top">
+              <span className="demo-icon">
+                <CircleAlert size={23} />
+              </span>
+              <span className="demo-step-number">05</span>
+            </div>
+            <span className="eyebrow">5 · FULFILLMENT FAILURE</span>
+            <h2>The coffee ran out</h2>
+            <p>
+              Record a sample stockout before physical handoff. The original
+              digital evidence stays intact.
+            </p>
+            <DemoButton action="stockout">Report sample stockout</DemoButton>
+          </article>
+        )}
+        {step === 6 && (
+          <article id="step-6">
+            <div className="demo-card-top">
+              <span className="demo-icon">
+                <HeartHandshake size={23} />
+              </span>
+              <span className="demo-step-number">06</span>
+            </div>
+            <span className="eyebrow">6 · BACKED RECOVERY</span>
+            <h2>Make the member whole</h2>
+            <p>
+              Issue one sealed bottle of water from separate sample fallback
+              stock. Reopen the member’s pass and the staff QR to record
+              recovery.
+            </p>
+            {counts.recovery_redemptions > 0 ? (
+              <p className="demo-complete">
+                <Check size={18} /> Recovery recorded. You’ve completed the
+                journey.
+              </p>
+            ) : counts.recoveries > 0 ? (
+              <p className="demo-complete">
+                <Check size={18} /> Recovery issued. Open the member’s pass,
+                prepare it for Uptick Tap, then return to step 3 to record it.
+              </p>
+            ) : (
+              <DemoButton action="recovery">Issue sample recovery</DemoButton>
+            )}
+            <Link className="text-link" href="/your-uptick">
+              Return to the member’s pass <ArrowRight size={15} />
+            </Link>
+          </article>
+        )}
       </section>
-      <section className="demo-reset">
+      <div className="demo-step-footer">
+        {step > 1 ? (
+          <Link href={`/demo?step=${step - 1}`} className="text-link">
+            ← Previous step
+          </Link>
+        ) : (
+          <span />
+        )}
+        {step < 6 ? (
+          <Link href={`/demo?step=${step + 1}`} className="button secondary">
+            Next: {stepNames[step]} <ArrowRight size={16} />
+          </Link>
+        ) : (
+          <Link href="/demo?step=1" className="text-link">
+            Back to the beginning <ArrowRight size={16} />
+          </Link>
+        )}
+      </div>
+      <details className="demo-reset" open={counts.recovery_redemptions > 0}>
+        <summary>Reset or finish this demo</summary>
         <h2>A fresh start, whenever you need it.</h2>
         {cloudDemoMode() ? (
           <>
@@ -310,7 +381,7 @@ export default async function DemoStudio() {
             </p>
           </>
         )}
-      </section>
+      </details>
     </main>
   );
 }

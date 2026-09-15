@@ -8,6 +8,7 @@ import { Badge, PageHeading } from "@/components/ui";
 import { PilotForm } from "@/components/pilot-form";
 import { NetworkMemberLookup } from "@/components/network-operations";
 import "@/components/network-operations.css";
+import "@/components/operator-workspace.css";
 export const dynamic = "force-dynamic";
 export default async function PilotSupport() {
   const actor = await requireActor(true),
@@ -23,11 +24,11 @@ export default async function PilotSupport() {
   );
   return (
     <Shell actor={actor} active="pilot/support" name="Member support">
-      <div className="network-operations">
+      <div className="network-operations operator-workspace support-workspace">
         <PageHeading
-          eyebrow="MEMBERS & SUPPORT"
-          title="Make the member whole."
-          description="Web help and inbound text requests arrive here with their existing context."
+          eyebrow="MEMBER SUPPORT"
+          title="Resolve open member requests."
+          description="Start with an unresolved request, confirm the remedy, and record what was done."
         />
         <section className="panel network-panel">
           <h2>{requests.length} open support requests</h2>
@@ -76,8 +77,8 @@ export default async function PilotSupport() {
                   </Link>
                 </p>
               )}
-              <details>
-                <summary>Record support resolution</summary>
+              <div className="operator-primary-action">
+                <h3>Resolve this request</h3>
                 <p>
                   Arrange the remedy before closing a fulfillment complaint.
                   Digital redemption alone does not establish that the item was
@@ -99,7 +100,7 @@ export default async function PilotSupport() {
                     />
                   </label>
                 </PilotForm>
-              </details>
+              </div>
             </article>
           ))}
         </section>
@@ -109,66 +110,68 @@ export default async function PilotSupport() {
             Privacy requests, account data exports, corrections and erasure →
           </Link>
         </p>
-        <section className="panel network-panel">
-          <h2>Member participation and account access</h2>
-          <p>
-            Keep the original cohort denominator. Withdrawal, inaccessibility
-            and suspension stop future releases; they never count as
-            fulfillment. Geography changes are recorded for review. Promotional
-            STOP remains separate.
-          </p>
-          <PilotForm
-            action="member-service"
-            extra={{ requestKey: randomUUID() }}
-            button="Record account status"
-          >
-            <label>
-              Member
-              <select name="memberId" required>
-                <option value="">Choose a member</option>
-                {members.map((member) => (
-                  <option key={member.id} value={member.id}>
-                    Phone ending {member.phone_hint} · {member.id.slice(-8)} ·{" "}
-                    {member.data_kind} · {member.service_kind}
+        <details className="panel network-panel operator-advanced">
+          <summary>Change participation or account access</summary>
+          <div>
+            <p>
+              Keep the original cohort denominator. Withdrawal, inaccessibility
+              and suspension stop future releases; they never count as
+              fulfillment. Geography changes are recorded for review.
+              Promotional STOP remains separate.
+            </p>
+            <PilotForm
+              action="member-service"
+              extra={{ requestKey: randomUUID() }}
+              button="Record account status"
+            >
+              <label>
+                Member
+                <select name="memberId" required>
+                  <option value="">Choose a member</option>
+                  {members.map((member) => (
+                    <option key={member.id} value={member.id}>
+                      Phone ending {member.phone_hint} · {member.id.slice(-8)} ·{" "}
+                      {member.data_kind} · {member.service_kind}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Status
+                <select name="kind" required>
+                  <option value="withdrawn">
+                    Voluntary withdrawal — verified member request
                   </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Status
-              <select name="kind" required>
-                <option value="withdrawn">
-                  Voluntary withdrawal — verified member request
-                </option>
-                <option value="suspended">
-                  Service suspension — revoke account access
-                </option>
-                <option value="deletion_pending">
-                  Verified deletion request — revoke access pending privacy
-                  review
-                </option>
-                <option value="inaccessible">
-                  Inaccessible — stop future release pending support
-                </option>
-                <option value="geography_changed">
-                  Geography changed — preserve existing obligations
-                </option>
-                <option value="resumed">
-                  Resume future participation — verified member request
-                </option>
-              </select>
-            </label>
-            <label>
-              Reason and evidence
-              <textarea
-                name="reason"
-                required
-                minLength={10}
-                maxLength={1500}
-              />
-            </label>
-          </PilotForm>
-        </section>
+                  <option value="suspended">
+                    Service suspension — revoke account access
+                  </option>
+                  <option value="deletion_pending">
+                    Verified deletion request — revoke access pending privacy
+                    review
+                  </option>
+                  <option value="inaccessible">
+                    Inaccessible — stop future release pending support
+                  </option>
+                  <option value="geography_changed">
+                    Geography changed — preserve existing obligations
+                  </option>
+                  <option value="resumed">
+                    Resume future participation — verified member request
+                  </option>
+                </select>
+              </label>
+              <label>
+                Reason and evidence
+                <textarea
+                  name="reason"
+                  required
+                  minLength={10}
+                  maxLength={1500}
+                />
+              </label>
+            </PilotForm>
+          </div>
+        </details>
       </div>
     </Shell>
   );

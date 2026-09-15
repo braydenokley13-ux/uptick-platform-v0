@@ -10,6 +10,7 @@ import { Shell } from "@/components/shell";
 import { PageHeading } from "@/components/ui";
 import { PilotForm } from "@/components/pilot-form";
 import "@/components/network-operations.css";
+import "@/components/operator-workspace.css";
 
 export const dynamic = "force-dynamic";
 export default async function FulfillmentPage({
@@ -38,7 +39,7 @@ export default async function FulfillmentPage({
     reason: string;
     closed_at: string | null;
   }>(
-    "select x.*,o.name merchant from location_outages x join locations l on l.id=x.location_id join organizations o on o.id=l.organization_id order by x.opened_at desc limit 50",
+    "select x.*,o.name merchant from location_outages x join locations l on l.id=x.location_id join organizations o on o.id=l.organization_id order by (x.closed_at is null) desc,x.opened_at desc limit 50",
   );
   const affected = await db.query<{
     outage_id: string;
@@ -65,20 +66,20 @@ export default async function FulfillmentPage({
       )
     : [];
   return (
-    <Shell actor={actor} active="pilot" name="Pilot fulfillment">
-      <div className="network-operations">
+    <Shell actor={actor} active="pilot/fulfillment" name="Pilot fulfillment">
+      <div className="network-operations operator-workspace fulfillment-workspace">
         <PageHeading
-          eyebrow="CONFIRM · RESERVE · REPAIR"
-          title="Keep each member’s promise."
-          description="Confirm exact terms and readiness, publish one backed grant per member, and repair fulfillment failures."
+          eyebrow="FULFILLMENT"
+          title="Fix active problems first."
+          description="Review outages and member recovery work, confirm readiness, then publish the next weekly release."
         />
-        <p>
+        <p className="operator-workspace-nav">
           <Link href="/operator/pilot">← Pilot Today</Link> ·{" "}
           <Link href="/operator/pilot/support">Member support</Link> ·{" "}
           <Link href="/operator/network/supply">Create or approve supply</Link>
         </p>
         {operations.runs.length > 0 && (
-          <form className="network-form" method="get">
+          <form className="network-form operator-run-picker" method="get">
             <label>
               Pilot run
               <select name="run" defaultValue={run?.id}>
@@ -92,9 +93,131 @@ export default async function FulfillmentPage({
             <button className="button secondary">Open pilot</button>
           </form>
         )}
+        <section className="panel network-panel operator-active-work">
+          <h2>Active outages and member recovery</h2>
+          <p>
+            Start here when a location cannot fulfill its promises. Open outages
+            are listed first, with every affected member who still needs
+            recovery work.
+          </p>
+          <details className="operator-advanced">
+            <summary>Report a new location outage</summary>
+            <p>
+              Opening an outage stops new distribution and directions to the
+              location, suspends its readiness, and queues affected promises for
+              recovery review. It does not claim that every member experienced a
+              failure.
+            </p>
+            <PilotForm
+              endpoint="/api/pilot-promise"
+              action="open_location_outage"
+              extra={{ requestKey: randomUUID() }}
+              button="Stop routing and open outage"
+            >
+              <label>
+                Destination
+                <select name="locationId" required>
+                  <option value="">Choose a destination</option>
+                  {destinations.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.merchant} · {d.address}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Outage owner
+                <input name="owner" required maxLength={200} />
+              </label>
+              <label>
+                What failed and what is known?
+                <textarea
+                  name="reason"
+                  required
+                  minLength={10}
+                  maxLength={1500}
+                />
+              </label>
+            </PilotForm>
+          </details>
+          {!outages.some((outage) => !outage.closed_at) && (
+            <p className="operator-clear-state">No open location outages.</p>
+          )}
+          {outages.map((outage) => (
+            <article className="panel network-panel" key={outage.id}>
+              <h3>
+                {outage.merchant} ·{" "}
+                {outage.closed_at
+                  ? "Closed; readiness must be rechecked"
+                  : "Open outage"}
+              </h3>
+              <p>{outage.reason}</p>
+              {affected
+                .filter((row) => row.outage_id === outage.id)
+                .map((row) => (
+                  <div className="panel network-panel" key={row.grant_id}>
+                    <p>
+                      Member {row.member_id.slice(-8)} · original week{" "}
+                      {row.week_key} · recovery{" "}
+                      {row.recovery_state || "needs review"}
+                    </p>
+                    {!row.incident_id && (
+                      <PilotForm
+                        endpoint="/api/pilot-promise"
+                        action="report_incident"
+                        extra={{
+                          grantId: row.grant_id,
+                          incidentType: "unexpected_closure",
+                          severity: "high",
+                          occurredAt: new Date().toISOString(),
+                          owner: "Uptick outage support",
+                          note: `Location outage review: ${outage.reason}. Physical handoff remains unknown.`,
+                          idempotencyKey: `outage:${outage.id}:${row.grant_id}`,
+                        }}
+                        button="Open this member’s recovery incident"
+                      />
+                    )}
+                    {row.incident_id && (
+                      <p>
+                        Incident recorded. Choose this member’s incident in the
+                        backed recovery form below.
+                      </p>
+                    )}
+                  </div>
+                ))}
+              {!outage.closed_at && (
+                <PilotForm
+                  endpoint="/api/pilot-promise"
+                  action="close_location_outage"
+                  extra={{ outageId: outage.id }}
+                  button="Close outage; keep routing paused"
+                >
+                  <label>
+                    Resolution evidence
+                    <textarea
+                      name="evidence"
+                      minLength={10}
+                      maxLength={1500}
+                      required
+                    />
+                  </label>
+                </PilotForm>
+              )}
+            </article>
+          ))}
+          <p>
+            After closing: recheck physical stock, hours, staff QR and fallback
+            below, then reactivate the destination and supply from{" "}
+            <Link href="/operator/network/supply">supply operations</Link>.
+          </p>
+        </section>
+        <section className="panel network-panel operator-readiness">
+          <h2>Readiness and recovery</h2>
+          <PilotPromiseControls data={data} organizations={organizations} />
+        </section>
         {run && detail ? (
-          <section className="panel network-panel">
-            <h2>Review and publish a weekly release</h2>
+          <section className="panel network-panel operator-weekly-release">
+            <h2>Publish this week</h2>
             <p>
               {run.name} · {run.data_kind} records
             </p>
@@ -201,7 +324,7 @@ export default async function FulfillmentPage({
             </details>
           </section>
         ) : (
-          <section className="panel network-panel">
+          <section className="panel network-panel operator-weekly-release">
             <h2>Start with a pilot run</h2>
             <p>
               Create the run from Pilot Today. You can certify supply below
@@ -209,8 +332,8 @@ export default async function FulfillmentPage({
             </p>
           </section>
         )}
-        <section className="panel network-panel">
-          <h2>Issued promises</h2>
+        <section className="panel network-panel operator-record-history">
+          <h2>Issued promise records</h2>
           <p>
             Choose the member’s benefit in the incident form below. These
             records show digital status; they do not prove the item was handed
@@ -242,117 +365,6 @@ export default async function FulfillmentPage({
               </tbody>
             </table>
           </div>
-        </section>
-        <section className="panel network-panel">
-          <h2>Whole-location failure</h2>
-          <p>
-            Opening an outage stops new distribution and directions to that
-            location, suspends its readiness, and queues affected promises for
-            recovery review. It does not claim that each member experienced a
-            failure.
-          </p>
-          <PilotForm
-            endpoint="/api/pilot-promise"
-            action="open_location_outage"
-            extra={{ requestKey: randomUUID() }}
-            button="Stop routing and open outage"
-          >
-            <label>
-              Destination
-              <select name="locationId" required>
-                <option value="">Choose a destination</option>
-                {destinations.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.merchant} · {d.address}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Outage owner
-              <input name="owner" required maxLength={200} />
-            </label>
-            <label>
-              What failed and what is known?
-              <textarea
-                name="reason"
-                required
-                minLength={10}
-                maxLength={1500}
-              />
-            </label>
-          </PilotForm>
-          {outages.map((outage) => (
-            <article className="panel network-panel" key={outage.id}>
-              <h3>
-                {outage.merchant} ·{" "}
-                {outage.closed_at
-                  ? "Closed; readiness must be rechecked"
-                  : "Open outage"}
-              </h3>
-              <p>{outage.reason}</p>
-              {affected
-                .filter((row) => row.outage_id === outage.id)
-                .map((row) => (
-                  <div className="panel network-panel" key={row.grant_id}>
-                    <p>
-                      Member {row.member_id.slice(-8)} · original week{" "}
-                      {row.week_key} · recovery{" "}
-                      {row.recovery_state || "needs review"}
-                    </p>
-                    {!row.incident_id && (
-                      <PilotForm
-                        endpoint="/api/pilot-promise"
-                        action="report_incident"
-                        extra={{
-                          grantId: row.grant_id,
-                          incidentType: "unexpected_closure",
-                          severity: "high",
-                          occurredAt: new Date().toISOString(),
-                          owner: "Uptick outage support",
-                          note: `Location outage review: ${outage.reason}. Physical handoff remains unknown.`,
-                          idempotencyKey: `outage:${outage.id}:${row.grant_id}`,
-                        }}
-                        button="Open this member’s recovery incident"
-                      />
-                    )}
-                    {row.incident_id && (
-                      <p>
-                        Incident recorded. Choose this member’s incident in the
-                        backed recovery form below.
-                      </p>
-                    )}
-                  </div>
-                ))}
-              {!outage.closed_at && (
-                <PilotForm
-                  endpoint="/api/pilot-promise"
-                  action="close_location_outage"
-                  extra={{ outageId: outage.id }}
-                  button="Close outage; keep routing paused"
-                >
-                  <label>
-                    Resolution evidence
-                    <textarea
-                      name="evidence"
-                      minLength={10}
-                      maxLength={1500}
-                      required
-                    />
-                  </label>
-                </PilotForm>
-              )}
-            </article>
-          ))}
-          <p>
-            After closing: recheck physical stock, hours, staff QR and fallback
-            below, then reactivate the destination and supply from{" "}
-            <Link href="/operator/network/supply">supply operations</Link>.
-          </p>
-        </section>
-        <section className="panel network-panel">
-          <h2>Readiness and recovery controls</h2>
-          <PilotPromiseControls data={data} organizations={organizations} />
         </section>
       </div>
     </Shell>

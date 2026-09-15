@@ -12,6 +12,7 @@ import {
   Play,
   MessageSquare,
   PackageCheck,
+  MoreHorizontal,
 } from "lucide-react";
 import { Brand, Badge } from "./ui";
 import { ActionButton } from "./forms";
@@ -23,11 +24,13 @@ const merchantLinks = [
   ["results", "Results", ChartNoAxesCombined],
 ] as const;
 const operatorLinks = [
-  ["pilot", "Today", LayoutDashboard],
-  ["network/markets", "Market", Radio],
+  ["pilot", "Overview", LayoutDashboard],
+  ["pilot/support", "Members", Users],
+  ["pilot/fulfillment", "Store operations", PackageCheck],
+] as const;
+const moreLinks = [
+  ["network/markets", "Markets", Radio],
   ["programs", "Programs", ClipboardCheck],
-  ["pilot/support", "Members & support", Users],
-  ["pilot/fulfillment", "Fulfillment", PackageCheck],
   ["network/messaging", "Messaging", MessageSquare],
   ["pilot/settings", "Settings", ShieldCheck],
 ] as const;
@@ -68,6 +71,28 @@ export function Shell({
                 {active === path && <span className="nav-dot" />}
               </Link>
             ),
+          )}
+          {operator && (
+            <details
+              className="nav-more"
+              open={moreLinks.some(([path]) => active === path)}
+            >
+              <summary>
+                <MoreHorizontal size={18} />
+                More tools
+              </summary>
+              {moreLinks.map(([path, label, Icon]) => (
+                <Link
+                  href={`${base}/${path}`}
+                  key={path}
+                  className={active === path ? "nav-item active" : "nav-item"}
+                  aria-current={active === path ? "page" : undefined}
+                >
+                  <Icon size={18} strokeWidth={1.6} />
+                  <span>{label}</span>
+                </Link>
+              ))}
+            </details>
           )}
         </nav>
         <div className="sidebar-bottom">
