@@ -31,8 +31,8 @@ export function proxy(request: NextRequest) {
     path.startsWith("/account/")
   )
     return new NextResponse("Not found", { status: 404, headers: noStore });
-  if (path === "/") return NextResponse.redirect(new URL("/demo", origin));
   const open =
+    path === "/" ||
     path === "/demo" ||
     path === "/api/demo/cloud" ||
     path.startsWith("/_next/") ||
