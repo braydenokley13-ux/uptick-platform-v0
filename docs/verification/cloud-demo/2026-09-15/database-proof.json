@@ -1,0 +1,14 @@
+{
+  "passed": true,
+  "privateMigrations": 34,
+  "publicReadWriteDenied": true,
+  "authReadDenied": true,
+  "leaseIsolation": true,
+  "fullJourneyIncludingRecoveryRedemption": true,
+  "failedResetRollsBack": true,
+  "twoConnectionPersistence": true,
+  "resetAndCredentialRotation": true,
+  "realDataConstraints": true,
+  "publicSentinelUnchanged": true,
+  "provisioningBytes": 441681
+}

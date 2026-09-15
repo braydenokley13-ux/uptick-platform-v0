@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, realpath, readFile, writeFile, rm } from "node:fs/promises";
 import { userInfo } from "node:os";
@@ -28,9 +29,32 @@ import {
 
 // Owns only a new temporary cluster. Never connects to the URL in the deployment
 // configuration; that URL supplies the reviewed identity marker and password.
-const config = JSON.parse(
-  await readFile("private/cloud-demo/environment.json", "utf8"),
-);
+const prepare = process.argv.includes("--prepare-cloud");
+const secret = () => randomBytes(32).toString("base64url");
+const config = prepare
+  ? JSON.parse(await readFile("private/cloud-demo/environment.json", "utf8"))
+  : {
+      UPTICK_CLOUD_DEMO_MODE: "true",
+      UPTICK_ENV: "development",
+      SMS_TRANSPORT: "development",
+      PILOT_ENROLLMENT_ENABLED: "false",
+      PRODUCTION_DELIVERY_ENABLED: "false",
+      MEMBER_ACCESS_SMS_ENABLED: "false",
+      MEMBER_PROMOTIONAL_SMS_ENABLED: "false",
+      MESSAGING_APPROVED: "false",
+      LEGAL_APPROVED: "false",
+      APP_URL: "https://cloud-demo.example.test",
+      CLOUD_DEMO_ORIGIN: "https://cloud-demo.example.test",
+      CLOUD_DEMO_PROJECT_REF: "abcdefghijklmnopqrst",
+      CLOUD_DEMO_VERCEL_PROJECT_ID: "prj_CloudDemoLocalProof",
+      CLOUD_DEMO_DATABASE_URL: `postgres://uptick_cloud_demo_runtime:${secret()}@db.abcdefghijklmnopqrst.supabase.co:5432/postgres`,
+      CLOUD_DEMO_INSTANCE_ID: secret(),
+      CLOUD_DEMO_ACCESS_KEY: secret(),
+      SESSION_SECRET: secret(),
+      PASS_ENCRYPTION_KEY: secret(),
+      CRON_SECRET: secret(),
+      PRIVACY_SUPPRESSION_KEY: secret(),
+    };
 for (const name of [
   "DATABASE_URL",
   "LOCAL_DATABASE_PATH",
@@ -167,6 +191,10 @@ try {
   assert.equal((await demoSnapshot(leased)).counts.redemptions, 1);
   await demoStockout(leased);
   await demoRecovery(leased);
+  await redeemAtPoint(leased, decrypt(claim.token_encrypted), {
+    pointToken: snap.qr.public_token,
+  });
+  assert.equal((await demoSnapshot(leased)).counts.recovery_redemptions, 1);
   assert.equal((await demoSnapshot(leased)).counts.recoveries, 1);
   const second = cloudSchemaDb(connect("uptick_cloud_demo_runtime"));
   assert.equal(
@@ -252,9 +280,10 @@ revoke all on schema uptick_cloud_demo,uptick_demo from anon,authenticated,servi
 revoke all on all tables in schema uptick_cloud_demo,uptick_demo from anon,authenticated,service_role;
 revoke all on all functions in schema uptick_cloud_demo from anon,authenticated,service_role;
 \ndo $$ begin if exists(select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','auth') and c.relkind in ('r','p','v','m') and (has_table_privilege('uptick_cloud_demo_runtime',c.oid,'SELECT') or has_table_privilege('uptick_cloud_demo_runtime',c.oid,'INSERT') or has_table_privilege('uptick_cloud_demo_runtime',c.oid,'UPDATE') or has_table_privilege('uptick_cloud_demo_runtime',c.oid,'DELETE') or has_table_privilege('uptick_cloud_demo_runtime',c.oid,'TRUNCATE'))) then raise exception 'Unexpected public/auth access; rollback'; end if; if exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosecdef and has_function_privilege('uptick_cloud_demo_runtime',p.oid,'EXECUTE')) then raise exception 'Unexpected public definer access; rollback'; end if; end $$;\ncommit;\n`;
-  await writeFile("private/cloud-demo/provisioning.sql", pre + dump + post, {
-    mode: 0o600,
-  });
+  if (prepare)
+    await writeFile("private/cloud-demo/provisioning.sql", pre + dump + post, {
+      mode: 0o600,
+    });
   console.log(
     JSON.stringify(
       {
@@ -263,6 +292,8 @@ revoke all on all functions in schema uptick_cloud_demo from anon,authenticated,
         publicReadWriteDenied: true,
         authReadDenied: true,
         leaseIsolation: true,
+        fullJourneyIncludingRecoveryRedemption: true,
+        failedResetRollsBack: true,
         twoConnectionPersistence: true,
         resetAndCredentialRotation: true,
         realDataConstraints: true,

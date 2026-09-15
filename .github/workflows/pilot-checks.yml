@@ -30,6 +30,7 @@ jobs:
       - run: npm test
       - name: Add local PostgreSQL binaries
         run: echo "$(pg_config --bindir)" >> "$GITHUB_PATH"
+      - run: node --import tsx scripts/verify-cloud-demo.ts
       - run: bash scripts/verify-postgres.sh
       - run: bash scripts/rehearse-restore.sh
       - run: npm run test:e2e
