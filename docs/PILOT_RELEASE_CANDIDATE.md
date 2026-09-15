@@ -1,3 +1,5 @@
+> **Historical record.** This document describes an earlier implementation or review checkpoint. Use [current release truth](REAL_ENROLLMENT_RELEASE_TRUTH.md) for this candidate’s fixes, evidence, verdicts and remaining gates. Earlier test counts, demo instructions and unresolved-gap statements are not current unless carried forward there.
+
 # Pilot release candidate for hosted commissioning
 
 Prepared September 14, 2026. **Operating deployment and migrations approved and executed.** See [HOSTED_COMMISSIONING.md](HOSTED_COMMISSIONING.md) for the completed release and remaining authenticated/physical checks. This release enables an internal rehearsal; it does not authorize real enrollment, promotional sending or A2P submission.

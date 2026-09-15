@@ -1,0 +1,302 @@
+[
+  {
+    "scene": "recovery-available",
+    "documentWidth": 320,
+    "width": 320
+  },
+  {
+    "scene": "recovery-available",
+    "documentWidth": 360,
+    "width": 360
+  },
+  {
+    "scene": "recovery-available",
+    "documentWidth": 390,
+    "width": 390
+  },
+  {
+    "scene": "recovery-available",
+    "documentWidth": 430,
+    "width": 430
+  },
+  {
+    "scene": "recovery-pass",
+    "documentWidth": 320,
+    "width": 320
+  },
+  {
+    "scene": "recovery-pass",
+    "documentWidth": 360,
+    "width": 360
+  },
+  {
+    "scene": "recovery-pass",
+    "documentWidth": 390,
+    "width": 390
+  },
+  {
+    "scene": "recovery-pass",
+    "documentWidth": 430,
+    "width": 430
+  },
+  {
+    "scene": "recovery-qr",
+    "documentWidth": 320,
+    "width": 320
+  },
+  {
+    "scene": "recovery-qr",
+    "documentWidth": 360,
+    "width": 360
+  },
+  {
+    "scene": "recovery-qr",
+    "documentWidth": 390,
+    "width": 390
+  },
+  {
+    "scene": "recovery-qr",
+    "documentWidth": 430,
+    "width": 430
+  },
+  {
+    "scene": "recovery-recorded",
+    "documentWidth": 320,
+    "width": 320
+  },
+  {
+    "scene": "recovery-recorded",
+    "documentWidth": 360,
+    "width": 360
+  },
+  {
+    "scene": "recovery-recorded",
+    "documentWidth": 390,
+    "width": 390
+  },
+  {
+    "scene": "recovery-recorded",
+    "documentWidth": 430,
+    "width": 430
+  },
+  {
+    "scene": "complete-ledger",
+    "documentWidth": 320,
+    "width": 320
+  },
+  {
+    "scene": "complete-ledger",
+    "documentWidth": 360,
+    "width": 360
+  },
+  {
+    "scene": "complete-ledger",
+    "documentWidth": 390,
+    "width": 390
+  },
+  {
+    "scene": "complete-ledger",
+    "documentWidth": 430,
+    "width": 430
+  },
+  {
+    "scene": "operator-overview",
+    "documentWidth": 320,
+    "width": 320
+  },
+  {
+    "scene": "operator-overview",
+    "documentWidth": 360,
+    "width": 360
+  },
+  {
+    "scene": "operator-overview",
+    "documentWidth": 390,
+    "width": 390
+  },
+  {
+    "scene": "operator-overview",
+    "documentWidth": 430,
+    "width": 430
+  },
+  {
+    "scene": "operator-recovery",
+    "documentWidth": 320,
+    "width": 320
+  },
+  {
+    "scene": "operator-recovery",
+    "documentWidth": 360,
+    "width": 360
+  },
+  {
+    "scene": "operator-recovery",
+    "documentWidth": 390,
+    "width": 390
+  },
+  {
+    "scene": "operator-recovery",
+    "documentWidth": 430,
+    "width": 430
+  },
+  {
+    "scene": "studio-reset",
+    "documentWidth": 320,
+    "width": 320
+  },
+  {
+    "scene": "studio-reset",
+    "documentWidth": 360,
+    "width": 360
+  },
+  {
+    "scene": "studio-reset",
+    "documentWidth": 390,
+    "width": 390
+  },
+  {
+    "scene": "studio-reset",
+    "documentWidth": 430,
+    "width": 430
+  },
+  {
+    "scene": "member-entry",
+    "documentWidth": 320,
+    "width": 320
+  },
+  {
+    "scene": "member-entry",
+    "documentWidth": 360,
+    "width": 360
+  },
+  {
+    "scene": "member-entry",
+    "documentWidth": 390,
+    "width": 390
+  },
+  {
+    "scene": "member-entry",
+    "documentWidth": 430,
+    "width": 430
+  },
+  {
+    "scene": "simulated-access",
+    "documentWidth": 320,
+    "width": 320
+  },
+  {
+    "scene": "simulated-access",
+    "documentWidth": 360,
+    "width": 360
+  },
+  {
+    "scene": "simulated-access",
+    "documentWidth": 390,
+    "width": 390
+  },
+  {
+    "scene": "simulated-access",
+    "documentWidth": 430,
+    "width": 430
+  },
+  {
+    "scene": "membership-confirmation",
+    "documentWidth": 320,
+    "width": 320
+  },
+  {
+    "scene": "membership-confirmation",
+    "documentWidth": 360,
+    "width": 360
+  },
+  {
+    "scene": "membership-confirmation",
+    "documentWidth": 390,
+    "width": 390
+  },
+  {
+    "scene": "membership-confirmation",
+    "documentWidth": 430,
+    "width": 430
+  },
+  {
+    "scene": "backed-benefit",
+    "documentWidth": 320,
+    "width": 320
+  },
+  {
+    "scene": "backed-benefit",
+    "documentWidth": 360,
+    "width": 360
+  },
+  {
+    "scene": "backed-benefit",
+    "documentWidth": 390,
+    "width": 390
+  },
+  {
+    "scene": "backed-benefit",
+    "documentWidth": 430,
+    "width": 430
+  },
+  {
+    "scene": "claimed-pass",
+    "documentWidth": 320,
+    "width": 320
+  },
+  {
+    "scene": "claimed-pass",
+    "documentWidth": 360,
+    "width": 360
+  },
+  {
+    "scene": "claimed-pass",
+    "documentWidth": 390,
+    "width": 390
+  },
+  {
+    "scene": "claimed-pass",
+    "documentWidth": 430,
+    "width": 430
+  },
+  {
+    "scene": "staff-qr",
+    "documentWidth": 320,
+    "width": 320
+  },
+  {
+    "scene": "staff-qr",
+    "documentWidth": 360,
+    "width": 360
+  },
+  {
+    "scene": "staff-qr",
+    "documentWidth": 390,
+    "width": 390
+  },
+  {
+    "scene": "staff-qr",
+    "documentWidth": 430,
+    "width": 430
+  },
+  {
+    "scene": "recorded-redemption",
+    "documentWidth": 320,
+    "width": 320
+  },
+  {
+    "scene": "recorded-redemption",
+    "documentWidth": 360,
+    "width": 360
+  },
+  {
+    "scene": "recorded-redemption",
+    "documentWidth": 390,
+    "width": 390
+  },
+  {
+    "scene": "recorded-redemption",
+    "documentWidth": 430,
+    "width": 430
+  }
+]

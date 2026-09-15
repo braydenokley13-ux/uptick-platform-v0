@@ -1,3 +1,5 @@
+> **Historical record.** This document describes an earlier implementation or review checkpoint. Use [current release truth](REAL_ENROLLMENT_RELEASE_TRUTH.md) for this candidate’s fixes, evidence, verdicts and remaining gates. Earlier test counts, demo instructions and unresolved-gap statements are not current unless carried forward there.
+
 # Uptick Local — pilot implementation report
 
 Decision brief dated September 13, 2026. Verification completed September 13–14, 2026. Operating branch: `codex/pilot-ready-service`, based on latest main `8acc4a64ff0e2427398c366be72b0968fb7a98bf`.

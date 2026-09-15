@@ -1,0 +1,3 @@
+.next/server/app/api/pilot-operations/route.js.nft.json:1:../../../../../db/migrations/034_callback_commissioning_scope.sql
+.next/server/app/api/member/route.js.nft.json:1:../../../../../db/migrations/034_callback_commissioning_scope.sql
+.next/server/app/operator/pilot/settings/page.js.nft.json:1:../../../../../../db/migrations/034_callback_commissioning_scope.sql

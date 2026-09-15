@@ -1,0 +1,206 @@
+{
+  "date": "2026-09-15",
+  "softwareCommit": "32706bb4b9c0d2e9c6fcf52dd45ba09894e5e7d4",
+  "publicPolicyCommit": "d8098df7cd163ae02c7dd16574643aafe63f0585",
+  "pdfPages": 21,
+  "screenshots": 36,
+  "mobileChecks": 60,
+  "horizontalOverflowFailures": 0,
+  "artifacts": [
+    {
+      "path": "output/pdf/uptick-founder-demo.pdf",
+      "bytes": 2502882,
+      "sha256": "ae509c2e01cddb0647aa6864cfc3f5bd1844ee6eb186c5002618c30e92d95216"
+    },
+    {
+      "path": "output/source/upticklocal-policy.bundle",
+      "bytes": 5587,
+      "sha256": "27e4d9da493b586617bafd23106f084763e01e8a5e6e6d097020df95844903e2"
+    },
+    {
+      "path": "docs/demo/mobile-checks.json",
+      "bytes": 5039,
+      "sha256": "9008e1045da034f25b34cee12fabecf2f005f5798170aebe2b7251210413c433"
+    },
+    {
+      "path": "docs/demo/screenshots/final/01-studio-desktop.png",
+      "bytes": 108546,
+      "sha256": "6ac238074f597b3160d7871ed7c970cbc08c66dd90d08c6828c34e57a3eeb26f"
+    },
+    {
+      "path": "docs/demo/screenshots/final/01-studio-mobile.png",
+      "bytes": 50546,
+      "sha256": "171d1eeb71c4950e2f39b48c761169b68b66d9b60f34cfd7cccc78524aa2b2b2"
+    },
+    {
+      "path": "docs/demo/screenshots/final/02-entry-desktop.png",
+      "bytes": 101060,
+      "sha256": "e0514713aa042bc010eb3924e60a31112ed00541e4b8a641a2a6316cb8198c74"
+    },
+    {
+      "path": "docs/demo/screenshots/final/02-entry-mobile.png",
+      "bytes": 41933,
+      "sha256": "2b568a9ba363d60cf4628cf9b7c0fe5e396825f767b634300e6abf535d1aded1"
+    },
+    {
+      "path": "docs/demo/screenshots/final/03-entry-form-desktop.png",
+      "bytes": 91771,
+      "sha256": "539ace90533ddea0575f4723823cd0408d374e0b011c7d284ca2367655cc48d2"
+    },
+    {
+      "path": "docs/demo/screenshots/final/03-entry-form-mobile.png",
+      "bytes": 46236,
+      "sha256": "c1f5f44a2fd876131ada237040ea19bbd1190f599de223a91b624c369a42d104"
+    },
+    {
+      "path": "docs/demo/screenshots/final/04-simulated-access-desktop.png",
+      "bytes": 86192,
+      "sha256": "5a06039deed10bc83c88a75b3ba3f746cf5518947a103e31fcf31f31dac6d748"
+    },
+    {
+      "path": "docs/demo/screenshots/final/04-simulated-access-mobile.png",
+      "bytes": 29003,
+      "sha256": "c9ed70273ac526e90cf6c21341b201da759b2076230c71b0a354dd1b15634b03"
+    },
+    {
+      "path": "docs/demo/screenshots/final/05-confirm-membership-desktop.png",
+      "bytes": 48897,
+      "sha256": "25d098fd307f6a2abfe9b28368e0973420511766c09e3817d9c02c7e1298c2b5"
+    },
+    {
+      "path": "docs/demo/screenshots/final/05-confirm-membership-mobile.png",
+      "bytes": 31257,
+      "sha256": "649c6a8a79c2e234f09e616a3f6093faa1d05cf32a1f3790cbd3feaae3afd798"
+    },
+    {
+      "path": "docs/demo/screenshots/final/06-backed-benefit-desktop.png",
+      "bytes": 59521,
+      "sha256": "9fd3d975b49a04ba9afc60c2cfd2dda69716bcd3c7758d2d221298b4c7ff6180"
+    },
+    {
+      "path": "docs/demo/screenshots/final/06-backed-benefit-mobile.png",
+      "bytes": 34944,
+      "sha256": "e336484595aec8254dd2c60fcf4a5ec01efcc4ac307cab752c19c7ce3ad620f5"
+    },
+    {
+      "path": "docs/demo/screenshots/final/07-claimed-pass-desktop.png",
+      "bytes": 52433,
+      "sha256": "4000b0a1542edfe9561e3103fc0719d471b34f6d22aa17e5c613ae2f64a498b8"
+    },
+    {
+      "path": "docs/demo/screenshots/final/07-claimed-pass-mobile.png",
+      "bytes": 29950,
+      "sha256": "2d9ac278bb49c81aece20507981bc89365cb1ab13b892d05916fdcb88263a3c4"
+    },
+    {
+      "path": "docs/demo/screenshots/final/08-staff-qr-desktop.png",
+      "bytes": 64179,
+      "sha256": "1cba954ddf8cb0d7d3e720c4075e4439b6f224145b4ddae12cf5f33fefbcd270"
+    },
+    {
+      "path": "docs/demo/screenshots/final/08-staff-qr-mobile.png",
+      "bytes": 46037,
+      "sha256": "f1cd3c05a7d6a677754d57bd826dfd794a83b632394d0b9440167bedab7a4eee"
+    },
+    {
+      "path": "docs/demo/screenshots/final/09-recorded-redemption-desktop.png",
+      "bytes": 65249,
+      "sha256": "8aecd8315ecea1e6c7504e1e4c832e5e3979f865aefc0b1351d309bb247cbd5a"
+    },
+    {
+      "path": "docs/demo/screenshots/final/09-recorded-redemption-mobile.png",
+      "bytes": 42225,
+      "sha256": "f383c92543eab1bbbdbaf9fac37fc1c156e08ae250d688a9b1347575a2829446"
+    },
+    {
+      "path": "docs/demo/screenshots/final/10-merchant-results-desktop.png",
+      "bytes": 91761,
+      "sha256": "e3c0624a5c6ba6975573c000885c72809bafbb8380899ed3be7d7a11ffdcaabd"
+    },
+    {
+      "path": "docs/demo/screenshots/final/10-merchant-results-mobile.png",
+      "bytes": 27817,
+      "sha256": "3e4159d159742d901f9a02361d91d73cf97af3fa6092198cfcd900bde010708d"
+    },
+    {
+      "path": "docs/demo/screenshots/final/11-incident-recorded-desktop.png",
+      "bytes": 87214,
+      "sha256": "e16ae63a6a23bd072759464ebcf252c2c49830dbd2ffb14f7ed353176975e9e1"
+    },
+    {
+      "path": "docs/demo/screenshots/final/11-incident-recorded-mobile.png",
+      "bytes": 44760,
+      "sha256": "c542130023808d5cad51863a2ab7ad8c8c1be9e9c42cbe7dfa89050826865fd9"
+    },
+    {
+      "path": "docs/demo/screenshots/final/12-recovery-available-desktop.png",
+      "bytes": 60125,
+      "sha256": "5a1e6a8bd09b349614f13388187294be4da0129326c50cbcb760a2426c1250cf"
+    },
+    {
+      "path": "docs/demo/screenshots/final/12-recovery-available-mobile.png",
+      "bytes": 36537,
+      "sha256": "d445cc2c18fd8d3e85d700d9d29e53964a3ba30d2e4169cf765290ebac0223af"
+    },
+    {
+      "path": "docs/demo/screenshots/final/13-recovery-pass-desktop.png",
+      "bytes": 55704,
+      "sha256": "e6087e26128b5ea6a6ac07e6c8f01a61960569dfdcdb7d9e6f543d60337387c6"
+    },
+    {
+      "path": "docs/demo/screenshots/final/13-recovery-pass-mobile.png",
+      "bytes": 31401,
+      "sha256": "104a3ab54592e17a9019d2fb8325dd5999b81fdb3ccce790d1516d77e79a7bce"
+    },
+    {
+      "path": "docs/demo/screenshots/final/14-recovery-qr-desktop.png",
+      "bytes": 68386,
+      "sha256": "4be2fbf8bf4c14c50becb77ade491b00f6eecc834045fa3d9e2632d0c87932b0"
+    },
+    {
+      "path": "docs/demo/screenshots/final/14-recovery-qr-mobile.png",
+      "bytes": 50184,
+      "sha256": "3f1fc7f386da05a4b52fc2d3fa720e4f94a75e5f77cffb551efaef1be54f7527"
+    },
+    {
+      "path": "docs/demo/screenshots/final/15-recovery-recorded-desktop.png",
+      "bytes": 53960,
+      "sha256": "ccd5e8371929017a4181385a33d2a749ee3d42bf7c70e1b5c65c7e128a8cd0c4"
+    },
+    {
+      "path": "docs/demo/screenshots/final/15-recovery-recorded-mobile.png",
+      "bytes": 34783,
+      "sha256": "27215d427d26a0af2329f1207f45754f2e1e9c39e621376f6c50677579a320c0"
+    },
+    {
+      "path": "docs/demo/screenshots/final/16-complete-ledger-desktop.png",
+      "bytes": 87507,
+      "sha256": "d481d4b69ea6f890733423aad023b0abcd82015771a5127dcd2a8e4c59b23b5a"
+    },
+    {
+      "path": "docs/demo/screenshots/final/16-complete-ledger-mobile.png",
+      "bytes": 45033,
+      "sha256": "e7e8adf8eaaffb3180d789323aee69310da6ac9c862a1a0fa49a87a0367aab8a"
+    },
+    {
+      "path": "docs/demo/screenshots/final/17-operator-recovery-desktop.png",
+      "bytes": 80772,
+      "sha256": "fb68873de20e1d94df9310c76af6e0f231b3678f30ea150f447e0d9aa93be391"
+    },
+    {
+      "path": "docs/demo/screenshots/final/17-operator-recovery-mobile.png",
+      "bytes": 31903,
+      "sha256": "a6076f38e6d7398045bc09371e72a339aa4e8e09c0f62262a1a38c2a12d0acfc"
+    },
+    {
+      "path": "docs/demo/screenshots/final/18-operator-overview-desktop.png",
+      "bytes": 93273,
+      "sha256": "981e22c60a0ec7d4d26d71aa7327bfba9b982fa3f1a407f326f46f8ac820efd1"
+    },
+    {
+      "path": "docs/demo/screenshots/final/18-operator-overview-mobile.png",
+      "bytes": 40158,
+      "sha256": "0f9719bbf3e8e1e071a8a3282af9d6cf16ec64ea1dfe013fab0f20c1ce14d97d"
+    }
+  ]
+}

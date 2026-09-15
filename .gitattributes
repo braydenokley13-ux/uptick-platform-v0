@@ -1,0 +1,3 @@
+# Generated handoff artifacts must not be interpreted as text patches.
+*.pdf binary
+*.bundle binary
