@@ -9,11 +9,14 @@ import {
   ArrowUpRight,
   LifeBuoy,
   ShieldCheck,
+  Play,
+  MessageSquare,
+  PackageCheck,
 } from "lucide-react";
 import { Brand, Badge } from "./ui";
 import { ActionButton } from "./forms";
 import type { Actor } from "@/lib/domain";
-import { localMode } from "@/lib/config";
+import { sampleDemoMode } from "@/lib/demo-guard";
 const merchantLinks = [
   ["program", "Program", ClipboardCheck],
   ["fulfillment", "Fulfillment", Store],
@@ -24,6 +27,8 @@ const operatorLinks = [
   ["network/markets", "Market", Radio],
   ["programs", "Programs", ClipboardCheck],
   ["pilot/support", "Members & support", Users],
+  ["pilot/fulfillment", "Fulfillment", PackageCheck],
+  ["network/messaging", "Messaging", MessageSquare],
   ["pilot/settings", "Settings", ShieldCheck],
 ] as const;
 export function Shell({
@@ -38,6 +43,7 @@ export function Shell({
   children: React.ReactNode;
 }) {
   const operator = actor.role === "operator";
+  const demo = sampleDemoMode();
   const base = operator ? "/operator" : "/merchant";
   return (
     <div className="app-shell">
@@ -110,9 +116,11 @@ export function Shell({
             <strong>{name}</strong>
           </div>
           <div>
-            {localMode() ? (
+            {demo ? (
               <div className="local-workspace-label">
-                <Badge>Local sample</Badge>
+                <Link href="/demo" className="demo-return">
+                  <Play size={14} /> Demo studio
+                </Link>
               </div>
             ) : (
               <Badge tone="mint">
@@ -120,9 +128,7 @@ export function Shell({
                 Secure workspace
               </Badge>
             )}
-            {!localMode() && (
-              <Link href="/account/security">Account security</Link>
-            )}
+            {!demo && <Link href="/account/security">Account security</Link>}
             <ActionButton action="logout" secondary>
               Sign out
             </ActionButton>

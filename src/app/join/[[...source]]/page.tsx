@@ -110,8 +110,9 @@ export default async function JoinPage({
             <em>starts here.</em>
           </h2>
           <p>
-            We’ll text a one-time private link to confirm your phone and open
-            your membership.
+            {demoMode()
+              ? "Open a simulated private link for the fictional member. No text will be sent."
+              : "We’ll text a one-time private link to confirm your phone and open your membership."}
           </p>
           <JoinUptick sourceToken={sourceToken} demo={demoMode()} />
           <p className="member-already">

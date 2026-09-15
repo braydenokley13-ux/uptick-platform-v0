@@ -91,7 +91,7 @@ export default async function PilotPage({
           <Link href="/operator/pilot/support">Members & support</Link>
         </nav>
         {data.runs.length > 0 && (
-          <form className="network-form" method="get">
+          <form className="network-form pilot-picker" method="get">
             <label>
               Current pilot
               <select name="run" defaultValue={run?.id}>
@@ -107,49 +107,6 @@ export default async function PilotPage({
         )}
         {run && detail && (
           <>
-            <section id="today" className="panel network-panel">
-              <p className="eyebrow">NEEDS ACTION</p>
-              <h2>
-                {detail.constraints.length
-                  ? `${detail.constraints.length} launch or distribution items need attention.`
-                  : "Launch checklist recorded. Check today’s fulfillment exceptions."}
-              </h2>
-              <div className="network-status-row">
-                <Badge tone={detail.ready ? "mint" : "amber"}>
-                  {detail.ready ? "Pilotable checklist" : "Not ready"}
-                </Badge>
-                <Badge>
-                  {run.data_kind === "real"
-                    ? "Real pilot records"
-                    : `${run.data_kind} rehearsal records`}
-                </Badge>
-                <p>
-                  Health:{" "}
-                  {detail.scorecard.matured
-                    ? "Review evidence and renewal before declaring healthy"
-                    : "Insufficient evidence"}
-                  .
-                </p>
-              </div>
-              {detail.constraints.length > 0 && (
-                <ul>
-                  {detail.constraints.map((c) => (
-                    <li key={c}>{c}</li>
-                  ))}
-                </ul>
-              )}
-              <p>
-                <Link href="/operator/network/messaging">
-                  Check message delivery
-                </Link>{" "}
-                ·{" "}
-                <Link href="/operator/pilot/support">Open member support</Link>{" "}
-                ·{" "}
-                <Link href="/operator/pilot/fulfillment">
-                  Destination readiness, incidents and recovery
-                </Link>
-              </p>
-            </section>
             <div className="network-metrics">
               <Metric
                 label="ADMITTED MEMBERS"
@@ -183,6 +140,63 @@ export default async function PilotPage({
                 note="Program review threshold, not views"
               />
             </div>
+            <section id="today" className="panel network-panel">
+              <p className="eyebrow">NEEDS ACTION</p>
+              <h2>
+                {detail.constraints.length
+                  ? `${detail.constraints.length} launch or distribution items need attention.`
+                  : "Launch checklist recorded. Check today’s fulfillment exceptions."}
+              </h2>
+              <div className="network-status-row">
+                <Badge tone={detail.ready ? "mint" : "amber"}>
+                  {detail.ready ? "Pilotable checklist" : "Not ready"}
+                </Badge>
+                <Badge>
+                  {run.data_kind === "real"
+                    ? "Real pilot records"
+                    : `${run.data_kind} rehearsal records`}
+                </Badge>
+                <p>
+                  Health:{" "}
+                  {detail.scorecard.matured
+                    ? "Review evidence and renewal before declaring healthy"
+                    : "Insufficient evidence"}
+                  .
+                </p>
+              </div>
+              {detail.constraints.length > 0 && (
+                <div className="pilot-action-list">
+                  <ul>
+                    {detail.constraints.slice(0, 3).map((c) => (
+                      <li key={c}>{c}</li>
+                    ))}
+                  </ul>
+                  {detail.constraints.length > 3 && (
+                    <details>
+                      <summary>
+                        Review all {detail.constraints.length} items
+                      </summary>
+                      <ul>
+                        {detail.constraints.slice(3).map((c) => (
+                          <li key={c}>{c}</li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+                </div>
+              )}
+              <p className="pilot-quick-links">
+                <Link href="/operator/network/messaging">
+                  Check message delivery
+                </Link>{" "}
+                ·{" "}
+                <Link href="/operator/pilot/support">Open member support</Link>{" "}
+                ·{" "}
+                <Link href="/operator/pilot/fulfillment">
+                  Destination readiness, incidents and recovery
+                </Link>
+              </p>
+            </section>
             <section id="run" className="panel network-panel">
               <p className="eyebrow">CURRENT PILOT</p>
               <h2>{run.name}</h2>

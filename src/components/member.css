@@ -1,9 +1,9 @@
 .member-world {
   min-height: 100vh;
-  background: #f4f1e9;
-  color: #112127;
-  --member-mint: #a7d6c2;
-  --member-amber: #c18b38;
+  background: #f5f7f9;
+  color: #142437;
+  --member-mint: #e9f7f1;
+  --member-amber: #087f68;
   font-family: "Geist Sans", sans-serif;
 }
 .member-header {
@@ -13,7 +13,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid #182c2914;
+  border-bottom: 1px solid #dce3e8;
+  background: #ffffff;
 }
 .member-header .brand {
   font-size: 30px;
@@ -22,13 +23,14 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  min-height: 44px;
   font-size: 12px;
-  color: #52665d;
+  color: #506174;
 }
 .member-status-dot {
   width: 6px;
   height: 6px;
-  background: #62a28d;
+  background: #087f68;
   border-radius: 50%;
 }
 .member-local-label {
@@ -38,8 +40,8 @@
     9px "Geist Mono",
     monospace;
   letter-spacing: 0.13em;
-  background: #e6ede5;
-  color: #426653;
+  background: #e9f7f1;
+  color: #08705d;
 }
 .member-main {
   max-width: 1190px;
@@ -47,18 +49,19 @@
   padding: 62px 42px 80px;
 }
 .member-world h1 {
-  font-size: clamp(42px, 5.6vw, 72px);
-  line-height: 1.04;
-  letter-spacing: -0.055em;
-  font-weight: 500;
+  font-size: clamp(38px, 4.8vw, 62px);
+  line-height: 1.06;
+  letter-spacing: -0.045em;
+  font-weight: 650;
 }
 .member-world h1 em,
 .member-world h2 em,
 .member-world h3 em {
-  font-family: "Newsreader", serif;
-  font-weight: 400;
-  color: #457863;
-  letter-spacing: -0.045em;
+  font-family: inherit;
+  font-style: normal;
+  font-weight: inherit;
+  color: #087f68;
+  letter-spacing: inherit;
 }
 .member-world .eyebrow {
   font-size: 10px;
@@ -68,7 +71,7 @@
 .member-world .fine {
   font-size: 11px;
   line-height: 1.7;
-  color: #718078;
+  color: #66788a;
 }
 .member-world p {
   line-height: 1.65;
@@ -77,7 +80,8 @@
   cursor: pointer;
 }
 .member-world button:disabled {
-  cursor: wait;
+  cursor: not-allowed;
+  opacity: 0.58;
 }
 .member-world button.text-link {
   display: inline-flex;
@@ -91,8 +95,10 @@
   text-align: left;
 }
 .member-world .button {
-  min-height: 50px;
-  font-size: 13px;
+  min-height: 48px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 650;
 }
 .member-full {
   width: 100%;
@@ -101,10 +107,31 @@
 .member-world input {
   font-size: 15px;
 }
+.member-world textarea {
+  display: block;
+  width: 100%;
+  min-height: 112px;
+  margin-top: 9px;
+  padding: 12px;
+  resize: vertical;
+  border: 1px solid #cdd7df;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #142437;
+  font: inherit;
+}
+.member-world textarea:focus {
+  outline: 2px solid #087f68;
+  outline-offset: 2px;
+}
+.member-world input::placeholder,
+.member-world textarea::placeholder {
+  color: #8a99a8;
+}
 .member-join-grid {
   display: grid;
   grid-template-columns: 1.1fr 1fr;
-  gap: 84px;
+  gap: 64px;
   align-items: start;
 }
 .member-join-story > .eyebrow {
@@ -112,7 +139,7 @@
 }
 .member-lead {
   font-size: 16px;
-  color: #637369;
+  color: #526579;
   max-width: 390px;
   margin: 24px 0;
 }
@@ -125,7 +152,7 @@
 }
 .member-join-benefits span:before {
   content: "✓";
-  color: #528c71;
+  color: #087f68;
   margin-right: 6px;
 }
 .member-join-story > .fine {
@@ -135,8 +162,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-top: 1px solid #bcc5b9;
-  border-bottom: 1px solid #d5d8ce;
+  border-top: 1px solid #dce3e8;
+  border-bottom: 1px solid #dce3e8;
   padding: 24px 0;
   margin-bottom: 16px;
   gap: 15px;
@@ -150,7 +177,7 @@
 }
 .member-preview-perk p {
   font-size: 11px;
-  color: #627167;
+  color: #617286;
 }
 .member-preview-perk .badge {
   font-size: 8px;
@@ -159,11 +186,11 @@
   max-width: 270px;
 }
 .member-join-panel {
-  background: #fffcf6;
-  border: 1px solid #deded3;
-  border-radius: 18px;
+  background: #ffffff;
+  border: 1px solid #dce3e8;
+  border-radius: 16px;
   padding: 36px;
-  box-shadow: 0 12px 40px #12221d04;
+  box-shadow: 0 18px 48px rgba(20, 36, 55, 0.08);
 }
 .member-join-panel > .eyebrow {
   margin-bottom: 16px;
@@ -171,12 +198,12 @@
 .member-join-panel h2 {
   font-size: 34px;
   line-height: 1.12;
-  font-weight: 500;
+  font-weight: 650;
   letter-spacing: -0.045em;
 }
 .member-join-panel > p:not(.eyebrow) {
   font-size: 12px;
-  color: #78847b;
+  color: #66788a;
   margin: 16px 0 27px;
 }
 .member-join-form label {
@@ -189,31 +216,31 @@
   min-width: 0;
   width: 100%;
   height: 48px;
-  border: 1px solid #d9ddd2;
-  border-radius: 8px;
+  border: 1px solid #cdd7df;
+  border-radius: 10px;
   padding: 12px;
-  background: #fffef9;
+  background: #ffffff;
   margin-top: 9px;
-  color: #16251e;
+  color: #142437;
 }
 .member-join-form input:focus {
-  outline: 2px solid #78ae95;
+  outline: 2px solid #087f68;
   outline-offset: 2px;
 }
 .member-join-form .phone-entry {
   display: flex;
   align-items: center;
-  border: 1px solid #d9ddd2;
-  background: #fffef9;
-  border-radius: 8px;
+  border: 1px solid #cdd7df;
+  background: #ffffff;
+  border-radius: 10px;
   margin-top: 9px;
   overflow: hidden;
 }
 .member-join-form .phone-entry > span {
   padding: 0 12px;
   font-size: 12px;
-  color: #65756b;
-  border-right: 1px solid #d9ddd2;
+  color: #607286;
+  border-right: 1px solid #dce3e8;
   white-space: nowrap;
 }
 .member-join-form .phone-entry input {
@@ -229,7 +256,7 @@
 }
 .member-zip-row small {
   font-weight: 400;
-  color: #829087;
+  color: #78899a;
   font-size: 10px;
 }
 .member-join-form .member-consent,
@@ -243,15 +270,15 @@
   line-height: 1.55;
 }
 .member-consent input {
-  width: 17px;
-  height: 17px;
-  accent-color: #3b7562;
+  width: 20px;
+  height: 20px;
+  accent-color: #087f68;
   flex-shrink: 0;
   margin: 1px 0 0;
 }
 .member-disclosure {
   font-size: 10px;
-  color: #7e877c;
+  color: #697b8e;
   line-height: 1.7;
   margin: 17px 0 0;
 }
@@ -260,7 +287,7 @@
   text-underline-offset: 3px;
 }
 .member-join-panel .member-already {
-  border-top: 1px solid #e1e3d9;
+  border-top: 1px solid #e2e8ed;
   margin: 24px 0 0 !important;
   padding-top: 20px;
   font-size: 10px !important;
@@ -276,8 +303,8 @@
   border-radius: 50%;
   align-items: center;
   justify-content: center;
-  background: #e2eee1;
-  color: #417861;
+  background: #e9f7f1;
+  color: #087f68;
   flex-shrink: 0;
 }
 .member-sent > .eyebrow {
@@ -288,7 +315,7 @@
 }
 .member-sent > p:not(.eyebrow) {
   font-size: 13px;
-  color: #708074;
+  color: #617387;
   margin: 20px 0;
 }
 .member-sent .text-link {
@@ -302,12 +329,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #b98131;
+  color: #087f68;
   flex-shrink: 0;
 }
 .perk-orbit {
   position: absolute;
-  border: 1px solid #bd985826;
+  border: 1px solid rgba(8, 127, 104, 0.18);
   border-radius: 50%;
   width: 162px;
   height: 162px;
@@ -315,7 +342,7 @@
 .perk-orbit.inner {
   width: 127px;
   height: 127px;
-  border-color: #bc924515;
+  border-color: rgba(8, 127, 104, 0.1);
 }
 .perk-icon {
   z-index: 1;
@@ -327,7 +354,7 @@
 .perk-spark {
   position: absolute;
   font-size: 20px;
-  color: #c39745;
+  color: #41a58e;
 }
 .spark-one {
   left: 13px;
@@ -378,18 +405,18 @@
   max-width: 1190px;
   margin: auto;
   padding: 32px 42px 45px;
-  border-top: 1px solid #d9ddd2;
+  border-top: 1px solid #dce3e8;
   display: flex;
   align-items: center;
   gap: 25px;
-  color: #677c70;
+  color: #617387;
 }
 .member-footer .brand {
   font-size: 23px;
 }
 .member-footer > p {
-  font-family: "Newsreader", serif;
-  font-style: italic;
+  font-family: inherit;
+  font-style: normal;
   font-size: 16px;
 }
 .member-footer > div {
@@ -399,7 +426,7 @@
   font-size: 10px;
 }
 .member-footer a:hover {
-  color: #3e775f;
+  color: #087f68;
 }
 .member-welcome {
   max-width: 470px;
@@ -411,14 +438,14 @@
 }
 .member-welcome > p:not(.eyebrow) {
   font-size: 14px;
-  color: #738276;
+  color: #617387;
   margin: 24px 0;
 }
 .member-welcome .member-confirm {
   text-align: left;
-  background: #fffcf6;
-  border: 1px solid #daded2;
-  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid #dce3e8;
+  border-radius: 16px;
   padding: 25px;
   margin-top: 25px;
 }
@@ -429,7 +456,7 @@
   margin-top: 0;
 }
 .member-welcome h1 {
-  font-size: 57px;
+  font-size: 50px;
 }
 .member-tabs {
   display: flex;
@@ -439,13 +466,14 @@
   font-size: 12px;
 }
 .member-tabs a {
-  padding: 12px 0;
-  color: #728176;
+  min-height: 44px;
+  padding: 12px 4px;
+  color: #65778a;
   border-bottom: 2px solid transparent;
 }
 .member-tabs a[aria-current="page"] {
-  color: #245b45;
-  border-bottom-color: #679783;
+  color: #087f68;
+  border-bottom-color: #087f68;
 }
 .member-your-heading {
   max-width: 610px;
@@ -456,21 +484,21 @@
   margin-bottom: 20px;
 }
 .member-your-heading h1 {
-  font-size: 58px;
+  font-size: 50px;
 }
 .member-your-heading > p:last-child {
   font-size: 13px;
-  color: #758274;
+  color: #65778a;
   margin-top: 18px;
 }
 .member-drop {
   max-width: 610px;
   margin: 0 auto 20px;
-  background: #fffcf6;
-  border: 1px solid #dcded2;
-  border-radius: 18px;
+  background: #ffffff;
+  border: 1px solid #dce3e8;
+  border-radius: 16px;
   padding: 28px;
-  box-shadow: 0 6px 20px #23352303;
+  box-shadow: 0 10px 30px rgba(20, 36, 55, 0.07);
 }
 .member-drop-top {
   display: flex;
@@ -496,15 +524,15 @@
 }
 .member-destination {
   font-size: 13px;
-  color: #6b7b6e;
+  color: #607286;
   margin: 21px 0 12px;
 }
 .member-drop h2 {
   font:
-    italic 52px/0.95 "Newsreader",
-    serif;
-  color: #967035;
-  letter-spacing: -0.045em;
+    650 38px/1.05 "Geist Sans",
+    sans-serif;
+  color: #142437;
+  letter-spacing: -0.04em;
 }
 .member-condition {
   font-size: 14px;
@@ -516,30 +544,31 @@
   align-items: center;
   gap: 5px;
   font-size: 10px;
-  color: #7c897b;
+  color: #687b8e;
 }
 .member-drop-bottom {
   display: flex;
   justify-content: space-between;
   gap: 8px;
   padding: 17px 0;
-  border-top: 1px dashed #d8dacf;
+  border-top: 1px solid #e2e8ed;
   font-size: 10px;
-  color: #778274;
+  color: #687b8e;
 }
 .member-fine-details {
-  border-top: 1px solid #e7e8df;
+  border-top: 1px solid #e5eaee;
   margin-top: 19px;
   padding-top: 13px;
 }
 .member-fine-details summary {
   font-size: 11px;
   cursor: pointer;
-  padding: 7px 0;
+  min-height: 44px;
+  padding: 12px 0;
 }
 .member-fine-details p {
   font-size: 11px;
-  color: #6f7c6e;
+  color: #607286;
   margin: 12px 0;
 }
 .member-directions {
@@ -551,7 +580,7 @@
   align-items: center;
   gap: 7px;
   cursor: pointer;
-  min-height: 30px;
+  min-height: 44px;
 }
 .member-directions summary svg:last-child {
   margin-left: auto;
@@ -566,8 +595,9 @@
   align-items: center;
   justify-content: space-between;
   padding: 12px;
-  background: #edf0e7;
-  border-radius: 7px;
+  min-height: 44px;
+  background: #f1f5f7;
+  border-radius: 10px;
 }
 .member-directions .fine {
   margin-top: 10px;
@@ -585,12 +615,12 @@
 }
 .member-alternatives > p:not(.eyebrow) {
   font-size: 12px;
-  color: #788274;
+  color: #66788a;
   margin-bottom: 24px;
 }
 .member-drop.alternative {
   padding: 23px;
-  background: #f9f7f0;
+  background: #f8fafb;
   box-shadow: none;
 }
 .alternative .member-drop-content {
@@ -609,16 +639,16 @@
   font-size: 12px;
 }
 .alternative .button {
-  background: #e6eee3;
-  color: #315c47;
+  background: #e9f7f1;
+  color: #08705d;
 }
 .member-next-note {
   max-width: 610px;
   margin: 35px auto;
   padding: 28px 0;
   text-align: center;
-  border-top: 1px solid #d7ddd0;
-  border-bottom: 1px solid #d7ddd0;
+  border-top: 1px solid #dce3e8;
+  border-bottom: 1px solid #dce3e8;
 }
 .member-next-note h3 {
   font-size: 24px;
@@ -629,7 +659,7 @@
 }
 .member-next-note > p:not(.eyebrow) {
   font-size: 12px;
-  color: #758473;
+  color: #65778a;
   max-width: 410px;
   margin: auto;
 }
@@ -639,13 +669,13 @@
 .member-invite {
   max-width: 610px;
   margin: 30px auto;
-  background: #12292a;
-  color: #eff3e8;
+  background: #142437;
+  color: #ffffff;
   padding: 29px;
   border-radius: 15px;
 }
 .member-invite .eyebrow {
-  color: #a0bfaa;
+  color: #8bd5c5;
   font-size: 9px;
 }
 .member-invite h3 {
@@ -656,10 +686,10 @@
 }
 .member-invite p {
   font-size: 12px;
-  color: #a4b7aa;
+  color: #c1ccd6;
 }
 .member-invite .text-link {
-  color: #b6ddc6;
+  color: #a7eadb;
   font-size: 12px;
   margin-top: 22px;
 }
@@ -668,7 +698,7 @@
 }
 .member-share-result label {
   font-size: 10px;
-  color: #bcd1c0;
+  color: #cbd6de;
 }
 .member-share-result input {
   display: block;
@@ -676,13 +706,13 @@
   width: 100%;
   padding: 12px;
   border-radius: 8px;
-  border: 1px solid #5e7969;
-  background: #213a37;
-  color: #e6f4e6;
+  border: 1px solid #4a5c6f;
+  background: #20344a;
+  color: #ffffff;
   font-size: 12px;
 }
 .member-share-result .fine {
-  color: #9eb8a5;
+  color: #bdcad4;
 }
 .member-empty {
   max-width: 610px;
@@ -700,7 +730,7 @@
   line-height: 1.15;
 }
 .member-empty p {
-  color: #738170;
+  color: #65778a;
   font-size: 14px;
   max-width: 390px;
   margin: 22px auto;
@@ -716,31 +746,31 @@
 }
 .member-settings h1,
 .member-history h1 {
-  font-size: 52px;
+  font-size: 46px;
   margin: 20px 0;
 }
 .member-settings > p:not(.eyebrow) {
   font-size: 13px;
-  color: #778273;
+  color: #65778a;
   margin: 24px 0;
 }
 .member-settings .member-join-form {
-  background: #fffdf6;
-  border: 1px solid #d8dfd0;
-  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid #dce3e8;
+  border-radius: 16px;
   padding: 28px;
 }
 .member-inline-result {
   font-size: 12px;
   margin: 14px 0;
-  color: #3f765b;
+  color: #08705d;
 }
 .member-history-row {
   display: flex;
   align-items: center;
   gap: 15px;
   padding: 23px 0;
-  border-bottom: 1px solid #d6ddd0;
+  border-bottom: 1px solid #dce3e8;
 }
 .member-history-row > div {
   flex: 1;
@@ -751,21 +781,21 @@
 }
 .member-history-row p {
   font-size: 12px;
-  color: #70816e;
+  color: #607286;
   margin: 7px 0;
 }
 .member-history-row small {
   font-size: 10px;
-  color: #81917d;
+  color: #78899a;
 }
 .member-history > .fine {
   margin-top: 25px;
 }
 .member-saved {
   max-width: 610px;
-  border: 1px solid #c7d8c2;
-  border-radius: 17px;
-  background: #edf2e7;
+  border: 1px solid #cde8df;
+  border-radius: 16px;
+  background: #e9f7f1;
   margin: auto;
   padding: 32px;
   text-align: center;
@@ -775,14 +805,14 @@
 }
 .member-saved h2 {
   font:
-    italic 43px/1 "Newsreader",
-    serif;
-  color: #536e43;
+    650 36px/1.05 "Geist Sans",
+    sans-serif;
+  color: #142437;
   letter-spacing: -0.04em;
 }
 .member-saved > p:not(.eyebrow) {
   font-size: 13px;
-  color: #698064;
+  color: #526f69;
   margin: 14px auto 20px;
 }
 .member-saved .button {
@@ -798,7 +828,7 @@
   align-items: center;
   justify-content: space-between;
   font-size: 11px;
-  color: #6d806d;
+  color: #607286;
 }
 .member-pass-heading .eyebrow {
   font-size: 8px;
@@ -806,19 +836,20 @@
 .member-pass {
   max-width: 540px;
   margin: auto;
-  background: #fffcf6;
-  border: 1px solid #d6decf;
-  border-radius: 19px;
+  background: #ffffff;
+  border: 1px solid #dce3e8;
+  border-radius: 16px;
   padding: 30px;
+  box-shadow: 0 14px 40px rgba(20, 36, 55, 0.08);
 }
 .member-pass > .perk-illustration {
   margin: 20px auto 10px;
 }
 .member-pass > h1 {
   font:
-    italic 49px/1 "Newsreader",
-    serif;
-  color: #947337;
+    650 40px/1.05 "Geist Sans",
+    sans-serif;
+  color: #142437;
   text-align: center;
   letter-spacing: -0.035em;
 }
@@ -832,11 +863,11 @@
   align-items: center;
   justify-content: center;
   gap: 7px;
-  color: #73816c;
+  color: #65778a;
   margin: 18px 0;
 }
 .member-perforation {
-  border-top: 1px dashed #ced8c5;
+  border-top: 1px dashed #cfd9e1;
   margin: 30px -30px;
   position: relative;
 }
@@ -846,9 +877,9 @@
   width: 16px;
   height: 25px;
   position: absolute;
-  background: #f4f1e9;
+  background: #f5f7f9;
   top: -13px;
-  border: 1px solid #d6decf;
+  border: 1px solid #dce3e8;
 }
 .member-perforation:before {
   left: -1px;
@@ -871,7 +902,7 @@
 }
 .member-tap-instructions > p {
   font-size: 13px;
-  color: #748169;
+  color: #607286;
   max-width: 360px;
   margin: 0 auto 20px;
 }
@@ -890,11 +921,13 @@
   gap: 12px;
   align-items: center;
   font-size: 12px;
-  color: #4c634b;
+  color: #41566b;
 }
 .member-tap-instructions li:before {
   content: counter(tapsteps);
-  border: 1px solid #c9d6c1;
+  border: 1px solid #bcded5;
+  background: #e9f7f1;
+  color: #08705d;
   border-radius: 50%;
   width: 24px;
   height: 24px;
@@ -907,7 +940,7 @@
   flex-shrink: 0;
 }
 .member-pass-facts {
-  border-top: 1px solid #dae0d1;
+  border-top: 1px solid #dce3e8;
   margin-top: 27px;
   padding-top: 20px;
   display: grid;
@@ -920,7 +953,7 @@
   gap: 10px;
 }
 .member-pass-facts span {
-  color: #7d8a73;
+  color: #6c7e90;
 }
 .member-pass-facts strong {
   font-weight: 500;
@@ -936,19 +969,19 @@
   border-radius: 50%;
   align-items: center;
   justify-content: center;
-  background: #3d8563;
-  color: #eaf6e8;
+  background: #087f68;
+  color: #ffffff;
 }
 .member-redemption-success > .eyebrow {
-  color: #35714f;
+  color: #08705d;
   margin: 24px 0 18px;
 }
 .member-redemption-success h1 {
-  font-size: 49px;
+  font-size: 42px;
 }
 .member-redemption-success > p:not(.eyebrow) {
   font-size: 14px;
-  color: #5c7754;
+  color: #526f69;
   margin: 20px 0;
 }
 .member-redemption-success > strong {
@@ -957,12 +990,12 @@
     monospace;
 }
 .member-pass-redeemed {
-  background: #ecf3e6;
-  border-color: #acc9a2;
+  background: #e9f7f1;
+  border-color: #b8dfd4;
 }
 .member-self-confirm {
   margin-top: 20px;
-  border-top: 1px solid #dce1d2;
+  border-top: 1px solid #dce3e8;
   padding-top: 10px;
 }
 .member-self-confirm .fine {
@@ -988,7 +1021,7 @@
     padding: 30px;
   }
   .member-world h1 {
-    font-size: 56px;
+    font-size: 50px;
   }
   .member-preview-perk h2 {
     font-size: 23px;
@@ -1002,7 +1035,7 @@
     margin: auto;
   }
   .member-join-story h1 {
-    font-size: 51px;
+    font-size: 44px;
   }
   .member-join-story h1 br:nth-child(2) {
     display: none;
@@ -1016,11 +1049,10 @@
     margin: 22px 0;
   }
   .member-preview-perk {
-    margin-bottom: 10px;
-    padding: 18px 0;
+    display: none;
   }
   .member-join-story > .fine {
-    font-size: 10px;
+    font-size: 11px;
   }
   .member-join-panel h2 {
     font-size: 32px;
@@ -1047,12 +1079,12 @@
     font-size: 10px;
   }
   .member-local-label {
-    font-size: 7px;
+    font-size: 9px;
     letter-spacing: 0.09em;
   }
   .member-your-heading h1,
   .member-world .member-welcome h1 {
-    font-size: 47px;
+    font-size: 42px;
   }
   .member-tabs {
     gap: 24px;
@@ -1088,7 +1120,7 @@
     display: none;
   }
   .member-drop h2 {
-    font-size: 42px;
+    font-size: 34px;
   }
   .member-drop .member-condition {
     font-size: 12px;
@@ -1097,13 +1129,13 @@
     font-size: 9px;
   }
   .member-drop .member-drop-top .eyebrow {
-    font-size: 8px;
+    font-size: 9px;
   }
   .member-drop-top .badge {
-    font-size: 7px;
+    font-size: 9px;
   }
   .member-drop-bottom {
-    font-size: 9px;
+    font-size: 10px;
   }
   .member-alternatives {
     margin-top: 37px;
@@ -1115,7 +1147,7 @@
     min-height: 148px;
   }
   .alternative h2 {
-    font-size: 35px;
+    font-size: 30px;
   }
   .member-drop-content > .perk-illustration.compact {
     width: 100px;
@@ -1141,7 +1173,7 @@
   }
   .member-settings h1,
   .member-history h1 {
-    font-size: 45px;
+    font-size: 40px;
   }
   .member-settings .member-join-form {
     padding: 20px;
@@ -1154,7 +1186,7 @@
     margin-right: -24px;
   }
   .member-pass > h1 {
-    font-size: 44px;
+    font-size: 36px;
   }
   .member-pass > .perk-illustration {
     height: 170px;
@@ -1163,7 +1195,7 @@
     font-size: 10px;
   }
   .member-pass-heading .eyebrow {
-    font-size: 7px;
+    font-size: 9px;
   }
   .member-pass .member-drop-top .eyebrow {
     font-size: 9px;
@@ -1175,7 +1207,87 @@
     padding: 20px;
   }
   .member-redemption-success h1 {
-    font-size: 44px;
+    font-size: 38px;
+  }
+}
+@media (max-width: 420px) {
+  .member-main {
+    padding: 28px 16px 40px;
+  }
+  .member-header {
+    padding: 16px;
+  }
+  .member-header > a:last-child {
+    gap: 8px;
+  }
+  .member-join-grid {
+    gap: 24px;
+  }
+  .member-join-story h1,
+  .member-your-heading h1,
+  .member-world .member-welcome h1 {
+    font-size: 36px;
+  }
+  .member-join-panel,
+  .member-drop,
+  .member-pass,
+  .member-saved {
+    padding: 20px;
+    border-radius: 14px;
+  }
+  .member-join-panel h2 {
+    font-size: 28px;
+  }
+  .member-zip-row {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .member-drop-content {
+    min-height: 0;
+    padding: 20px 0;
+  }
+  .member-drop-content > .perk-illustration {
+    width: 92px;
+    height: 112px;
+  }
+  .member-drop-content > .perk-illustration .perk-orbit.outer {
+    width: 88px;
+    height: 88px;
+  }
+  .member-drop-content > .perk-illustration .perk-orbit.inner {
+    width: 66px;
+    height: 66px;
+  }
+  .member-drop-content > .perk-illustration svg {
+    width: 52px;
+    height: 52px;
+  }
+  .member-drop h2 {
+    font-size: 30px;
+  }
+  .member-drop-bottom,
+  .member-pass-facts > div {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .member-tabs {
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .member-tabs a {
+    font-size: 10px;
+  }
+  .member-footer {
+    padding: 24px 16px 32px;
+  }
+  .member-footer > div {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+  }
+  .member-perforation {
+    margin-left: -20px;
+    margin-right: -20px;
   }
 }
 @media (prefers-reduced-motion: no-preference) {

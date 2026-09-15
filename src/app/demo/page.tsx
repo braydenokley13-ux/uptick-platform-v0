@@ -1,4 +1,17 @@
 import Link from "next/link";
+import {
+  ArrowRight,
+  ShieldCheck,
+  Play,
+  Coffee,
+  ScanLine,
+  ChartNoAxesCombined,
+  CircleAlert,
+  HeartHandshake,
+  Check,
+  LockKeyhole,
+} from "lucide-react";
+import { Brand } from "@/components/ui";
 import { notFound } from "next/navigation";
 import QRCode from "qrcode";
 import {
@@ -27,24 +40,52 @@ export default async function DemoStudio() {
     )
       throw error;
     return (
-      <main id="main" className="demo-studio">
-        <header>
-          <p className="eyebrow">UPTICK · PRIVATE CLOUD REHEARSAL</p>
-          <h1>
-            Your demo.
-            <br />
-            <em>Ready in the browser.</em>
-          </h1>
-          <p>
-            Use your founder access key. This separate sample environment sends
-            no real SMS and creates no real members or commitments.
-          </p>
-        </header>
-        <CloudDemoUnlock />
-        <p>
-          One browser rehearsal at a time. Your session lasts eight hours. Use
-          fictional sample information only.
-        </p>
+      <main id="main" className="demo-studio demo-locked">
+        <div className="demo-top">
+          <Brand />
+          <Link href="/">
+            Back to overview <ArrowRight size={16} />
+          </Link>
+        </div>
+        <div className="demo-unlock-layout">
+          <header>
+            <span className="demo-kicker">
+              <ShieldCheck size={15} /> PRIVATE FOUNDER DEMO
+            </span>
+            <h1>
+              Your next great demo
+              <br />
+              <span>starts here.</span>
+            </h1>
+            <p>
+              Explore Uptick as a member, a store, and an operator. One
+              connected journey, using the real application.
+            </p>
+            <div className="demo-assurances">
+              <span>
+                <Check size={17} /> Fictional members & benefits
+              </span>
+              <span>
+                <Check size={17} /> No real SMS or commitments
+              </span>
+              <span>
+                <Check size={17} /> Reset from your browser
+              </span>
+            </div>
+          </header>
+          <section className="demo-access-card">
+            <span className="demo-icon">
+              <LockKeyhole size={24} />
+            </span>
+            <h2>Welcome to your rehearsal</h2>
+            <p>Enter your founder access key to open the sample workspace.</p>
+            <CloudDemoUnlock />
+            <p className="fine">
+              One browser rehearsal at a time. Your session lasts eight hours.
+              Use fictional sample information only.
+            </p>
+          </section>
+        </div>
       </main>
     );
   }
@@ -56,21 +97,67 @@ export default async function DemoStudio() {
   });
   return (
     <main id="main" className="demo-studio">
-      <header>
-        <p className="eyebrow">UPTICK · FOUNDER REHEARSAL</p>
-        <h1>
-          A little good.
-          <br />
-          <em>The whole journey.</em>
-        </h1>
-        <p>
-          This is the real application with a separate{" "}
-          {cloudDemoMode() ? "cloud" : "local"} sample database. No real
-          members, messages, stock or commercial commitments are created.
-        </p>
+      <div className="demo-top">
+        <Brand />
+        <span className="demo-session">
+          <span className="status-dot" /> Sample workspace
+        </span>
+      </div>
+      <header className="demo-heading">
+        <div>
+          <span className="demo-kicker">
+            <Play size={14} /> DEMO STUDIO
+          </span>
+          <h1>
+            See the whole journey.
+            <br />
+            <span>Make it your own.</span>
+          </h1>
+          <p>
+            From a member’s first benefit to a recovery that puts things right.
+            Follow the six steps below, then reset and go again.
+          </p>
+        </div>
+        <div className="demo-safety">
+          <ShieldCheck size={26} />
+          <strong>A safe place to explore</strong>
+          <p>
+            Real application. Separate {cloudDemoMode() ? "cloud" : "local"}{" "}
+            sample records. No real SMS, members, stock obligations, or
+            commitments.
+          </p>
+        </div>
       </header>
+      <section className="demo-summary" aria-label="Saved sample activity">
+        {[
+          ["Claims", counts.claims],
+          ["Digital redemptions", counts.redemptions],
+          ["Reported issues", counts.incidents],
+          ["Recoveries issued", counts.recoveries],
+          ["Recoveries redeemed", counts.recovery_redemptions],
+        ].map(([label, value]) => (
+          <div key={label}>
+            <span>{label}</span>
+            <strong>{value}</strong>
+            <small>Sample activity</small>
+          </div>
+        ))}
+      </section>
+      <div className="demo-section-heading">
+        <div>
+          <p className="eyebrow">YOUR WALKTHROUGH</p>
+          <h2>One benefit. Every perspective.</h2>
+        </div>
+        <span>Follow steps 1–6 in this browser</span>
+      </div>
       <section className="demo-scenes" aria-label="Demo steps">
-        <article>
+        <article id="step-1">
+          <div className="demo-card-top">
+            <span className="demo-icon">
+              <Play size={23} />
+            </span>
+            <span className="demo-step-number">01</span>
+          </div>
           <span className="eyebrow">1 · MEMBER ENTRY</span>
           <h2>Start with a member</h2>
           <p>
@@ -81,7 +168,13 @@ export default async function DemoStudio() {
           <DemoButton action="member">Open member journey</DemoButton>
           <p className="fine">Sample: (202) 555-0123 · ZIP 10583</p>
         </article>
-        <article>
+        <article id="step-2">
+          <div className="demo-card-top">
+            <span className="demo-icon">
+              <Coffee size={23} />
+            </span>
+            <span className="demo-step-number">02</span>
+          </div>
           <span className="eyebrow">2 · BACKED BENEFIT</span>
           <h2>Claim this week’s coffee</h2>
           <p>
@@ -92,7 +185,13 @@ export default async function DemoStudio() {
             Open Your Uptick
           </Link>
         </article>
-        <article>
+        <article id="step-3">
+          <div className="demo-card-top">
+            <span className="demo-icon">
+              <ScanLine size={23} />
+            </span>
+            <span className="demo-step-number">03</span>
+          </div>
           <span className="eyebrow">3 · STAFF QR</span>
           <h2>Record redemption</h2>
           <p>
@@ -110,14 +209,26 @@ export default async function DemoStudio() {
             purchase or physical handoff.
           </p>
         </article>
-        <article>
+        <article id="step-4">
+          <div className="demo-card-top">
+            <span className="demo-icon">
+              <ChartNoAxesCombined size={23} />
+            </span>
+            <span className="demo-step-number">04</span>
+          </div>
           <span className="eyebrow">4 · RESULTS</span>
           <h2>See the saved result</h2>
           <p>The merchant and operator views use these same sample records.</p>
           <DemoButton action="merchant">Open merchant view</DemoButton>
           <DemoButton action="operator">Open operator view</DemoButton>
         </article>
-        <article>
+        <article id="step-5">
+          <div className="demo-card-top">
+            <span className="demo-icon">
+              <CircleAlert size={23} />
+            </span>
+            <span className="demo-step-number">05</span>
+          </div>
           <span className="eyebrow">5 · FULFILLMENT FAILURE</span>
           <h2>The coffee ran out</h2>
           <p>
@@ -126,7 +237,13 @@ export default async function DemoStudio() {
           </p>
           <DemoButton action="stockout">Report sample stockout</DemoButton>
         </article>
-        <article>
+        <article id="step-6">
+          <div className="demo-card-top">
+            <span className="demo-icon">
+              <HeartHandshake size={23} />
+            </span>
+            <span className="demo-step-number">06</span>
+          </div>
           <span className="eyebrow">6 · BACKED RECOVERY</span>
           <h2>Make the member whole</h2>
           <p>
@@ -134,7 +251,9 @@ export default async function DemoStudio() {
             stock. Reopen the member’s pass and the staff QR to record recovery.
           </p>
           <DemoButton action="recovery">Issue sample recovery</DemoButton>
-          <Link href="/your-uptick">Return to the member’s pass →</Link>
+          <Link className="text-link" href="/your-uptick">
+            Return to the member’s pass <ArrowRight size={15} />
+          </Link>
         </article>
       </section>
       <section className="demo-ledger">
@@ -152,8 +271,8 @@ export default async function DemoStudio() {
           placement or another member.
         </p>
       </section>
-      <section>
-        <h2>Start over</h2>
+      <section className="demo-reset">
+        <h2>A fresh start, whenever you need it.</h2>
         {cloudDemoMode() ? (
           <>
             <p>

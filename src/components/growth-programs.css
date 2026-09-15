@@ -6,11 +6,11 @@
 }
 .gp-panel,
 .gp-card {
-  border: 1px solid #dfe4dd;
-  background: #fff;
-  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  border-radius: 12px;
   padding: 28px;
-  box-shadow: 0 8px 30px rgba(31, 43, 34, 0.035);
+  box-shadow: 0 8px 24px rgba(20, 36, 55, 0.06);
 }
 .gp-panel > h2,
 .gp-card h2 {
@@ -29,12 +29,13 @@
   align-items: center;
   padding: 20px;
   border-radius: 14px;
-  background: #edf4e9;
-  color: #1c3a28;
+  background: #e8f6f2;
+  color: #145447;
+  border: 1px solid #cfeae3;
 }
 .gp-explainer span {
   grid-column: 2;
-  color: #61716c;
+  color: var(--muted);
   font-size: 13px;
 }
 .gp-card-head,
@@ -67,11 +68,12 @@
   min-width: 0;
   padding: 14px;
   border-radius: 12px;
-  background: #f6f7f3;
+  background: #f7f9fb;
+  border: 1px solid var(--line);
 }
 .gp-facts span {
-  color: #68766e;
-  font-size: 11px;
+  color: var(--muted);
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -82,12 +84,12 @@
 }
 .gp-role-row {
   flex-wrap: wrap;
-  color: #63726a;
+  color: var(--muted);
   font-size: 12px;
 }
 .gp-role-row span {
   padding: 5px 9px;
-  border: 1px solid #dfe4dd;
+  border: 1px solid var(--line);
   border-radius: 99px;
 }
 .gp-callout,
@@ -96,8 +98,9 @@
   margin: 18px 0;
   padding: 14px 16px;
   border-radius: 12px;
-  background: #edf4e9;
-  color: #36523f;
+  background: #e8f6f2;
+  color: #145447;
+  border: 1px solid #cfeae3;
   font-size: 13px;
   line-height: 1.6;
 }
@@ -109,26 +112,26 @@
   margin: 0;
 }
 .gp-protection {
-  background: #f5f1df;
-  color: #665b2f;
+  background: #f1f6f8;
+  color: var(--ink);
 }
 .gp-card details {
-  border-top: 1px solid #e5e8e2;
+  border-top: 1px solid var(--line);
   margin-top: 20px;
   padding-top: 16px;
-  color: #5f6f65;
+  color: var(--muted);
   line-height: 1.65;
 }
 .gp-card details summary {
   cursor: pointer;
-  color: #223a2a;
+  color: var(--ink);
   font-weight: 650;
 }
 .text-button {
   border: 0;
   background: transparent;
   padding: 16px 0 0;
-  color: #1f6339;
+  color: var(--mint-deep);
   text-decoration: underline;
   cursor: pointer;
   font: inherit;
@@ -143,12 +146,12 @@
 .gp-form fieldset {
   display: grid;
   gap: 8px;
-  color: #2d4033;
+  color: var(--ink);
   font-size: 13px;
   font-weight: 650;
 }
 .gp-form fieldset {
-  border: 1px solid #dfe4dd;
+  border: 1px solid var(--line);
   border-radius: 13px;
   padding: 16px;
 }
@@ -159,11 +162,11 @@
 .gp-form select,
 .gp-form textarea {
   width: 100%;
-  border: 1px solid #ccd4cb;
+  border: 1px solid #cbd6e1;
   border-radius: 9px;
   padding: 11px 12px;
   background: #fff;
-  color: #15251a;
+  color: var(--ink);
   font: inherit;
   font-weight: 400;
 }
@@ -173,7 +176,7 @@
 .gp-form input:focus,
 .gp-form select:focus,
 .gp-form textarea:focus {
-  outline: 2px solid #9cc4a7;
+  outline: 2px solid rgba(8, 127, 104, 0.28);
   outline-offset: 1px;
 }
 .gp-form-grid {
@@ -210,13 +213,15 @@
   gap: 10px;
   padding: 12px;
   border-radius: 10px;
-  background: #f6f7f3;
+  background: #f7f9fb;
+  border: 1px solid var(--line);
 }
 .gp-protection-fields {
   display: grid;
   gap: 16px;
   padding: 18px;
-  background: #faf8ee;
+  background: #f7f9fb;
+  border: 1px solid var(--line);
   border-radius: 13px;
 }
 .gp-actions {
@@ -227,8 +232,9 @@
   padding: 13px 15px;
   margin: 0;
   border-radius: 10px;
-  background: #e6f3e8;
-  color: #285d37;
+  background: #e8f6f2;
+  color: #086955;
+  border: 1px solid #bde5db;
 }
 .gp-list {
   display: grid;
@@ -244,9 +250,9 @@
   align-content: start;
   margin: 0;
   padding: 18px;
-  border: 1px solid #dfe4dd;
+  border: 1px solid var(--line);
   border-radius: 13px;
-  background: #f8f9f6;
+  background: #f7f9fb;
 }
 .gp-operator-grid h3 {
   margin: 0;
@@ -289,5 +295,15 @@
   .gp-card-head {
     gap: 8px;
     flex-direction: column;
+  }
+}
+@media (max-width: 420px) {
+  .gp-panel,
+  .gp-card,
+  .gp-card.compact {
+    padding: 18px;
+  }
+  .gp-actions .button {
+    width: 100%;
   }
 }

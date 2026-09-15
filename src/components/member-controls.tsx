@@ -94,7 +94,7 @@ export function JoinUptick({
         <p className="eyebrow">ONE SMALL STEP</p>
         <h2>
           {result.development
-            ? "Your local test is ready."
+            ? "Your sample demo is ready."
             : "Check your texts."}
         </h2>
         <p>

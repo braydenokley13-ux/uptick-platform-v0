@@ -1,14 +1,14 @@
 :root {
-  --marine: #0a1820;
-  --marine-2: #0d1f2a;
-  --canvas: #f3f0e9;
-  --paper: #faf8f4;
-  --canvas-deep: #e9e4d9;
-  --ink: #17201f;
-  --muted: #69716d;
-  --line: #dcded5;
+  --marine: #142437;
+  --marine-2: #1c3349;
+  --canvas: #f4f7fa;
+  --paper: #ffffff;
+  --canvas-deep: #eaf0f5;
+  --ink: #142437;
+  --muted: #637386;
+  --line: #e1e7ee;
   --mint: #5fd6bb;
-  --mint-deep: #0f6f5c;
+  --mint-deep: #087f68;
   --amber: #e2a24f;
   --amber-deep: #a8681f;
   --sans: "Geist Sans", Arial, sans-serif;
@@ -38,12 +38,12 @@ p {
 h1,
 h2,
 h3 {
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: -0.035em;
   line-height: 1.16;
 }
 h1 {
-  font-size: clamp(32px, 3vw, 46px);
+  font-size: clamp(28px, 2.8vw, 38px);
 }
 h2 {
   font-size: 25px;
@@ -52,8 +52,9 @@ h3 {
   font-size: 20px;
 }
 em {
-  font-family: var(--serif);
-  font-weight: 400;
+  font-family: inherit;
+  font-style: normal;
+  font-weight: inherit;
 }
 a {
   color: inherit;
@@ -91,7 +92,7 @@ textarea {
   padding: 12px 14px;
   background: var(--paper);
   color: var(--ink);
-  border: 1px solid #cdd2c8;
+  border: 1px solid #cdd7e2;
   border-radius: 7px;
   outline: none;
 }
@@ -168,7 +169,7 @@ summary:focus-visible {
   transform: translateY(0);
 }
 .eyebrow {
-  font: 10px/1.5 var(--mono);
+  font: 600 11px/1.5 var(--sans);
   letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--muted);
@@ -197,7 +198,7 @@ summary:focus-visible {
   align-items: center;
   justify-content: center;
   gap: 14px;
-  min-height: 43px;
+  min-height: 44px;
   padding: 11px 18px;
   border: 1px solid var(--marine);
   border-radius: 7px;
@@ -215,7 +216,7 @@ summary:focus-visible {
 }
 .button.secondary {
   background: transparent;
-  border-color: #cbd0c5;
+  border-color: #cdd7e2;
   color: var(--ink);
 }
 .button.secondary:hover {
@@ -288,14 +289,13 @@ summary:focus-visible {
   gap: 6px;
   border-radius: 30px;
   padding: 5px 10px;
-  font-size: 9px;
+  font-size: 11px;
   line-height: 1.5;
   font-weight: 500;
   background: var(--canvas-deep);
   color: #4c5750;
   white-space: nowrap;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0;
 }
 .badge.mint {
   background: #ddf1e8;
@@ -316,38 +316,32 @@ summary:focus-visible {
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
-  font-size: 29px;
+  gap: 10px;
+  font-size: 23px;
   line-height: 1;
-  font-weight: 600;
-  letter-spacing: -1.3px;
+  font-weight: 650;
+  letter-spacing: -0.8px;
 }
-.brand-dot {
-  height: 9px;
-  width: 9px;
-  border-radius: 50%;
-  background: var(--mint);
-  margin-top: 3px;
+.brand-mark {
+  width: 29px;
+  height: 29px;
+  color: var(--mint-deep);
+}
+.sidebar .brand-mark {
+  color: var(--mint);
 }
 .brand-local {
-  display: inline-block;
-  color: var(--mint);
-  font: 8px var(--mono);
-  letter-spacing: 1px;
-  margin-left: 4px;
-  vertical-align: top;
-  padding-top: 3px;
+  font-size: 12px;
+  letter-spacing: -0.2px;
+  font-weight: 500;
+  margin-left: 5px;
 }
 .brand.small {
-  font-size: 20px;
+  font-size: 21px;
 }
-.brand.small .brand-local {
-  color: var(--mint-deep);
-  font-size: 6px;
-}
-.brand.small .brand-dot {
-  height: 6px;
-  width: 6px;
+.brand.small .brand-mark {
+  width: 25px;
+  height: 25px;
 }
 .app-shell {
   display: flex;
@@ -361,11 +355,11 @@ summary:focus-visible {
   color: #f1ede5;
   display: flex;
   flex-direction: column;
-  padding: 34px 18px 16px;
+  padding: 26px 14px 16px;
   z-index: 20;
 }
 .sidebar > .brand {
-  margin: 0 15px 43px;
+  margin: 0 12px 38px;
 }
 .workspace-label {
   padding: 0 15px 13px;
@@ -386,7 +380,7 @@ summary:focus-visible {
   gap: 12px;
   min-height: 45px;
   padding: 12px 15px;
-  color: #b4c0c0;
+  color: #b8c7d7;
   border-radius: 7px;
   font-size: 12px;
   line-height: 1.2;
@@ -396,7 +390,7 @@ summary:focus-visible {
   background: #ffffff08;
 }
 .nav-item.active {
-  background: #1b333c;
+  background: #23433f;
   color: var(--paper);
 }
 .nav-item.active svg {
@@ -429,15 +423,15 @@ summary:focus-visible {
   padding-top: 20px;
 }
 .sidebar-note {
-  padding: 34px 14px 28px;
+  padding: 20px 14px;
   border-bottom: 1px solid #ffffff15;
   margin-bottom: 12px;
 }
 .sidebar-note p {
-  font-size: 24px;
-  line-height: 1.15;
+  font-size: 17px;
+  line-height: 1.4;
   letter-spacing: -0.03em;
-  color: #e9e4d9;
+  color: #e5edf6;
 }
 .sidebar-note em {
   color: var(--mint);
@@ -491,7 +485,8 @@ summary:focus-visible {
   flex-direction: column;
 }
 .topbar {
-  height: 70px;
+  min-height: 72px;
+  background: var(--paper);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -509,12 +504,12 @@ summary:focus-visible {
   font-weight: 500;
 }
 .topbar .button {
-  min-height: 30px;
+  min-height: 40px;
   padding: 5px 10px;
   font-size: 10px;
 }
 .topbar .badge {
-  font-size: 8px;
+  font-size: 11px;
 }
 .top-divider {
   color: #9ca49b;
@@ -523,7 +518,7 @@ summary:focus-visible {
   padding: 36px;
   max-width: 1560px;
   width: 100%;
-  margin: auto;
+  margin: 0 auto;
   flex: 1;
 }
 .page-heading {
@@ -574,25 +569,28 @@ summary:focus-visible {
   margin-bottom: 26px;
 }
 .metric {
-  padding: 21px 23px;
-  border-right: 1px solid var(--line);
+  padding: 23px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 3px 14px #14243704;
 }
 .metric:last-child {
-  border: 0;
+  border: 1px solid var(--line);
 }
 .metric .eyebrow {
-  font-size: 8px;
+  font-size: 11px;
 }
 .metric strong {
   display: block;
   font-size: 38px;
   font-weight: 500;
   line-height: 1.15;
-  letter-spacing: -2px;
+  letter-spacing: -1.3px;
   margin: 17px 0 8px;
 }
 .metric > p:last-child {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
 }
 .accent-metric strong {
@@ -2489,8 +2487,9 @@ td strong {
 }
 /* Persistent rehearsal label on member, merchant and operator surfaces. */
 .demo-banner {
-  background: #e2a24f;
-  color: #0a1820;
+  background: #e9f5f0;
+  color: #225346;
+  border-bottom: 1px solid #cde5db;
   padding: 10px 18px;
   display: flex;
   flex-wrap: wrap;
@@ -2510,6 +2509,24 @@ td strong {
     line-height: 18px;
   }
   .demo-mode .sidebar {
-    top: 38px;
+    top: 39px;
+  }
+}
+
+.demo-return {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--mint-deep);
+  font-weight: 600;
+  min-height: 44px;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
   }
 }
