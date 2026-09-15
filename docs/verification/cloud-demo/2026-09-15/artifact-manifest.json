@@ -1,0 +1,100 @@
+{
+  "algorithm": "sha256",
+  "artifacts": [
+    {
+      "path": "docs/demo/screenshots/cloud-refresh/01-landing.png",
+      "bytes": 41784,
+      "sha256": "dd8e85d7176971c4a4055f0e1c220daae97afb7bc563c33d35be1df63e1ea1b8"
+    },
+    {
+      "path": "docs/demo/screenshots/cloud-refresh/02-guided-studio.png",
+      "bytes": 27351,
+      "sha256": "b565542e9a0a5c9d1e6a8b06cb4d28b2c8717938b63ce3246cd5bca39a6bd98e"
+    },
+    {
+      "path": "docs/demo/screenshots/cloud-refresh/03-member-entry.png",
+      "bytes": 47197,
+      "sha256": "fa6b502b15c84a268430b9ab0f882756a0a501aacf60b1280b2b2746ee5e18e4"
+    },
+    {
+      "path": "docs/demo/screenshots/cloud-refresh/04-simulated-access.png",
+      "bytes": 41585,
+      "sha256": "20a8e4272018f9e09f98dfb4aeeef303bdfb731f193dffa69827e61304c0cff2"
+    },
+    {
+      "path": "docs/demo/screenshots/cloud-refresh/05-benefit.png",
+      "bytes": 43569,
+      "sha256": "36564e7f7512e797d3ac729e23ec7a39308e9003df5927c7731a1263c28caaf3"
+    },
+    {
+      "path": "docs/demo/screenshots/cloud-refresh/06-pass.png",
+      "bytes": 51398,
+      "sha256": "9cd81d11b8719a56a538ffd9771f953e1d1e498f462224cbedeafef2e5c017f7"
+    },
+    {
+      "path": "docs/demo/screenshots/cloud-refresh/07-redemption.png",
+      "bytes": 37830,
+      "sha256": "14fd3b95942b2c8862ddc1e32f83a48f7de6dfcf9e61f4201f5c8c5d005153a3"
+    },
+    {
+      "path": "docs/demo/screenshots/cloud-refresh/08-merchant.png",
+      "bytes": 72445,
+      "sha256": "6eb1efe6eff6453fd6cd17242ce1ada0a1d671cbab49c4f03491828f61b560c5"
+    },
+    {
+      "path": "docs/demo/screenshots/cloud-refresh/09-operator.png",
+      "bytes": 39063,
+      "sha256": "cb7c2dcaaa6f0ca0d4e373ef8af12926ef73df367c7762e8dbdf073ebd1f7568"
+    },
+    {
+      "path": "docs/demo/screenshots/cloud-refresh/10-failure.png",
+      "bytes": 33649,
+      "sha256": "5a97b277355f189f6db11c685bd6b289211ef9f615871d113aeffd3b41dc4640"
+    },
+    {
+      "path": "docs/demo/screenshots/cloud-refresh/11-recovery.png",
+      "bytes": 33520,
+      "sha256": "06999e0ad4bed95a5d87167a8bf5d54884595d04f4da8b5467f00a3a645ca971"
+    },
+    {
+      "path": "docs/demo/screenshots/cloud-refresh/12-recovery-redemption.png",
+      "bytes": 41411,
+      "sha256": "3a2b741ea38590b5f04097a38a8a5b19dd01eba5a41a722636e83f00722f3a88"
+    },
+    {
+      "path": "docs/demo/screenshots/cloud-refresh/13-complete.png",
+      "bytes": 48259,
+      "sha256": "792b81843f360028976b63884b36b2441975b53b54ebbc0ae7234f8dafb3188c"
+    },
+    {
+      "path": "docs/demo/screenshots/cloud-refresh/14-reset.png",
+      "bytes": 34032,
+      "sha256": "be61620800029c44d8d3a625c63ee20ad64f4080aac8c8235561b852d18d8752"
+    },
+    {
+      "path": "docs/demo/screenshots/cloud-refresh/mobile-checks.json",
+      "bytes": 148,
+      "sha256": "8ba7fe2659770fd70e8c38ca9267e7c4a44edd5dbe549df642b9b39bf113864c"
+    },
+    {
+      "path": "docs/demo/screenshots/cloud-refresh/mobile-enrollment.png",
+      "bytes": 40586,
+      "sha256": "b09929fdfe56d2e451c6927230c1cdc7d5882933a204c2d264ffe8d8c1775c6e"
+    },
+    {
+      "path": "docs/demo/screenshots/cloud-refresh/mobile-guide.png",
+      "bytes": 32192,
+      "sha256": "8d0ffc004bfc380d818d9a845f9e0d299ab594fd5e2e3f91cbd02a914feb932b"
+    },
+    {
+      "path": "docs/demo/screenshots/cloud-refresh/pass-final.png",
+      "bytes": 39498,
+      "sha256": "ff49c0195ccaf556500f26298d50fb4dde2473a874dccbc6038ff7aab3dcebd3"
+    },
+    {
+      "path": "output/pdf/uptick-cloud-demo-guide.pdf",
+      "bytes": 2571846,
+      "sha256": "f7bd741412b364bec74362809adf52979fdb837df1747a5eea7e8878b2e5b273"
+    }
+  ]
+}

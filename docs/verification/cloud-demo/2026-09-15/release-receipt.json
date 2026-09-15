@@ -1,0 +1,28 @@
+{
+  "verifiedAt": "2026-09-15",
+  "origin": "https://pilot.upticklocal.com",
+  "branch": "codex/real-enrollment-ready",
+  "runtimeSource": "fc54a5bf557a58d670898d6b4e1cc629b3a5cfc2",
+  "deployment": {
+    "id": "dpl_8qFXFFRLcNSx2zqFZeeRxEHqKMh2",
+    "state": "READY",
+    "project": "uptick-cloud-demo"
+  },
+  "ci": {
+    "id": 35014771313,
+    "conclusion": "success",
+    "url": "https://github.com/braydenokley13-ux/uptick-platform-v0/actions/runs/35014771313"
+  },
+  "fullHostedJourneySource": "e670b6e4c36c2029e4e1fb217ded6033bf8f29c9",
+  "finalPresentationVerification": {
+    "memberEntry": true,
+    "simulatedAccess": true,
+    "claim": true,
+    "compactPass": true,
+    "primaryActionBeforeInstructions": true,
+    "afterResetCounts": [0, 0, 0, 0, 0],
+    "sessionEndedAndLocked": true
+  },
+  "artifactManifest": "artifact-manifest.json",
+  "note": "Full hosted journey proved before presentation-only follow-up. Final deployed runtime passed CI and fresh entry, claim, pass, reset and session-release browser verification. Subsequent receipt commit changes only evidence."
+}

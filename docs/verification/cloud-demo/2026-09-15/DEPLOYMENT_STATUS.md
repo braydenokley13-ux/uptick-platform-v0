@@ -35,7 +35,7 @@ Screenshots are in `docs/demo/screenshots/cloud-refresh/`. The offline guide is 
 - Main remains `81ad63e0922e4a1fb3bf2c4d51bbf001d458f51b`.
 - Visual foundation: `8d1f970c71e6904528b3822893e4e01dbfcb819d`; [CI 35012202208](https://github.com/braydenokley13-ux/uptick-platform-v0/actions/runs/35012202208) passed.
 - Guided demo and task workspaces: `e670b6e4c36c2029e4e1fb217ded6033bf8f29c9`; [CI 35013090123](https://github.com/braydenokley13-ux/uptick-platform-v0/actions/runs/35013090123) passed. Full hosted journey above used this version.
-- Vercel project: `uptick-cloud-demo`, `prj_OaNjYj6hnSFqyy7iiT7d8lOGTUgF`. Deployment `dpl_EqpnC2F9RvoL6ctCSZjHdB666hB5` reached READY for the guided version. Any final presentation-only follow-up is identified in `release-receipt.json`.
+- Vercel project: `uptick-cloud-demo`, `prj_OaNjYj6hnSFqyy7iiT7d8lOGTUgF`. Deployment `dpl_EqpnC2F9RvoL6ctCSZjHdB666hB5` reached READY for the guided version. Final presentation release `fc54a5bf557a58d670898d6b4e1cc629b3a5cfc2` is READY as `dpl_8qFXFFRLcNSx2zqFZeeRxEHqKMh2`; [CI 35014771313](https://github.com/braydenokley13-ux/uptick-platform-v0/actions/runs/35014771313) passed. Fresh entry, claim, compact pass, reset to zero and session release were verified on that deployment. See `release-receipt.json` and `artifact-manifest.json`.
 - Local unit/domain tests: **299 passed, 0 failed**. TypeScript, lint and whitespace checks passed.
 - Dedicated real-PostgreSQL isolation verifier passed: restricted public/auth access, lease isolation, shared persistence, full recovery journey, reset rotation, failed-reset rollback, normal-schema sentinel unchanged.
 - CI additionally checks PostgreSQL upgrade/concurrency, backup/restore, HTTP/browser behavior and production build.
