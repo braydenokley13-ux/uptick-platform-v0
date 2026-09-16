@@ -19,7 +19,7 @@ const LAYERS: GateKey[][] = [
   ["software"],
   ["database"],
   ["identity", "messaging", "market"],
-  ["support"],
+  ["operations", "support"],
   ["enrollment"],
 ];
 
@@ -104,6 +104,7 @@ export function ReadinessMap({ gates }: { gates: Gate[] }) {
       "identity",
       "messaging",
       "market",
+      "operations",
       "support",
     ] as GateKey[]
   )

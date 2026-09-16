@@ -301,8 +301,37 @@ export async function releaseReadiness(db: DB) {
     db.query<{ open: number; oldest: string | null }>(
       "select count(*)::int open,min(created_at) oldest from member_support_requests where state in ('queued','working')",
     ),
-    db.query<{ id: string; name: string; state: string; data_kind: string }>(
-      "select id,name,state,data_kind from market_cells order by name",
+    /* A Market Cell's `state` is a free operator-set text column, so it is a
+       statement of intent, not evidence. These counts are the evidence: what
+       is actually backed, approved, substitutable and rehearsed. */
+    db.query<{
+      id: string;
+      name: string;
+      state: string;
+      data_kind: string;
+      backed_weeks: number;
+      approved_supplies: number;
+      approved_fallbacks: number;
+      ready_destinations: number;
+    }>(
+      `select k.id,k.name,k.state,k.data_kind,
+              (select count(distinct p.week_key)::int
+                 from pilot_runs r join effective_pilot_week_supplies p on p.run_id=r.id
+                where r.market_id=k.id and r.state<>'complete') backed_weeks,
+              (select count(*)::int
+                 from pilot_runs r join effective_pilot_week_supplies p on p.run_id=r.id
+                 join network_drop_supplies s on s.id=p.supply_id
+                where r.market_id=k.id and r.state<>'complete' and s.state='approved') approved_supplies,
+              (select count(*)::int
+                 from pilot_runs r join effective_pilot_week_supplies p on p.run_id=r.id
+                 join pilot_supply_fallbacks f on f.supply_id=p.supply_id and f.state='approved'
+                where r.market_id=k.id and r.state<>'complete') approved_fallbacks,
+              (select count(*)::int
+                 from pilot_runs r join effective_pilot_week_supplies p on p.run_id=r.id
+                 join destination_readiness d on d.supply_id=p.supply_id
+                where r.market_id=k.id and r.state<>'complete'
+                  and d.state='ready' and d.valid_until>now()) ready_destinations
+         from market_cells k order by k.name`,
     ),
   ]);
   const releaseSha = process.env.VERCEL_GIT_COMMIT_SHA || "local";
@@ -367,29 +396,130 @@ export async function releaseReadiness(db: DB) {
     enrollmentEnabled: process.env.PILOT_ENROLLMENT_ENABLED === "true",
   };
 }
+/** Which readiness gate an enrollment blocker belongs to. Keep in step with
+    `GateKey` in operator-readiness.ts — the map renders one gate per value. */
+export type BlockerGate =
+  | "software"
+  | "database"
+  | "identity"
+  | "messaging"
+  | "market"
+  | "support"
+  | "operations";
+
+export type EnrollmentBlocker = {
+  key: string;
+  gate: BlockerGate;
+  detail: string;
+};
+
+/* The conditions real enrollment is actually gated on — the single list.
+
+   This used to be a boolean expression inside the server assert, while the
+   operator's readiness map derived its own answer from the same underlying
+   data. The two drifted: of the nine conditions enforced here, the seven
+   visual gates encoded four, so the map could show every gate green and read
+   "Nothing technical is blocking it" while the server refused to enrol anyone.
+
+   Both surfaces now read this function, so a gate cannot be green unless the
+   thing it stands for is genuinely not blocking. */
+export function enrollmentBlockers(
+  readiness: Awaited<ReturnType<typeof releaseReadiness>>,
+): EnrollmentBlocker[] {
+  const blockers: EnrollmentBlocker[] = [];
+  const add = (key: string, gate: BlockerGate, detail: string) =>
+    blockers.push({ key, gate, detail });
+
+  if (readiness.releaseSha === "local")
+    add(
+      "release_sha",
+      "software",
+      "Running from a local build, so no evidence can be tied to a known commit.",
+    );
+  if (!readiness.schema.matches)
+    add(
+      "schema",
+      "database",
+      "The connected database does not carry exactly the migrations in this release.",
+    );
+  for (const check of readiness.checks)
+    if (
+      check.state !== "verified" &&
+      (check.key !== "promotion_receipt" ||
+        readiness.messaging.promotionEnabled)
+    )
+      add(
+        `evidence:${check.key}`,
+        /* `support_coverage` is filed under the Operations group but is what
+           the Support gate stands for, so it is routed by key. */
+        check.key === "support_coverage"
+          ? "support"
+          : check.group === "Hosted commissioning"
+            ? "identity"
+            : check.group === "Messaging"
+              ? "messaging"
+              : check.group === "Software"
+                ? "software"
+                : "operations",
+        `Commissioning evidence "${check.label}" is ${check.state}.`,
+      );
+  for (const job of readiness.jobs)
+    if (!job.healthy)
+      add(
+        `job:${job.key}`,
+        "operations",
+        `Scheduled job "${job.key}" is not running within its freshness window.`,
+      );
+  if (!readiness.messaging.accessReady)
+    add(
+      "access_messaging",
+      "messaging",
+      "Requested-access messaging is not ready, so an admitted member could not be given a way in.",
+    );
+  if (!readiness.policy)
+    add(
+      "privacy_policy",
+      "operations",
+      "No privacy policy version is recorded.",
+    );
+  else if (new Date(readiness.policy.review_due_at) <= new Date())
+    add(
+      "privacy_policy_review",
+      "operations",
+      "The recorded privacy policy is past its review date.",
+    );
+  if ((process.env.PRIVACY_SUPPRESSION_KEY?.length || 0) < 32)
+    add(
+      "suppression_key",
+      "operations",
+      "PRIVACY_SUPPRESSION_KEY is missing or too short, so erasure do-not-contact cannot be honoured.",
+    );
+  if (process.env.OPERATOR_MFA_REQUIRED !== "true")
+    add(
+      "operator_mfa",
+      "identity",
+      "Operator multi-factor authentication is not required.",
+    );
+  for (const kind of ["inbound", "status"])
+    if (
+      !readiness.callbacks.some(
+        (callback) => callback.kind === kind && callback.current,
+      )
+    )
+      add(
+        `callback:${kind}`,
+        "messaging",
+        `No current signed ${kind} callback has been observed.`,
+      );
+  return blockers;
+}
+
 export async function assertRealEnrollmentCommissioned(db: DB) {
   const readiness = await releaseReadiness(db);
-  const required = readiness.checks.filter(
-    (check) =>
-      check.key !== "promotion_receipt" || readiness.messaging.promotionEnabled,
-  );
-  if (
-    readiness.releaseSha === "local" ||
-    !readiness.schema.matches ||
-    required.some((check) => check.state !== "verified") ||
-    readiness.jobs.some((job) => !job.healthy) ||
-    !readiness.messaging.accessReady ||
-    !readiness.policy ||
-    new Date(readiness.policy.review_due_at) <= new Date() ||
-    (process.env.PRIVACY_SUPPRESSION_KEY?.length || 0) < 32 ||
-    process.env.OPERATOR_MFA_REQUIRED !== "true" ||
-    ["inbound", "status"].some(
-      (kind) =>
-        !readiness.callbacks.some(
-          (callback) => callback.kind === kind && callback.current,
-        ),
-    )
-  )
+  /* The reason stays generic: this also guards the public signup path, and an
+     unauthenticated caller should not be handed a list of what is unfinished.
+     Operators get the detail through the readiness map. */
+  if (enrollmentBlockers(readiness).length)
     throw new RequestError(
       "Real enrollment is waiting for verified release, account, messaging and support commissioning.",
       503,

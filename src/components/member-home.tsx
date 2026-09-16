@@ -197,6 +197,7 @@ export function UptickReveal({
   driveMinutes,
   endsLabel,
   href,
+  action,
   cta = "View your pass",
   tone = "ready",
 }: {
@@ -205,7 +206,10 @@ export function UptickReveal({
   qualification?: string;
   driveMinutes?: number | null;
   endsLabel?: string;
-  href: string;
+  /** Where to go when the pass already exists. */
+  href?: string;
+  /** What to do when it does not yet — claiming is a write, not a link. */
+  action?: React.ReactNode;
   cta?: string;
   tone?: "ready" | "saved" | "redeemed" | "recovery";
 }) {
@@ -229,10 +233,13 @@ export function UptickReveal({
           {endsLabel ? <span>{endsLabel}</span> : null}
           {qualification ? <span>{qualification}</span> : null}
         </p>
-        <Link href={href} className="mh-cta">
-          {cta}
-          <ArrowRight size={17} />
-        </Link>
+        {action ??
+          (href ? (
+            <Link href={href} className="mh-cta">
+              {cta}
+              <ArrowRight size={17} />
+            </Link>
+          ) : null)}
       </div>
     </article>
   );

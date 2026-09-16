@@ -94,9 +94,11 @@ export async function merchantOverview(db: DB, actor: Actor) {
 
   /* The pilot this merchant is backing. A finished pilot is still the
      merchant's pilot: its results are exactly what a renewal conversation is
-     about, so a completed run is selected rather than hidden. An unfinished
-     run is preferred when one exists, because that is the one with a counter
-     to keep ready today. */
+     about, so a completed run is selected rather than hidden.
+
+     Ordering is by what the merchant needs to act on, not by date. Sorting on
+     starts_on alone would let a draft pencilled in for next month outrank the
+     live run whose counter has to be ready this morning. */
   const [run] = await db.query<{
     id: string;
     name: string;
@@ -113,7 +115,11 @@ export async function merchantOverview(db: DB, actor: Actor) {
         select 1 from effective_pilot_week_supplies p
           join network_drop_supplies s on s.id=p.supply_id
          where p.run_id=r.id and s.organization_id=$1)
-      order by (r.state='complete'), r.starts_on desc limit 1`,
+      order by case r.state
+                 when 'live' then 0 when 'paused' then 1 when 'enrolling' then 2
+                 when 'complete' then 3 else 4 end,
+               r.starts_on desc
+      limit 1`,
     [organizationId],
   );
   if (!organization || !run)
@@ -140,7 +146,11 @@ export async function merchantOverview(db: DB, actor: Actor) {
   /* What this merchant owes at the counter *for the week being shown*.
      `effective_pilot_week_supplies` resolves the amendment chain per week, so
      a supply amended for a future week cannot become today's instructions.
-     Selecting the newest supply row instead would do exactly that. */
+     Selecting the newest supply row instead would do exactly that.
+
+     Only approved rows are read. A draft or paused supply, or an unapproved
+     fallback, is not something staff should be told to hand over — printing it
+     here would put an item on the counter that nobody agreed to provide. */
   const commitmentWeek = weekKeys.includes(currentWeek)
     ? currentWeek
     : weekKeys.filter((key) => key <= currentWeek).pop() || weekKeys[0];
@@ -166,8 +176,9 @@ export async function merchantOverview(db: DB, actor: Actor) {
        join pilot_supply_terms t on t.supply_id=s.id
        join offer_versions v on v.offer_id=s.offer_id and v.version=s.offer_version
        join locations l on l.id=s.location_id
-       left join pilot_supply_fallbacks f on f.supply_id=s.id
+       left join pilot_supply_fallbacks f on f.supply_id=s.id and f.state='approved'
       where p.run_id=$1 and p.week_key=$2 and s.organization_id=$3
+        and s.state='approved'
       limit 1`,
     [run.id, commitmentWeek, organizationId],
   );
@@ -224,27 +235,36 @@ export async function merchantOverview(db: DB, actor: Actor) {
 
   /* Anything that went wrong at this counter, and where its make-good actually
      stands. The current attempt is the one that has not been superseded;
-     supersession is permanent and enforced by trigger, so there is at most one. */
-  const incidentRows = await db.query<IncidentRow>(
-    `select i.id,i.incident_type,i.state,i.occurred_at::text occurred_at,
-            (select count(*)::int from recovery_grants rg where rg.incident_id=i.id) recovery_attempts,
-            current.state current_state,
-            (current.expires_at>now()) current_live
-       from fulfillment_incidents i
-       join fulfillment_grants g on g.id=i.grant_id
-       join network_drop_supplies s on s.id=g.supply_id
-       join weekly_releases r on r.id=g.release_id
-       left join lateral (
-         select rg.state,rg.expires_at from recovery_grants rg
-          where rg.incident_id=i.id and rg.superseded_at is null
-          order by rg.issued_at desc limit 1
-       ) current on true
-      where r.run_id=$1 and s.organization_id=$2 and g.data_kind=$3
-      order by i.occurred_at desc limit 20`,
-    [run.id, organizationId, run.data_kind],
-  );
+     supersession is permanent and enforced by trigger, so there is at most one.
 
-  const incidents: MerchantIncident[] = incidentRows.map((row) => {
+     This query is written once and used twice: the recent slice the merchant
+     reads, and the totals above it. The headline figures must count every
+     incident in the run, not the twenty most recent — deriving "No outstanding
+     problems" from a capped list is how a merchant with unresolved members
+     gets shown a green check. */
+  const incidentSelect = `
+    select i.id,i.incident_type,i.state,i.occurred_at::text occurred_at,
+           (select count(*)::int from recovery_grants rg where rg.incident_id=i.id) recovery_attempts,
+           current.state current_state,
+           (current.expires_at>now()) current_live
+      from fulfillment_incidents i
+      join fulfillment_grants g on g.id=i.grant_id
+      join network_drop_supplies s on s.id=g.supply_id
+      join weekly_releases r on r.id=g.release_id
+      left join lateral (
+        select rg.state,rg.expires_at from recovery_grants rg
+         where rg.incident_id=i.id and rg.superseded_at is null
+         order by rg.issued_at desc limit 1
+      ) current on true
+     where r.run_id=$1 and s.organization_id=$2 and g.data_kind=$3
+     order by i.occurred_at desc`;
+  const allIncidentRows = await db.query<IncidentRow>(incidentSelect, [
+    run.id,
+    organizationId,
+    run.data_kind,
+  ]);
+
+  const allIncidents: MerchantIncident[] = allIncidentRows.map((row) => {
     const recoveryState = recoveryStateOf(row);
     const madeGood = recoveryState === "completed";
     return {
@@ -261,13 +281,15 @@ export async function merchantOverview(db: DB, actor: Actor) {
       unresolved: !madeGood && !["resolved", "closed"].includes(row.state),
     };
   });
+  /* The list is what a merchant reads; the totals are what they trust. */
+  const incidents = allIncidents.slice(0, 20);
 
   const issued = weeks.reduce((n, w) => n + w.issued, 0);
   const recorded = weeks.reduce((n, w) => n + w.recorded, 0);
   const staffVerified = weeks.reduce((n, w) => n + w.staffVerified, 0);
   const activeWeek = weeks.find((w) => w.current) || null;
   const count = (state: RecoveryState) =>
-    incidents.filter((i) => i.recoveryState === state).length;
+    allIncidents.filter((i) => i.recoveryState === state).length;
 
   return {
     organization,
@@ -284,10 +306,10 @@ export async function merchantOverview(db: DB, actor: Actor) {
       staffVerified,
       /* Only ever "of issued". Never framed as customers or visits. */
       redemptionRate: issued ? Math.round((recorded / issued) * 100) : null,
-      incidentsTotal: incidents.length,
+      incidentsTotal: allIncidents.length,
       /* Nothing here is inferred from another figure: each counts incidents
          whose make-good is genuinely in that state. */
-      unresolvedIncidents: incidents.filter((i) => i.unresolved).length,
+      unresolvedIncidents: allIncidents.filter((i) => i.unresolved).length,
       recoveriesCompleted: count("completed"),
       recoveriesActive: count("active"),
       recoveriesExpired: count("expired"),

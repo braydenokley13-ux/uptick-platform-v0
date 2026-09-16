@@ -16,7 +16,7 @@
    Nothing here is scored or averaged. A gate is `ready`, `blocked`, `pending`
    (work is legitimately in flight) or `closed` (deliberately held shut). */
 import type { DB } from "./db";
-import { releaseReadiness } from "./release-readiness";
+import { enrollmentBlockers, releaseReadiness } from "./release-readiness";
 import type { Tone } from "@/components/system";
 
 export type GateKey =
@@ -25,6 +25,7 @@ export type GateKey =
   | "identity"
   | "messaging"
   | "market"
+  | "operations"
   | "support"
   | "enrollment";
 
@@ -57,6 +58,7 @@ const GATE_LABEL: Record<GateKey, string> = {
   identity: "Hosted identity",
   messaging: "Messaging",
   market: "Market Cell",
+  operations: "Operations",
   support: "Support",
   enrollment: "Real enrollment",
 };
@@ -73,6 +75,9 @@ function ago(value: string | null | undefined) {
 
 export async function readinessGates(db: DB): Promise<Gate[]> {
   const readiness = await releaseReadiness(db);
+  /* The same list the server gate enforces. Gates are reconciled against it
+     below so the map cannot show green where enrollment would be refused. */
+  const blockers = enrollmentBlockers(readiness);
   const schema = readiness.schema;
   const group = (name: string) =>
     readiness.checks.filter((c) => c.group === name);
@@ -197,21 +202,41 @@ export async function readinessGates(db: DB): Promise<Gate[]> {
   };
 
   /* --- Market Cell -------------------------------------------------------- */
+  /* `state` is a free operator-set text column, so "pilot" is a statement of
+     intent. A cell is only ready when something is actually behind it: four
+     distinct backed weeks, approved supply, an approved fallback and a
+     destination rehearsed within its validity window. Reading `state` alone
+     let a cell with no supply at all report the gate green. */
   const realMarkets = readiness.markets.filter((m) => m.data_kind === "real");
-  const liveMarkets = realMarkets.filter((m) => m.state === "pilot");
+  const backed = realMarkets.filter(
+    (m) =>
+      m.state === "pilot" &&
+      m.backed_weeks >= 4 &&
+      m.approved_supplies > 0 &&
+      m.approved_fallbacks > 0 &&
+      m.ready_destinations > 0,
+  );
+  const intended = realMarkets.filter((m) => m.state === "pilot");
+  const shortfall = (m: (typeof realMarkets)[number]) =>
+    [
+      m.backed_weeks < 4 ? `${m.backed_weeks}/4 weeks backed` : null,
+      m.approved_supplies ? null : "no approved supply",
+      m.approved_fallbacks ? null : "no approved fallback",
+      m.ready_destinations ? null : "no destination rehearsed and in date",
+    ]
+      .filter(Boolean)
+      .join(", ");
   const market: Gate = {
     key: "market",
     label: GATE_LABEL.market,
-    state: liveMarkets.length
-      ? "ready"
-      : realMarkets.length
-        ? "pending"
-        : "blocked",
-    blocker: liveMarkets.length
-      ? `${liveMarkets.length} real Market Cell(s) in pilot state.`
-      : realMarkets.length
-        ? `${realMarkets.length} real Market Cell(s) recorded but none in pilot state.`
-        : "No real Market Cell exists yet. Only test classifications are present.",
+    state: backed.length ? "ready" : realMarkets.length ? "pending" : "blocked",
+    blocker: backed.length
+      ? `${backed.length} real Market Cell(s) with four backed weeks, approved supply, fallback and a rehearsed destination.`
+      : intended.length
+        ? `${intended.map((m) => `${m.name}: ${shortfall(m)}`).join("; ")}.`
+        : realMarkets.length
+          ? `${realMarkets.length} real Market Cell(s) recorded but none in pilot state.`
+          : "No real Market Cell exists yet. Only test classifications are present.",
     consequence:
       "There is no real neighbourhood, destination or four-week supply to admit anyone into.",
     owner: "Operator owner",
@@ -264,8 +289,56 @@ export async function readinessGates(db: DB): Promise<Gate[]> {
     href: "/operator/pilot/support",
   };
 
+  /* --- Operations --------------------------------------------------------- */
+  /* Scheduler health and the privacy prerequisites are enforced by the server
+     gate but had no gate of their own, so the map could show everything green
+     while enrollment was refused for a stopped cron job or a lapsed policy. */
+  const operationsBlockers = blockers.filter((b) => b.gate === "operations");
+  const operations: Gate = {
+    key: "operations",
+    label: GATE_LABEL.operations,
+    state: operationsBlockers.length ? "blocked" : "ready",
+    blocker: operationsBlockers.length
+      ? operationsBlockers.map((b) => b.detail).join(" ")
+      : "Scheduled jobs are within their freshness windows and privacy settings are current.",
+    consequence:
+      "Weekly releases, suppression reconciliation and retention reviews stop running, and erasure requests cannot be honoured.",
+    owner: "Operator owner",
+    action: operationsBlockers.length
+      ? "Restore the scheduler and the privacy settings named above."
+      : "Keep the scheduler and the privacy review current.",
+    evidence: `${readiness.jobs.filter((j) => j.healthy).length}/${readiness.jobs.length} scheduled jobs healthy.`,
+    expiresAt: readiness.policy?.review_due_at ?? null,
+    dependsOn: ["database"],
+    href: "/operator/pilot/settings",
+  };
+
+  /* --- Reconcile every gate with what the server actually enforces --------- */
+  /* One list decides both surfaces. Any gate carrying an unmet server
+     condition is forced to `blocked` here, so a green map and a refusing
+     server cannot disagree — which is exactly what happened when the map
+     encoded four of the nine conditions and said "Nothing technical is
+     blocking it". */
+  const reconcile = (gate: Gate) => {
+    const mine = blockers.filter((b) => b.gate === gate.key);
+    if (!mine.length || gate.state === "blocked") return gate;
+    return {
+      ...gate,
+      state: "blocked" as const,
+      blocker: mine.map((b) => b.detail).join(" "),
+    };
+  };
+
   /* --- Real enrollment ---------------------------------------------------- */
-  const upstream = [software, database, identity, messaging, market, support];
+  const upstream = [
+    software,
+    database,
+    identity,
+    messaging,
+    market,
+    operations,
+    support,
+  ].map(reconcile);
   const blocking = upstream.filter((g) => g.state !== "ready");
   const enrollment: Gate = {
     key: "enrollment",
@@ -295,11 +368,12 @@ export async function readinessGates(db: DB): Promise<Gate[]> {
       "identity",
       "messaging",
       "market",
+      "operations",
       "support",
     ],
   };
 
-  return [software, database, identity, messaging, market, support, enrollment];
+  return [...upstream, enrollment];
 }
 
 /** The compact strip on the command centre. */

@@ -16,6 +16,7 @@ import {
   UptickReveal,
 } from "@/components/member-home";
 import {
+  ClaimUptick,
   MemberAccountControls,
   MemberHelp,
   MemberPreferences,
@@ -68,10 +69,22 @@ export default async function YourUptick({
   const earlierRecoveries = data.outstandingRecoveries.filter(
     (recovery) => !recovery.current_week,
   );
-  const currentRecoveryStatus =
-    current?.recovery?.state === "issued" && !currentRecoveryPass
-      ? "expired"
-      : current?.recovery?.state;
+  /* A make-good's own state and expiry decide this. It previously read
+     "expired" whenever the recovery was missing from outstandingRecoveries —
+     but that list is filtered to unsuperseded, unexpired rows that join
+     through an original claim, and capped at ten, so absence from it means
+     several different things and only one of them is expiry. A live make-good
+     whose original_claim_id was never bound (the column is nullable) was being
+     told to the member as expired while it was still usable. */
+  const currentRecovery = current?.recovery;
+  const currentRecoveryStatus = !currentRecovery
+    ? undefined
+    : currentRecovery.state === "redeemed"
+      ? "redeemed"
+      : currentRecovery.expires_at &&
+          new Date(currentRecovery.expires_at) <= new Date()
+        ? "expired"
+        : "issued";
 
   return (
     <MemberShell
@@ -273,8 +286,12 @@ export default async function YourUptick({
                   weekday: "long",
                   timeZone: current.options[0].timezone,
                 })}`}
-                href={`/u/${current.options[0].id}`}
-                cta="Claim your Uptick"
+                /* Claiming writes a pass; it is not a page you can navigate
+                   to. This previously linked to /u/<supplyId>, but /u/[token]
+                   resolves a member access token, so the one CTA in the whole
+                   member journey that turns a benefit into a pass led to a
+                   URL that could never resolve. */
+                action={<ClaimUptick supplyId={current.options[0].id} />}
               />
               <MemberNote />
             </>
