@@ -111,7 +111,11 @@ function recoveryStateOf(row: IncidentRow): RecoveryState {
   return row.current_live ? "active" : "expired";
 }
 
-export async function merchantOverview(db: DB, actor: Actor) {
+export async function merchantOverview(
+  db: DB,
+  actor: Actor,
+  asOf = new Date(),
+) {
   const organizationId = actor.organizationId;
   const [organization] = await db.query<{
     id: string;
@@ -157,6 +161,9 @@ export async function merchantOverview(db: DB, actor: Actor) {
       run: null as null,
       completed: false,
       commitments: [] as MerchantCommitment[],
+      commitmentWeek: null as string | null,
+      commitmentWeekState: null as "current" | "upcoming" | "past" | null,
+      commitmentWeekIndex: 0,
       weeks: [],
       activeWeek: null,
       totals: null,
@@ -170,7 +177,7 @@ export async function merchantOverview(db: DB, actor: Actor) {
       .toISOString()
       .slice(0, 10),
   );
-  const currentWeek = marketWeekWindow(new Date(), run.timezone).weekKey;
+  const currentWeek = marketWeekWindow(asOf, run.timezone).weekKey;
 
   /* What this merchant owes at the counter *for the week being shown*.
      `effective_pilot_week_supplies` resolves the amendment chain per week, so
@@ -185,9 +192,21 @@ export async function merchantOverview(db: DB, actor: Actor) {
      merchant backing two counters — or one counter backing a week with two
      benefits — saw whichever row the planner happened to return, and the other
      obligation simply vanished from the page they run their morning off. */
+  /* Which week the counter instructions belong to, and how that week relates to
+     today. A run that has not started has no current week, and falling back to
+     week one while labelling it "this week" would put staff instructions on the
+     counter before fulfilment begins. The same mistake was corrected on the
+     member Places tab; it is the same mistake here. */
   const commitmentWeek = weekKeys.includes(currentWeek)
     ? currentWeek
     : weekKeys.filter((key) => key <= currentWeek).pop() || weekKeys[0];
+  const commitmentWeekState: "current" | "upcoming" | "past" = weekKeys.includes(
+    currentWeek,
+  )
+    ? "current"
+    : currentWeek < weekKeys[0]
+      ? "upcoming"
+      : "past";
   const commitmentRows = await db.query<{
     supply_id: string;
     location_id: string;
@@ -349,6 +368,10 @@ export async function merchantOverview(db: DB, actor: Actor) {
     run,
     completed,
     commitments,
+    commitmentWeek,
+    /* Never "this week" unless it is. */
+    commitmentWeekState,
+    commitmentWeekIndex: weekKeys.indexOf(commitmentWeek) + 1,
     /* One address only when there genuinely is one. A merchant backing two
        counters must not see one of them printed as "where this is happening". */
     location:

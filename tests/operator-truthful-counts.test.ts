@@ -116,3 +116,42 @@ test("the support queue reports every waiting member, not the page it shows", as
     );
   });
 });
+
+test("the unresolved-message badge counts every failure, not the page it shows", async () => {
+  await withDatabase(async (db) => {
+    const fixture = await seedSyntheticPilot(db, 2, "tc-unresolved");
+    const member = fixture.members[0].id;
+    /* One old failure, then ninety delivered messages on top of it. The
+       activity list is capped at eighty, so counting the visible rows loses the
+       failure and reports zero unresolved while a member is still undelivered. */
+    const message = async (n: number, state: string, ageDays: number) => {
+      const accessId = `tc-unresolved-access-${n}`;
+      await db.query(
+        `insert into member_access(id,member_id,token_hash,token_encrypted,purpose,expires_at,age_attested,disclosure,home_zip)
+         values($1,$2,$1,$1,'access',now()+interval '30 days',true,'Synthetic disclosure for this test.','10001')`,
+        [accessId, member],
+      );
+      await db.query(
+        `insert into member_messages(id,member_id,access_id,purpose,expires_at,environment,state,created_at)
+         values($1,$2,$3,'access',now()+interval '30 days','development',$4,now()-($5||' days')::interval)`,
+        [`tc-unresolved-${n}`, member, accessId, state, String(ageDays)],
+      );
+    };
+    await message(0, "failed", 30);
+    for (let n = 1; n <= 90; n++) await message(n, "delivered", 0);
+
+    const data = await membershipMessagingOperations(db, {
+      id: "tc-operator",
+      role: "operator",
+      organizationId: "tc-unresolved-merchant",
+    });
+    assert.ok(
+      !data.messages.some((row) => row.id === "tc-unresolved-0"),
+      "the old failure is outside the rendered window",
+    );
+    const unresolved = data.counts
+      .filter((c) => ["failed", "undelivered", "unknown"].includes(c.state))
+      .reduce((n, c) => n + c.count, 0);
+    assert.equal(unresolved, 1, "and is still counted");
+  });
+});

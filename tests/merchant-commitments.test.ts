@@ -340,3 +340,30 @@ test("E · a later week and an unapproved supply stay off this week's list", asy
     );
   });
 });
+
+test("F · a week that has not started is not labelled as this week", async () => {
+  await withDatabase(async (db) => {
+    const fixture = await seedSyntheticPilot(db, 4, "mc-upcoming");
+    /* Reading the same data five days early is the position of a merchant whose
+       run has been planned but has not begun. The commitments are real and
+       should be shown; calling them "this week" would put staff instructions on
+       the counter before fulfilment starts. */
+    const early = new Date(
+      Date.parse(`${fixture.weekKey}T12:00:00Z`) - 5 * 86400000,
+    );
+    const data = await merchantOverview(db, fixture.actor, early);
+    assert.equal(data.commitmentWeekState, "upcoming");
+    assert.equal(data.commitmentWeekIndex, 1);
+    assert.equal(data.commitmentWeek, fixture.weekKey);
+    assert.equal(data.commitments.length, 1, "the plan is still shown");
+  });
+});
+
+test("G · the current week is still reported as current", async () => {
+  await withDatabase(async (db) => {
+    const fixture = await seedSyntheticPilot(db, 4, "mc-current");
+    const data = await merchantOverview(db, fixture.actor);
+    assert.equal(data.commitmentWeekState, "current");
+    assert.equal(data.commitmentWeek, fixture.weekKey);
+  });
+});

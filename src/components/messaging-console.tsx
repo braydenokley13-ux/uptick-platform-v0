@@ -62,13 +62,23 @@ export function MessagingConsole({
 }: {
   data: MembershipMessagingOperations;
 }) {
-  const { readiness, messages, support, supportTotal, callbacks } = data;
+  const { readiness, counts, messages, support, supportTotal, callbacks } =
+    data;
   const inbound = callbacks.find((c) => c.kind === "inbound");
   const status = callbacks.find((c) => c.kind === "status");
-  const unresolved = messages.filter((m) =>
-    ["failed", "undelivered", "unknown"].includes(m.state),
-  ).length;
+  /* From the uncapped grouped totals, not from the eighty rows below. Counting
+     the visible list meant an older failure fell out of the badge as newer
+     messages arrived, and the operator saw zero unresolved while members were
+     still undelivered. */
+  const unresolved = counts
+    .filter((c) => ["failed", "undelivered", "unknown"].includes(c.state))
+    .reduce((n, c) => n + c.count, 0);
   const oldest = support[0];
+  /* Two separate questions. Sending works or it does not; hearing back — the
+     signed callbacks that carry STOP, HELP and delivery outcomes — works or it
+     does not. Collapsing them told an operator with a stale callback that
+     messaging could not send, which is its own untrue statement. */
+  const sendReady = readiness.sendReady;
   const connected = readiness.ready;
 
   return (
@@ -87,12 +97,16 @@ export function MessagingConsole({
               ? "Simulated delivery — no real messages leave this environment."
               : connected
                 ? "Messaging service is ready."
-                : "Messaging is not ready to send."}
+                : sendReady
+                  ? "Uptick can send, but replies are not confirmed reaching us."
+                  : "Messaging is not ready to send."}
           </strong>
           <p>
-            {readiness.sender
-              ? `Sender ${readiness.sender.phone} · service ${readiness.sender.serviceSid.slice(0, 10)}…${readiness.sender.approved ? " · approved" : " · not approved"}`
-              : "No dedicated membership sender is configured yet."}
+            {!readiness.simulated && sendReady && !connected
+              ? `No current signed ${!inbound?.current ? "inbound" : "status"} callback for this sender and release. STOP and HELP may not be reaching Uptick.`
+              : readiness.sender
+                ? `Sender ${readiness.sender.phone} · service ${readiness.sender.serviceSid.slice(0, 10)}…${readiness.sender.approved ? " · approved" : " · not approved"}`
+                : "No dedicated membership sender is configured yet."}
           </p>
         </div>
         <Link href="/operator/pilot/settings" className="mc-provider-go">

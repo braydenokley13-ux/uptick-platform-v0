@@ -51,11 +51,18 @@ export function MerchantOverview({ data }: { data: Data }) {
     organization,
     run,
     commitments,
+    commitmentWeekState,
+    commitmentWeekIndex,
     totals,
     weeks,
     incidents,
     completed,
   } = data;
+  /* Only say "this week" when the week on display is the current one. */
+  const whichWeek =
+    commitmentWeekState === "current"
+      ? "this week"
+      : `in week ${commitmentWeekIndex}`;
 
   if (!run)
     return (
@@ -184,10 +191,16 @@ export function MerchantOverview({ data }: { data: Data }) {
       {commitments.length > 0 && (
         <section className="u-card u-card-pad mo-commit">
           <div className="u-head">
-            <h2>{completed ? "What you provided" : "What you provide"}</h2>
+            <h2>
+              {completed
+                ? "What you provided"
+                : commitmentWeekState === "upcoming"
+                  ? `What you provide in week ${commitmentWeekIndex}`
+                  : "What you provide"}
+            </h2>
             {commitments.length > 1 && (
               <span className="mo-commit-count">
-                {commitments.length} commitments this week
+                {commitments.length} commitments {whichWeek}
               </span>
             )}
           </div>
@@ -205,7 +218,7 @@ export function MerchantOverview({ data }: { data: Data }) {
                     </p>
                     <small>{commitment.usableHours}</small>
                     <small>
-                      {commitment.committedQuantity} committed this week
+                      {commitment.committedQuantity} committed {whichWeek}
                       {commitment.address ? ` · ${commitment.address}` : ""}
                     </small>
                   </div>
