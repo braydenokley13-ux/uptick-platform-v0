@@ -2,7 +2,13 @@
 
    A store owner is not an operator. They get the five answers they actually
    want, in order, and nothing else. No campaign builder, no member list, no
-   impressions, no invented "new customers" number. */
+   impressions, no invented "new customers" number.
+
+   Every label here names a recorded event, not a hoped-for outcome. See the
+   header of src/lib/merchant-overview.ts for what the database can and cannot
+   prove — in short: it can prove a redemption was recorded, and it can never
+   prove a purchase, because the evidence table forbids that column from being
+   true. */
 import Link from "next/link";
 import {
   ArrowRight,
@@ -12,14 +18,37 @@ import {
   MapPin,
   TriangleAlert,
 } from "lucide-react";
-import type { merchantOverview } from "@/lib/merchant-overview";
+import type {
+  merchantOverview,
+  MerchantIncident,
+} from "@/lib/merchant-overview";
 import { Dot, Pill, Scene, Stat } from "./system";
 import "./merchant-overview.css";
 
 type Data = Awaited<ReturnType<typeof merchantOverview>>;
 
+/* One line per make-good state. None of these say "made good" unless the
+   recovery was actually redeemed. */
+function recoveryNote(incident: MerchantIncident) {
+  switch (incident.recoveryState) {
+    case "completed":
+      return "Uptick issued a backed make-good and the member used it.";
+    case "active":
+      return "Uptick issued a make-good. The member has not used it yet.";
+    case "expired":
+      return "The make-good Uptick issued expired unused. Still open.";
+    case "superseded":
+      return "An earlier make-good failed and is being replaced.";
+    default:
+      return incident.unresolved
+        ? "Uptick is arranging a make-good."
+        : "Closed by your Uptick operator.";
+  }
+}
+
 export function MerchantOverview({ data }: { data: Data }) {
-  const { organization, run, commitment, totals, weeks, incidents } = data;
+  const { organization, run, commitment, totals, weeks, incidents, completed } =
+    data;
 
   if (!run)
     return (
@@ -31,8 +60,8 @@ export function MerchantOverview({ data }: { data: Data }) {
             <p className="mo-lede">
               You don’t have an active Uptick program yet. When your Uptick
               operator sets one up, everything about it appears here — what you
-              agreed to provide, what is happening each week, and exactly what
-              was handed over.
+              agreed to provide, what is happening each week, and what was
+              recorded at your counter.
             </p>
             <Link href="/sms" className="mo-cta">
               Talk to your Uptick operator <ArrowRight size={16} />
@@ -44,7 +73,8 @@ export function MerchantOverview({ data }: { data: Data }) {
 
   const active = weeks.find((w) => w.current);
   const live = run.state === "live";
-  const openIncidents = totals?.openIncidents || 0;
+  const unresolved = totals?.unresolvedIncidents || 0;
+  const expired = totals?.recoveriesExpired || 0;
 
   return (
     <div className="mo">
@@ -59,10 +89,15 @@ export function MerchantOverview({ data }: { data: Data }) {
           <p className="eyebrow">UPTICK FOR MERCHANTS</p>
           <h1>{organization.name}</h1>
           <p className="mo-hero-meta">
-            <Pill tone={live ? "ok" : "warn"}>
-              {live ? "Live" : run.state.replaceAll("_", " ")}
+            <Pill tone={completed ? "idle" : live ? "ok" : "warn"}>
+              {completed
+                ? "Pilot complete"
+                : live
+                  ? "Live"
+                  : run.state.replaceAll("_", " ")}
             </Pill>
             {active && <span>Week {active.index} of 4</span>}
+            {completed && <span>Final results</span>}
             {data.location && (
               <span>
                 <MapPin size={13} /> {data.location}
@@ -74,28 +109,28 @@ export function MerchantOverview({ data }: { data: Data }) {
 
       {/* 1. What are we trying to accomplish? */}
       <section
-        className={openIncidents ? "mo-status attention" : "mo-status"}
+        className={unresolved ? "mo-status attention" : "mo-status"}
         aria-live="polite"
       >
         <span className="mo-status-mark">
-          {openIncidents ? (
-            <TriangleAlert size={19} />
-          ) : (
-            <CircleCheck size={19} />
-          )}
+          {unresolved ? <TriangleAlert size={19} /> : <CircleCheck size={19} />}
         </span>
         <div>
           <strong>
-            {openIncidents
-              ? `${openIncidents} member${openIncidents === 1 ? "" : "s"} couldn’t get their Uptick at your counter.`
-              : live
-                ? "You’re live. Thanks for being part of Uptick."
-                : "Your program is being set up."}
+            {unresolved
+              ? `${unresolved} member${unresolved === 1 ? "" : "s"} couldn’t get their Uptick at your counter.`
+              : completed
+                ? "Your four weeks are finished. These are your final results."
+                : live
+                  ? "You’re live. Thanks for being part of Uptick."
+                  : "Your program is being set up."}
           </strong>
           <p>
-            {openIncidents
-              ? "Uptick is arranging a make-good for them. You don’t need to do anything unless your operator asks."
-              : "Uptick brings nearby members to your store. You provide the perk. We handle the member experience, the messaging and the support."}
+            {unresolved
+              ? `Uptick is arranging a make-good${expired ? `, including ${expired} that expired unused and is being reissued` : ""}. You don’t need to do anything unless your operator asks.`
+              : completed
+                ? "Nothing further is needed at your counter. Your operator will walk through these numbers with you."
+                : "Uptick brings nearby members to your store. You provide the perk. We handle the member experience, the messaging and the support."}
           </p>
         </div>
       </section>
@@ -108,37 +143,41 @@ export function MerchantOverview({ data }: { data: Data }) {
           foot="Members given this benefit so far"
         />
         <Stat
-          label="Handed over"
-          value={totals?.redeemed ?? 0}
+          label="Recorded redemptions"
+          value={totals?.recorded ?? 0}
           foot={
             totals?.redemptionRate === null
               ? "Nothing issued yet"
-              : `${totals?.redemptionRate}% of issued, recorded at your counter`
+              : `${totals?.redemptionRate}% of issued${totals?.staffVerified ? ` · ${totals.staffVerified} staff-verified` : ""}`
           }
-          tone={totals?.redeemed ? "ok" : "idle"}
+          tone={totals?.recorded ? "ok" : "idle"}
         />
         <Stat
-          label="Made good"
-          value={totals?.recoveredIncidents ?? 0}
+          label="Make-goods completed"
+          value={totals?.recoveriesCompleted ?? 0}
           foot={
-            openIncidents
-              ? `${openIncidents} still being resolved`
-              : "No outstanding problems"
+            unresolved
+              ? `${unresolved} still open${expired ? ` · ${expired} expired unused` : ""}`
+              : totals?.incidentsTotal
+                ? "No outstanding problems"
+                : "No problems reported"
           }
-          tone={openIncidents ? "warn" : "ok"}
+          tone={unresolved ? "warn" : "ok"}
         />
       </div>
       <p className="mo-truth">
-        These are the only two things Uptick can prove: a benefit was issued,
-        and a benefit was handed over here. We don’t report visits, new
-        customers or sales, because we can’t verify them.
+        Uptick can prove two things: a benefit was issued, and a redemption was
+        recorded at your counter. “Staff-verified” means that recording came
+        from a staff-held code rather than a member self-confirming. We don’t
+        report visits, new customers or sales, because we can’t verify them —
+        and a recorded redemption on its own isn’t proof an item changed hands.
       </p>
 
       {/* 2. What do I need to provide? */}
       {commitment && (
         <section className="u-card u-card-pad mo-commit">
           <div className="u-head">
-            <h2>What you provide</h2>
+            <h2>{completed ? "What you provided" : "What you provide"}</h2>
           </div>
           <div className="mo-commit-row">
             <span className="mo-commit-mark">
@@ -181,15 +220,17 @@ export function MerchantOverview({ data }: { data: Data }) {
               </span>
               {w.released ? (
                 <span className="mo-week-figs">
-                  <b>{w.issued}</b> issued · <b>{w.redeemed}</b> handed over
+                  <b>{w.issued}</b> issued · <b>{w.recorded}</b> recorded
                 </span>
               ) : (
-                <span className="mo-week-figs muted">Not started yet</span>
+                <span className="mo-week-figs muted">
+                  {completed ? "Not released" : "Not started yet"}
+                </span>
               )}
               <span className="mo-week-bar" aria-hidden="true">
                 <i
                   style={{
-                    width: `${w.issued ? Math.round((w.redeemed / w.issued) * 100) : 0}%`,
+                    width: `${w.issued ? Math.round((w.recorded / w.issued) * 100) : 0}%`,
                   }}
                 />
               </span>
@@ -209,20 +250,16 @@ export function MerchantOverview({ data }: { data: Data }) {
               <div className="u-row" key={incident.id}>
                 <Dot
                   tone={
-                    incident.state === "resolved"
+                    incident.madeGood
                       ? "ok"
-                      : incident.recovered
-                        ? "warn"
-                        : "bad"
+                      : incident.unresolved
+                        ? "bad"
+                        : "warn"
                   }
                 />
                 <div className="u-row-body">
                   <strong>{incident.incident_type.replaceAll("_", " ")}</strong>
-                  <small>
-                    {incident.recovered
-                      ? "Uptick gave the member a backed make-good."
-                      : "Uptick is arranging a make-good."}
-                  </small>
+                  <small>{recoveryNote(incident)}</small>
                 </div>
                 <div className="u-row-end">
                   {new Date(incident.occurred_at).toLocaleDateString("en-US", {
@@ -241,15 +278,16 @@ export function MerchantOverview({ data }: { data: Data }) {
         <div>
           <p className="eyebrow">WHAT HAPPENS NEXT</p>
           <h2>
-            {active && active.index < 4
-              ? `Keep the counter ready for week ${active.index + 1}.`
-              : "Your operator will review the four weeks with you."}
+            {completed
+              ? "Your operator will review the four weeks with you."
+              : active && active.index < 4
+                ? `Keep the counter ready for week ${active.index + 1}.`
+                : "Your operator will review the four weeks with you."}
           </h2>
           <p>
-            Nothing is charged to you for the member experience. If stock runs
-            short or staff change, tell your Uptick operator before the next
-            week is released — that is the one thing that keeps a member from
-            being let down.
+            {completed
+              ? "These results stay available here. Your commercial terms are whatever you agreed with your Uptick operator."
+              : "Members are never charged and never required to buy anything to receive this benefit. If stock runs short or staff change, tell your Uptick operator before the next week is released — that is the one thing that keeps a member from being let down."}
           </p>
         </div>
         <Link href="/sms" className="mo-cta">

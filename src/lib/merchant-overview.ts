@@ -7,12 +7,51 @@
      5. What should we do next?             → next
 
    Deliberately absent: impressions, reach, audience segments, member lists,
-   attribution, or any "new customers" figure. Uptick can prove that a benefit
-   was issued and that a specific benefit was handed over at this counter. It
-   cannot prove someone became a customer, so it does not say so. */
+   attribution, or any "new customers" figure.
+
+   What this file may and may not claim
+   ------------------------------------
+   The only fact the database independently holds is that a grant reached
+   `state='redeemed'` — a redemption was *recorded*. That is weaker than it
+   sounds, and the schema says so itself: `redemption_evidence` carries
+   `transaction_verified boolean ... check(transaction_verified=false)`, a
+   column the database forbids from ever being true. So Uptick cannot prove a
+   purchase, a visit, an incremental visit, or that an item physically changed
+   hands. It can prove that a redemption was recorded, and separately that some
+   of those recordings were staff-gated at a registered counter device
+   (`verification_level >= 1`), which is stronger evidence but still not proof
+   of physical handoff.
+
+   Every merchant-facing number below is therefore named for the event that was
+   recorded, never for the commercial outcome someone might hope it implies. */
 import type { DB } from "./db";
 import type { Actor } from "./domain";
 import { marketWeekWindow } from "./network";
+
+/** Where an incident's make-good actually stands. A recovery that merely
+    exists is not a recovery that worked, so these are kept distinct. */
+export type RecoveryState =
+  | "none" // no make-good has been issued at all
+  | "active" // issued, still live, not yet used
+  | "completed" // redeemed — the only state that means "made good"
+  | "expired" // issued, never used, and the window has closed
+  | "superseded"; // every attempt was replaced, none is current
+
+export type MerchantIncident = {
+  id: string;
+  incident_type: string;
+  state: string;
+  occurred_at: string;
+  recoveryState: RecoveryState;
+  /** How many make-goods have been issued for this incident, including ones
+      that failed and were superseded. */
+  recoveryAttempts: number;
+  /** True only when a recovery was actually redeemed. */
+  madeGood: boolean;
+  /** True when nothing has closed this out: no redeemed recovery and no
+      operator resolution. An expired make-good lands here, not in "made good". */
+  unresolved: boolean;
+};
 
 export type MerchantWeek = {
   weekKey: string;
@@ -20,9 +59,28 @@ export type MerchantWeek = {
   label: string;
   current: boolean;
   issued: number;
-  redeemed: number;
+  /** Redemptions recorded. Not visits, not purchases, not handoffs. */
+  recorded: number;
+  /** The subset of those recorded at a staff-gated counter device. */
+  staffVerified: number;
   released: boolean;
 };
+
+type IncidentRow = {
+  id: string;
+  incident_type: string;
+  state: string;
+  occurred_at: string;
+  recovery_attempts: number;
+  current_state: string | null;
+  current_live: boolean | null;
+};
+
+function recoveryStateOf(row: IncidentRow): RecoveryState {
+  if (!row.current_state) return row.recovery_attempts ? "superseded" : "none";
+  if (row.current_state === "redeemed") return "completed";
+  return row.current_live ? "active" : "expired";
+}
 
 export async function merchantOverview(db: DB, actor: Actor) {
   const organizationId = actor.organizationId;
@@ -34,7 +92,11 @@ export async function merchantOverview(db: DB, actor: Actor) {
     organizationId,
   ]);
 
-  /* The pilot this merchant is actually backing, if any. */
+  /* The pilot this merchant is backing. A finished pilot is still the
+     merchant's pilot: its results are exactly what a renewal conversation is
+     about, so a completed run is selected rather than hidden. An unfinished
+     run is preferred when one exists, because that is the one with a counter
+     to keep ready today. */
   const [run] = await db.query<{
     id: string;
     name: string;
@@ -42,27 +104,32 @@ export async function merchantOverview(db: DB, actor: Actor) {
     starts_on: string;
     timezone: string;
     support_owner: string;
+    data_kind: string;
   }>(
-    `select distinct r.id,r.name,r.state,r.starts_on::text starts_on,m.timezone,r.support_owner
+    `select r.id,r.name,r.state,r.starts_on::text starts_on,m.timezone,r.support_owner,r.data_kind
        from pilot_runs r
        join market_cells m on m.id=r.market_id
-       join effective_pilot_week_supplies p on p.run_id=r.id
-       join network_drop_supplies s on s.id=p.supply_id
-      where s.organization_id=$1 and r.state<>'complete'
-      order by starts_on desc limit 1`,
+      where exists(
+        select 1 from effective_pilot_week_supplies p
+          join network_drop_supplies s on s.id=p.supply_id
+         where p.run_id=r.id and s.organization_id=$1)
+      order by (r.state='complete'), r.starts_on desc limit 1`,
     [organizationId],
   );
   if (!organization || !run)
     return {
       organization,
       run: null as null,
+      completed: false,
       commitment: null,
       weeks: [],
+      activeWeek: null,
       totals: null,
-      incidents: [],
+      incidents: [] as MerchantIncident[],
       location: null,
     };
 
+  const completed = run.state === "complete";
   const weekKeys = [0, 7, 14, 21].map((days) =>
     new Date(Date.parse(`${run.starts_on}T12:00:00Z`) + days * 86400000)
       .toISOString()
@@ -70,6 +137,13 @@ export async function merchantOverview(db: DB, actor: Actor) {
   );
   const currentWeek = marketWeekWindow(new Date(), run.timezone).weekKey;
 
+  /* What this merchant owes at the counter *for the week being shown*.
+     `effective_pilot_week_supplies` resolves the amendment chain per week, so
+     a supply amended for a future week cannot become today's instructions.
+     Selecting the newest supply row instead would do exactly that. */
+  const commitmentWeek = weekKeys.includes(currentWeek)
+    ? currentWeek
+    : weekKeys.filter((key) => key <= currentWeek).pop() || weekKeys[0];
   const [commitment] = await db.query<{
     exact_item: string;
     size_label: string;
@@ -79,33 +153,55 @@ export async function merchantOverview(db: DB, actor: Actor) {
     substitute_item: string | null;
     fallback_available: number | null;
     address: string;
+    week_key: string;
+    committed_quantity: number | null;
   }>(
     `select t.exact_item,t.size_label,t.usable_hours,v.qualification,v.terms,
             f.substitute_item,
             greatest(0,f.usable_capacity-(select count(*)::int from recovery_grants rg where rg.fallback_id=f.id and (rg.state='redeemed' or (rg.superseded_at is null and rg.expires_at>now())))) fallback_available,
-            coalesce(l.address,'') address
-       from network_drop_supplies s
+            coalesce(l.address,'') address,
+            p.week_key, p.committed_quantity
+       from effective_pilot_week_supplies p
+       join network_drop_supplies s on s.id=p.supply_id
        join pilot_supply_terms t on t.supply_id=s.id
        join offer_versions v on v.offer_id=s.offer_id and v.version=s.offer_version
        join locations l on l.id=s.location_id
        left join pilot_supply_fallbacks f on f.supply_id=s.id
-      where s.organization_id=$1 and s.market_id=(select market_id from pilot_runs where id=$2)
-      order by s.created_at desc limit 1`,
-    [organizationId, run.id],
+      where p.run_id=$1 and p.week_key=$2 and s.organization_id=$3
+      limit 1`,
+    [run.id, commitmentWeek, organizationId],
   );
 
+  /* Week activity, scoped to the run's own classification.
+
+     `releaseWeeklyBenefits` already refuses to issue a grant whose data_kind
+     differs from its run, so in a healthy database this filter changes
+     nothing. It is written explicitly anyway, because the one thing a
+     merchant's numbers must never do is absorb an internal commissioning
+     record into a real pilot's totals — and stating the invariant here means a
+     row that somehow escapes that guard is excluded rather than counted.
+
+     Note this is deliberately `= run.data_kind` and not `= 'real'`: a
+     rehearsal run is supposed to show its own rehearsal numbers. The rule is
+     that classifications never mix, not that only real data is ever shown. */
   const perWeek = await db.query<{
     week_key: string;
     issued: number;
-    redeemed: number;
+    recorded: number;
+    staff_verified: number;
   }>(
-    `select r.week_key,count(*)::int issued,count(*) filter(where g.state='redeemed')::int redeemed
+    `select r.week_key,count(*)::int issued,
+            count(*) filter(where g.state='redeemed')::int recorded,
+            count(*) filter(where g.state='redeemed' and exists(
+              select 1 from member_claims mc
+                join redemption_evidence re on re.claim_id=mc.claim_id
+               where mc.grant_id=g.id and re.staff_gated and re.verification_level>=1))::int staff_verified
        from fulfillment_grants g
        join weekly_releases r on r.id=g.release_id
        join network_drop_supplies s on s.id=g.supply_id
-      where r.run_id=$1 and s.organization_id=$2
+      where r.run_id=$1 and s.organization_id=$2 and g.data_kind=$3
       group by r.week_key`,
-    [run.id, organizationId],
+    [run.id, organizationId, run.data_kind],
   );
   const released = await db.query<{ week_key: string }>(
     "select week_key from weekly_releases where run_id=$1",
@@ -118,55 +214,84 @@ export async function merchantOverview(db: DB, actor: Actor) {
       weekKey,
       index: i + 1,
       label: `Week ${i + 1}`,
-      current: weekKey === currentWeek,
+      current: !completed && weekKey === currentWeek,
       issued: row?.issued || 0,
-      redeemed: row?.redeemed || 0,
+      recorded: row?.recorded || 0,
+      staffVerified: row?.staff_verified || 0,
       released: released.some((r) => r.week_key === weekKey),
     };
   });
 
-  /* Anything that went wrong at this counter, and whether it was made good. */
-  const incidents = await db.query<{
-    id: string;
-    incident_type: string;
-    state: string;
-    occurred_at: string;
-    recovered: boolean;
-  }>(
-    `select i.id,i.incident_type,i.state,i.occurred_at,
-            exists(select 1 from recovery_grants rg where rg.incident_id=i.id and rg.superseded_at is null) recovered
+  /* Anything that went wrong at this counter, and where its make-good actually
+     stands. The current attempt is the one that has not been superseded;
+     supersession is permanent and enforced by trigger, so there is at most one. */
+  const incidentRows = await db.query<IncidentRow>(
+    `select i.id,i.incident_type,i.state,i.occurred_at::text occurred_at,
+            (select count(*)::int from recovery_grants rg where rg.incident_id=i.id) recovery_attempts,
+            current.state current_state,
+            (current.expires_at>now()) current_live
        from fulfillment_incidents i
        join fulfillment_grants g on g.id=i.grant_id
        join network_drop_supplies s on s.id=g.supply_id
        join weekly_releases r on r.id=g.release_id
-      where r.run_id=$1 and s.organization_id=$2
+       left join lateral (
+         select rg.state,rg.expires_at from recovery_grants rg
+          where rg.incident_id=i.id and rg.superseded_at is null
+          order by rg.issued_at desc limit 1
+       ) current on true
+      where r.run_id=$1 and s.organization_id=$2 and g.data_kind=$3
       order by i.occurred_at desc limit 20`,
-    [run.id, organizationId],
+    [run.id, organizationId, run.data_kind],
   );
 
+  const incidents: MerchantIncident[] = incidentRows.map((row) => {
+    const recoveryState = recoveryStateOf(row);
+    const madeGood = recoveryState === "completed";
+    return {
+      id: row.id,
+      incident_type: row.incident_type,
+      state: row.state,
+      occurred_at: row.occurred_at,
+      recoveryState,
+      recoveryAttempts: row.recovery_attempts,
+      madeGood,
+      /* Operator resolution and a redeemed recovery are the only two things
+         that close an incident. An expired or superseded make-good leaves it
+         open, which is the whole point of tracking these separately. */
+      unresolved: !madeGood && !["resolved", "closed"].includes(row.state),
+    };
+  });
+
   const issued = weeks.reduce((n, w) => n + w.issued, 0);
-  const redeemed = weeks.reduce((n, w) => n + w.redeemed, 0);
+  const recorded = weeks.reduce((n, w) => n + w.recorded, 0);
+  const staffVerified = weeks.reduce((n, w) => n + w.staffVerified, 0);
   const activeWeek = weeks.find((w) => w.current) || null;
+  const count = (state: RecoveryState) =>
+    incidents.filter((i) => i.recoveryState === state).length;
 
   return {
     organization,
     run,
+    completed,
     commitment: commitment || null,
     location: commitment?.address || null,
     weeks,
     activeWeek,
     totals: {
       issued,
-      redeemed,
+      /* Named for the event the database actually holds. */
+      recorded,
+      staffVerified,
       /* Only ever "of issued". Never framed as customers or visits. */
-      redemptionRate: issued ? Math.round((redeemed / issued) * 100) : null,
-      /* An incident that already has a live make-good is not still "being
-         resolved" from the merchant's point of view, and must not be counted
-         in both figures. */
-      openIncidents: incidents.filter(
-        (i) => ["open", "recovering"].includes(i.state) && !i.recovered,
-      ).length,
-      recoveredIncidents: incidents.filter((i) => i.recovered).length,
+      redemptionRate: issued ? Math.round((recorded / issued) * 100) : null,
+      incidentsTotal: incidents.length,
+      /* Nothing here is inferred from another figure: each counts incidents
+         whose make-good is genuinely in that state. */
+      unresolvedIncidents: incidents.filter((i) => i.unresolved).length,
+      recoveriesCompleted: count("completed"),
+      recoveriesActive: count("active"),
+      recoveriesExpired: count("expired"),
+      recoveriesSuperseded: count("superseded"),
     },
     incidents,
   };
