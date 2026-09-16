@@ -405,55 +405,28 @@ export async function pilotCapacity(
     }),
   );
 
-  /* A Growth Program's remaining placements belong to the programme, not to
-     each counter linked to it. Capping every supply by the same figure let two
-     counters under one twenty-placement plan each report the same two
-     placements left — twice what the programme could actually serve. The
-     remainder is therefore allocated once across the supplies that share it,
-     busiest counter first so the one already serving people keeps its headroom.
+  /* `quantity` is a per-counter cap, and deliberately so: the week totals
+     below, `recommendPilotAssignments` and `releaseWeeklyBenefits` all enforce
+     a programme's shared limit at group level, over a flow graph that also
+     knows which members each counter can actually serve. Partitioning that
+     limit between counters here instead would strand a member who is suitable
+     only for the counter that lost the draw.
 
-     The run-level totals below are unchanged by this: they already grouped by
-     programme and took `min(sum, limit)`, and an allocation that never exceeds
-     the limit makes that min a no-op. */
-  const shares = new Map<string, number>();
-  for (const group of new Set(
-    measured
-      .filter((m) => m.programId && m.commercialCapacity !== null)
-      .map((m) => `${m.week_key}\u0000${m.programId}`),
-  )) {
-    const [week, programId] = group.split("\u0000");
-    const members = measured
-      .filter((m) => m.week_key === week && m.programId === programId)
-      .sort((a, b) => b.issued - a.issued || a.supply_id.localeCompare(b.supply_id));
-    let left = members[0]?.commercialCapacity ?? 0;
-    for (const member of members) {
-      const share = Math.min(member.total, Math.max(0, left));
-      shares.set(`${member.week_key}\u0000${member.supply_id}`, share);
-      left -= share;
-    }
-  }
-
-  const quantities = measured.map((m) => {
-    const share = shares.get(`${m.week_key}\u0000${m.supply_id}`);
-    /* What can still be placed at this counter. */
-    const quantity = share ?? m.total;
-    return {
-      week_key: m.week_key,
-      supply_id: m.supply_id,
-      programId: m.programId,
-      commercialCapacity: m.commercialCapacity,
-      quantity,
-      /* What this counter backs for the whole week, grants already issued
-         against it included. Subtracting those from `quantity` would count them
-         twice whenever a commercial limit is the binding term. */
-      weekTotal:
-        share === undefined ? m.total : Math.min(m.total, share + m.issued),
-      issued: m.issued,
-      /* True when this counter's own plan is not what limits it: the programme
-         it belongs to has no placements left to give here. */
-      commercialExhausted: share !== undefined && share < m.total,
-    };
-  });
+     A commercially rejected supply keeps a zero cap, which is the whole point
+     of the catch above: `releaseWeeklyBenefits` will refuse to publish it, so
+     nothing upstream may count it as usable. */
+  const quantities = measured.map((m) => ({
+    week_key: m.week_key,
+    supply_id: m.supply_id,
+    programId: m.programId,
+    commercialCapacity: m.commercialCapacity,
+    quantity: Math.min(m.total, m.commercialCapacity ?? Infinity),
+    /* What this counter could back for the week before any commercial limit,
+       and what has already been drawn from it. Surfaces that list counters
+       together need both to share a programme's remainder once. */
+    total: m.total,
+    issued: m.issued,
+  }));
 
   const weeks = pilotWeeks(run).map((week) => {
     const groups = new Map<string, { quantity: number; limit: number }>();

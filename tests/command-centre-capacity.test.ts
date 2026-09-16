@@ -386,11 +386,7 @@ test("H · a commercial counter's remaining units are not subtracted twice", asy
       2,
       "two placements are still available under the program",
     );
-    assert.equal(
-      plan.weekTotal,
-      20,
-      "and twenty is what the week was planned to back",
-    );
+    assert.equal(plan.total, 20, "and twenty is what the counter committed");
 
     const pin = (await destinationPins(db, run, fixture.weekKey, capacity))[0];
     assert.equal(pin.backed, 20);
@@ -410,7 +406,7 @@ test("a supply outside any programme reports the same total it can place", async
     const capacity = await pilotCapacity(db, run);
     for (const supply of capacity.supplies)
       assert.equal(
-        supply.weekTotal,
+        supply.total,
         supply.quantity,
         "with no commercial limit the placeable figure is already the total",
       );
@@ -512,14 +508,17 @@ test("I · two counters under one programme share its placements, they do not ea
       (supply) => supply.week_key === fixture.weekKey,
     );
     assert.equal(
-      week.reduce((n, supply) => n + supply.quantity, 0),
+      capacity.weeks.find((w) => w.week === fixture.weekKey)!.capacity,
       2,
-      "the programme has two placements left in total, not two per counter",
+      "the run can place two more this week, not four",
     );
-    assert.equal(
-      week.reduce((n, supply) => n + supply.weekTotal, 0),
-      20,
-      "and twenty is what the week was planned to back, across both counters",
+    /* `quantity` is deliberately left shared by the engine — the assignment
+       flow graph enforces the programme limit while knowing which members each
+       counter can serve — so each counter still reports the programme'"'"'s two.
+       What must not double up is the operator'"'"'s list of counters. */
+    assert.deepEqual(
+      week.map((supply) => supply.quantity).sort(),
+      [2, 2],
     );
 
     const pins = await destinationPins(db, run, fixture.weekKey, capacity);
@@ -530,5 +529,58 @@ test("I · two counters under one programme share its placements, they do not ea
     );
     const spent = pins.find((pin) => pin.remaining === 0)!;
     assert.match(spent.why, /Growth Program has no placements left/);
+  });
+});
+
+test("J · a commercially invalid counter stays at zero, not at its full commitment", async () => {
+  await withDatabase(async (db) => {
+    const fixture = await seedSyntheticPilot(db, 20, "cc-rejected");
+    const run = await loadPilotRun(db, fixture.runId);
+    const [source] = await db.query<{ organization_id: string }>(
+      "select organization_id from network_drop_supplies where id=$1",
+      [fixture.supplyId],
+    );
+    /* Linked to a programme that is still in review and approved for nothing.
+       `programForSupply` rejects it, and `releaseWeeklyBenefits` will refuse to
+       publish the benefit — so nothing upstream may count it as usable. */
+    await db.transaction(async (tx) => {
+      await tx.query(
+        `insert into growth_programs(id,buyer_organization_id,market_id,status,current_version,created_by)
+         values('cc-rejected-p',$1,$2,'review',1,$3)`,
+        [source.organization_id, fixture.marketId, fixture.actor.id],
+      );
+      await tx.query(
+        `insert into growth_program_versions(
+           program_id,version,name,objective,starts_on,ends_on,buyer_organization_id,
+           funder_organization_id,fulfiller_organization_id,negotiated_fee_cents,
+           commercial_status,benefit_ceiling,operating_constraints,evaluation_plan,proposed_by
+         ) values('cc-rejected-p',1,'Synthetic unapproved program','introduce_store',$1::date,$1::date+28,$2,$2,$2,
+           0,'agreed',80,'Synthetic operating constraints for this test.',
+           'Synthetic evaluation plan for this test.',$3)`,
+        [fixture.weekKey, source.organization_id, fixture.actor.id],
+      );
+    });
+    await db.query(
+      "insert into program_supply_links(program_id,program_version,supply_id,week_key,linked_by) values('cc-rejected-p',1,$1,$2,$3)",
+      [fixture.supplyId, fixture.weekKey, fixture.actor.id],
+    );
+
+    const capacity = await pilotCapacity(db, run);
+    const plan = capacity.supplies.find(
+      (supply) => supply.supply_id === fixture.supplyId,
+    )!;
+    assert.equal(plan.commercialCapacity, 0, "the programme allows nothing");
+    assert.equal(
+      plan.quantity,
+      0,
+      "so the counter backs nobody, whatever it committed",
+    );
+    assert.equal(
+      capacity.weeks.find((w) => w.week === fixture.weekKey)!.capacity,
+      0,
+    );
+    const pin = (await destinationPins(db, run, fixture.weekKey, capacity))[0];
+    assert.equal(pin.backed, 0);
+    assert.equal(pin.state, "not_ready");
   });
 });

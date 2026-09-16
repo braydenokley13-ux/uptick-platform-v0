@@ -73,6 +73,42 @@ export async function destinationPins(
   /* The operator can page through all four weeks, so these figures belong to
      the week that is open, not to today. Saying "this week" while looking at
      week three tells staff to act on the wrong week's capacity. */
+  /* A Growth Program's remaining placements belong to the programme, not to
+     each counter linked to it, and `pilotCapacity` deliberately leaves them
+     shared: the assignment flow graph enforces the group limit while also
+     knowing which members each counter can serve, which a fixed partition
+     could not. A list of counters, though, must not collectively offer more
+     than the programme has — two counters under one twenty-placement plan each
+     showing the same two left is four placements on the screen an operator
+     routes people from. So the remainder is allocated once here, for display
+     only, busiest counter first so the counter already serving people keeps
+     its headroom. */
+  const plans = capacity.supplies.filter(
+    (supply) => supply.week_key === weekKey,
+  );
+  const display = new Map<string, { backed: number; exhausted: boolean }>();
+  for (const key of new Set(
+    plans.map((plan) => plan.programId || plan.supply_id),
+  )) {
+    const members = plans
+      .filter((plan) => (plan.programId || plan.supply_id) === key)
+      .sort(
+        (a, b) => b.issued - a.issued || a.supply_id.localeCompare(b.supply_id),
+      );
+    let left = members[0]?.commercialCapacity ?? Infinity;
+    for (const member of members) {
+      const placeable = Math.min(member.total, Math.max(0, left));
+      left -= placeable;
+      display.set(member.supply_id, {
+        /* Grants already drawn from this counter are part of what it backs;
+           a commercial remainder has already subtracted them, so adding them
+           back is what makes "N of M remain" add up. */
+        backed: Math.min(member.total, placeable + member.issued),
+        exhausted: placeable < member.total,
+      });
+    }
+  }
+
   const weeks = pilotWeeks(run);
   const index = weeks.indexOf(weekKey) + 1;
   const when =
@@ -146,12 +182,8 @@ export async function destinationPins(
       (supply) =>
         supply.week_key === weekKey && supply.supply_id === row.supply_id,
     );
-    /* `weekTotal` rather than `quantity`: for a supply inside a Growth Program
-       the placeable figure is already net of the grants that program has
-       issued, so subtracting them again here reported a counter with two
-       placements left as having none. `weekTotal` is always the week's total,
-       which is what "N of M remain" needs. */
-    const backed = plan?.weekTotal ?? 0;
+    const shared = display.get(row.supply_id);
+    const backed = shared?.backed ?? 0;
     const remaining = Math.max(0, backed - row.issued);
     let state: DestinationPin["state"] = "active";
     let why = `${remaining} of ${backed} backed units remain ${when}.`;
@@ -173,7 +205,7 @@ export async function destinationPins(
          supply window that does not cover the week, an exhausted commercial
          limit. Say so plainly rather than reporting "0 of 0 remain". */
       state = "not_ready";
-      why = plan?.commercialExhausted
+      why = shared?.exhausted && plan?.commercialCapacity !== null
         ? `Committed ${row.committed} ${when}, but this counter's Growth Program has no placements left to give here.`
         : row.committed > 0
           ? `Committed ${row.committed} ${when}, but none of it is currently usable. Check the fallback, the staff QR credential and the supply's dates.`
