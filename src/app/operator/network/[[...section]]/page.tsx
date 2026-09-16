@@ -25,6 +25,7 @@ import {
 } from "@/lib/network-operations";
 import { Shell } from "@/components/shell";
 import { memberMessageText } from "@/lib/member-messaging";
+import { MessagingConsole } from "@/components/messaging-console";
 import { Badge, ButtonLink, Empty, Metric, PageHeading } from "@/components/ui";
 import {
   LocalCoordinateMap,
@@ -2235,7 +2236,10 @@ export default async function NetworkPage({
           <MarketSelect data={data} section={active} />
         )}
         {messaging ? (
-          <MembershipMessaging data={messaging} />
+          <>
+            <MessagingConsole data={messaging} />
+            <MembershipMessaging data={messaging} />
+          </>
         ) : active === "members" && !data.market ? (
           <NetworkMemberLookup />
         ) : !data.market ? (

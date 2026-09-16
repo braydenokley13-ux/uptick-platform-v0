@@ -4,6 +4,8 @@ import { getDb } from "@/lib/db";
 import { uptickEnvironment } from "@/lib/environment";
 import { appUrl } from "@/lib/config";
 import { releaseReadiness } from "@/lib/release-readiness";
+import { readinessGates } from "@/lib/operator-readiness";
+import { ReadinessMap } from "@/components/readiness-map";
 import { Shell } from "@/components/shell";
 import { Badge, PageHeading } from "@/components/ui";
 import { PilotForm } from "@/components/pilot-form";
@@ -11,7 +13,9 @@ import "@/components/network-operations.css";
 export const dynamic = "force-dynamic";
 export default async function PilotSettings() {
   const actor = await requireActor(true),
-    data = await releaseReadiness(await getDb());
+    db = await getDb(),
+    data = await releaseReadiness(db),
+    gates = await readinessGates(db);
   const { schema, messaging } = data;
   const controls = [
     ["Canonical app origin", appUrl() === "https://pilot.upticklocal.com"],
@@ -35,6 +39,7 @@ export default async function PilotSettings() {
           title="Know what is ready."
           description="Record evidence for this release. Deployment, carrier delivery, working accounts and backed member promises need their own proof."
         />
+        <ReadinessMap gates={gates} />
         <p>
           <Link href="/operator/pilot/access">
             Manage operator and merchant access

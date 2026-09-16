@@ -193,6 +193,23 @@ export async function commitPilotSupply(db: DB, actor: Actor, raw: unknown) {
     });
   });
 }
+/** A single named blocker. `text` is the whole truth of it; the category and
+    urgency only decide where it is shown and how loudly. */
+export type PilotConstraint = {
+  category:
+    | "Supply"
+    | "Destinations"
+    | "Incidents"
+    | "Messaging"
+    | "Partners"
+    | "Readiness"
+    | "Scheduler";
+  urgency: "bad" | "warn";
+  text: string;
+  href?: string;
+};
+export const constraintOrder: PilotConstraint["urgency"][] = ["bad", "warn"];
+
 export async function pilotCapacity(
   db: DB,
   run: PilotRun,
@@ -918,7 +935,15 @@ export async function pilotOperations(
   const ready =
     launchChecks.every((key) => run.checklist[key]) &&
     capacity.capacity >= run.target_members;
-  const constraints = [];
+  // Structured so the command centre can group, rank and route each blocker.
+  // `text` stays the single truthful sentence; nothing is summarised into a score.
+  const constraints: PilotConstraint[] = [];
+  const raise = (
+    category: PilotConstraint["category"],
+    urgency: PilotConstraint["urgency"],
+    text: string,
+    href?: string,
+  ) => constraints.push({ category, urgency, text, href });
   const [openIncidents, unready, jobs, failures] = await Promise.all([
     db.query<{ owner: string; n: number }>(
       "select i.owner,count(*)::int n from fulfillment_incidents i join fulfillment_grants g on g.id=i.grant_id join weekly_releases r on r.id=g.release_id where r.run_id=$1 and i.state in ('open','recovering') group by i.owner",
@@ -937,16 +962,25 @@ export async function pilotOperations(
     ),
   ]);
   for (const incident of openIncidents)
-    constraints.push(
+    raise(
+      "Incidents",
+      "bad",
       `${incident.n} unresolved fulfillment incident(s). Owner: ${incident.owner}. Open fulfillment recovery.`,
+      "/operator/pilot/fulfillment",
     );
   for (const destination of unready)
-    constraints.push(
+    raise(
+      "Destinations",
+      "warn",
       `${destination.merchant}: readiness or fallback is unavailable. Confirm before new releases.`,
+      "/operator/pilot/fulfillment",
     );
   if (failures[0]?.n)
-    constraints.push(
+    raise(
+      "Messaging",
+      "bad",
       `${failures[0].n} failed or uncertain messages need review. Do not blindly retry unknown delivery.`,
+      "/operator/network/messaging",
     );
   if (run.state === "live") {
     for (const key of ["membership_prepare", "membership_dispatch"]) {
@@ -956,7 +990,9 @@ export async function pilotOperations(
         job.state !== "succeeded" ||
         Date.now() - new Date(job.last_success).getTime() > 15 * 60 * 1000
       )
-        constraints.push(
+        raise(
+          "Scheduler",
+          "bad",
           `${key.replaceAll("_", " ")}: scheduler health needs attention.`,
         );
     }
@@ -967,25 +1003,33 @@ export async function pilotOperations(
         [run.id, currentWeek],
       );
       if (n)
-        constraints.push(
+        raise(
+          "Supply",
+          "warn",
           `${n} admitted members await this week's backed release.`,
         );
     }
   }
   if (capacity.capacity < run.target_members)
-    constraints.push(
+    raise(
+      "Supply",
+      "bad",
       `Supply backs ${capacity.capacity} of ${run.target_members} target members across all four weeks.`,
     );
   for (const c of commitments)
     if (c.state === "planned" && new Date(c.planned_at) < new Date())
-      constraints.push(
+      raise(
+        "Partners",
+        "warn",
         `${c.partner}: ${c.channel.replaceAll("_", " ")} is overdue. Owner: ${c.owner}.`,
       );
   if (!commitments.length)
-    constraints.push("Record a partner distribution commitment.");
+    raise("Partners", "warn", "Record a partner distribution commitment.");
   for (const key of launchChecks)
     if (!run.checklist[key])
-      constraints.push(
+      raise(
+        "Readiness",
+        "warn",
         `Confirm ${key.replace(/([A-Z])/g, " $1").toLowerCase()}.`,
       );
   return {

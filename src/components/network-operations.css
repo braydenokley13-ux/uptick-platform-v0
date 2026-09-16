@@ -1,5 +1,5 @@
 .network-operations {
-  --network-border: #e1e7ee;
+  --network-border: var(--line);
 }
 .network-operations .page-heading {
   margin-bottom: 24px;

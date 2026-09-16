@@ -1020,34 +1020,62 @@ export async function dispatchMembershipMessages(
 /** Operator-only cross-market delivery ledger. Never select private access credentials. */
 export async function membershipMessagingOperations(db: DB, actor: Actor) {
   requireOperator(actor);
-  const [readiness, counts, messages, preparations] = await Promise.all([
-    memberMessagingReadiness(db),
-    db.query<{ state: string; count: number }>(
-      "select state,count(*)::int count from member_messages group by state order by state",
-    ),
-    db.query<{
-      id: string;
-      member_ref: string;
-      phone_hint: string;
-      market: string | null;
-      purpose: string;
-      week_key: string | null;
-      state: string;
-      environment: string;
-      scheduled_at: string;
-      expires_at: string;
-      created_at: string;
-      error_code: string | null;
-      suppression_reason: string | null;
-      provider_sid: string | null;
-    }>(
-      `select msg.id,upper(right(msg.member_id,6)) member_ref,right(c.phone,4) phone_hint,k.name market,msg.purpose,msg.week_key,msg.state,msg.environment,msg.scheduled_at,msg.expires_at,msg.created_at,msg.error_code,msg.suppression_reason,msg.provider_sid from member_messages msg join uptick_members m on m.id=msg.member_id join customers c on c.id=m.customer_id left join market_cells k on k.id=m.market_id order by msg.created_at desc,msg.id limit 80`,
-    ),
-    db.query<{ state: string; count: number }>(
-      "select p.state,count(*)::int count from member_week_preparations p join uptick_members m on m.id=p.member_id join market_cells k on k.id=m.market_id where p.week_key=to_char(date_trunc('week',now() at time zone k.timezone),'YYYY-MM-DD') group by p.state",
-    ),
-  ]);
-  return { readiness, counts, messages, preparations };
+  const [readiness, counts, messages, preparations, support, callbacks] =
+    await Promise.all([
+      memberMessagingReadiness(db),
+      db.query<{ state: string; count: number }>(
+        "select state,count(*)::int count from member_messages group by state order by state",
+      ),
+      db.query<{
+        id: string;
+        member_ref: string;
+        phone_hint: string;
+        market: string | null;
+        purpose: string;
+        week_key: string | null;
+        state: string;
+        environment: string;
+        scheduled_at: string;
+        expires_at: string;
+        created_at: string;
+        error_code: string | null;
+        suppression_reason: string | null;
+        provider_sid: string | null;
+      }>(
+        `select msg.id,upper(right(msg.member_id,6)) member_ref,right(c.phone,4) phone_hint,k.name market,msg.purpose,msg.week_key,msg.state,msg.environment,msg.scheduled_at,msg.expires_at,msg.created_at,msg.error_code,msg.suppression_reason,msg.provider_sid from member_messages msg join uptick_members m on m.id=msg.member_id join customers c on c.id=m.customer_id left join market_cells k on k.id=m.market_id order by msg.created_at desc,msg.id limit 80`,
+      ),
+      db.query<{ state: string; count: number }>(
+        "select p.state,count(*)::int count from member_week_preparations p join uptick_members m on m.id=p.member_id join market_cells k on k.id=m.market_id where p.week_key=to_char(date_trunc('week',now() at time zone k.timezone),'YYYY-MM-DD') group by p.state",
+      ),
+      // The support queue belongs beside delivery: a failed message and an
+      // unanswered member are the same problem seen from two sides.
+      db.query<{
+        id: string;
+        origin: string;
+        state: string;
+        created_at: string;
+        phone_hint: string | null;
+      }>(
+        // A request can arrive before the sender is matched to a member, so the
+        // member join must not drop it. Message bodies stay encrypted at rest and
+        // are never listed here.
+        `select r.id,r.origin,r.state,r.created_at,right(c.phone,4) phone_hint
+         from member_support_requests r
+         left join uptick_members m on m.id=r.member_id
+         left join customers c on c.id=m.customer_id
+        where r.state in ('queued','working')
+        order by r.created_at limit 20`,
+      ),
+      db.query<{
+        kind: string;
+        last_success_at: string | null;
+        last_failure_at: string | null;
+        last_failure_code: string | null;
+      }>(
+        "select kind,last_success_at,last_failure_at,last_failure_code from member_callback_health order by kind",
+      ),
+    ]);
+  return { readiness, counts, messages, preparations, support, callbacks };
 }
 export type MembershipMessagingOperations = Awaited<
   ReturnType<typeof membershipMessagingOperations>

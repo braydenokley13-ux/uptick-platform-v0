@@ -9,6 +9,8 @@ import { merchantGrowth } from "@/lib/merchant-growth";
 import { MerchantGrowthView } from "@/components/merchant-growth";
 import "@/components/merchant-growth.css";
 import { growthProgramWorkspace } from "@/lib/growth-programs";
+import { merchantOverview } from "@/lib/merchant-overview";
+import { MerchantOverview } from "@/components/merchant-overview";
 import { GrowthPrograms } from "@/components/growth-programs";
 import "@/components/growth-programs.css";
 import { Shell } from "@/components/shell";
@@ -36,6 +38,7 @@ export default async function Merchant({
     (route.section?.length || 0) > 1 ||
     ![
       "",
+      "overview",
       "anchor",
       "drops",
       "results",
@@ -52,7 +55,19 @@ export default async function Merchant({
   )
     notFound();
   const db = await getDb();
-  if (["", "program", "fulfillment", "results"].includes(section)) {
+  if (section === "" || section === "overview") {
+    const data = await merchantOverview(db, actor);
+    return (
+      <Shell
+        actor={{ ...actor, role: "merchant" }}
+        active="overview"
+        name={data.organization?.name || "Your store"}
+      >
+        <MerchantOverview data={data} />
+      </Shell>
+    );
+  }
+  if (["program", "fulfillment", "results"].includes(section)) {
     const growth = await growthProgramWorkspace(db, actor);
     const growthSection = (section || "program") as
       "program" | "fulfillment" | "results";

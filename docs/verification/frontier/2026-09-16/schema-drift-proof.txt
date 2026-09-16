@@ -1,0 +1,54 @@
+Hosted schema drift guard — proof against a real PostgreSQL cluster
+===================================================================
+
+Date:     2026-09-16
+Server:   PostgreSQL 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1), disposable cluster,
+          loopback only, fsync=on
+Release:  db/migrations 001-034 (34 files)
+Scenario: the hosted condition on record — database at 021, source expecting 034
+
+Step 1-3: the failure, and the guarded response
+-----------------------------------------------
+$ node --import tsx scripts/tmp/drift-proof.ts "postgres://uptick@127.0.0.1:55432/uptick_drift"
+
+1. Database at 21 applied migrations; this release expects 34.
+2. Unguarded driver error: 42P01 relation "location_outages" does not exist
+3. Guarded response (HTTP 503):
+   This deployment expects 34 database migrations but the connected database has 21.
+   13 migrations are not applied (022_suppression_reconciliation.sql through
+   034_callback_commissioning_scope.sql). Apply the forward migrations with
+   "npm run db:migrate" against this database, then reload. No data is changed until
+   that runs, and nothing here works around the missing tables.
+PROOF OK
+exit=0
+
+Line 2 is the exact error that reached the normal runtime before this change.
+Line 3 is the same call after it, answering with cause, consequence and remedy.
+
+Step 4: the forward upgrade, and the guard standing down
+---------------------------------------------------------
+$ DATABASE_URL=... npm run db:migrate
+Database migrations applied.
+migrate_exit=0
+$ psql -tAc "select count(*) from schema_migrations;"
+34
+
+$ node --import tsx scripts/tmp/drift-clear.ts "postgres://uptick@127.0.0.1:55432/uptick_drift"
+4. After migrating forward the guard stands down: location_outages is queryable ({"n":0}).
+   Ledger now at 34 applied migrations.
+
+This also exercises the 021 -> 034 forward-only upgrade path on real PostgreSQL:
+13 migrations applied in order, no applied file edited, checksums recorded.
+
+Unit coverage
+-------------
+tests/schema-guard.test.ts — 6 tests, all passing, covering:
+  - a fully-migrated database reports no drift
+  - the exact 021 -> 034 gap names every missing migration, including
+    027_location_outages.sql
+  - the message names the range, the command, and that nothing is worked around
+  - an entirely unmigrated database is the most extreme drift, not a crash
+  - only 42P01 counts as a missing relation
+  - a non-relation error (e.g. 57P01 connection loss) is never swallowed as drift
+
+The disposable cluster and its data directory were destroyed after this run.

@@ -1,3 +1,6 @@
+// The migration runner is the one caller that must reach a database that is
+// still behind this release.
+process.env.UPTICK_MIGRATING = "true";
 import { getDb, migrate } from "../src/lib/db";
 try {
   process.loadEnvFile(".env.local");

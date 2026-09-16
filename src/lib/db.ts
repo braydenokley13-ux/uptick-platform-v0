@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { localMode } from "./config";
 import { demoMode, assertDemoStorage } from "./demo-guard";
+import { schemaDrift, driftMessage } from "./schema-guard";
 import { cloudDemoMode } from "./cloud-demo-guard";
 export type Row = Record<string, unknown>;
 export interface DB {
@@ -54,10 +55,17 @@ export async function getDb() {
     );
   if (!globalDb.uptickDb)
     globalDb.uptickDb = (async () => {
-      if (process.env.DATABASE_URL)
-        return pgAdapter(
+      if (process.env.DATABASE_URL) {
+        const hosted = pgAdapter(
           postgres(process.env.DATABASE_URL, { prepare: false, max: 5 }),
         );
+        // Hosted databases are migrated deliberately, never on connect. Refuse
+        // to serve a database that is behind this release rather than letting a
+        // missing relation surface as an unexplained error inside a request.
+        return process.env.UPTICK_MIGRATING === "true"
+          ? hosted
+          : guardSchemaDrift(hosted);
+      }
       if (!localMode())
         throw Error(
           "Configure DATABASE_URL. Local storage is disabled outside explicit local mode.",
@@ -95,6 +103,34 @@ export async function getDb() {
     })();
   return globalDb.uptickDb;
 }
+/** Wraps a hosted connection so every query fails closed while the schema is
+    behind this release. The check itself is cached and runs at most twice a
+    minute; the migration ledger read is deliberately allowed through. */
+function guardSchemaDrift(db: DB): DB {
+  let assured = false;
+  const assure = async () => {
+    if (assured) return;
+    const drift = await schemaDrift(db);
+    if (drift) {
+      const { RequestError } = await import("./http");
+      throw new RequestError(driftMessage(drift), 503);
+    }
+    assured = true;
+  };
+  const wrapped: DB = {
+    query: async (sql, params) => {
+      await assure();
+      return db.query(sql, params);
+    },
+    transaction: async (fn) => {
+      await assure();
+      return db.transaction(fn);
+    },
+    close: db.close?.bind(db),
+  };
+  return wrapped;
+}
+
 export async function migrate(db: DB) {
   await db.query(
     "create table if not exists schema_migrations (name text primary key, applied_at timestamptz default now())",

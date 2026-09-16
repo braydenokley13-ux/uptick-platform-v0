@@ -1,19 +1,30 @@
 :root {
-  --marine: #142437;
-  --marine-2: #1c3349;
-  --canvas: #f4f7fa;
+  /* Uptick warm evergreen system. Values retuned from the cool marine base so
+     every existing rule inherits the warmth without being rewritten. */
+  --marine: #12312a;
+  --marine-2: #1b4539;
+  --canvas: #f7f3ec;
   --paper: #ffffff;
-  --canvas-deep: #eaf0f5;
-  --ink: #142437;
-  --muted: #637386;
-  --line: #e1e7ee;
+  --canvas-deep: #efe8dc;
+  --ink: #172a23;
+  --muted: #6b7d74;
+  --line: #e6ded1;
   --mint: #5fd6bb;
   --mint-deep: #087f68;
   --amber: #e2a24f;
   --amber-deep: #a8681f;
+  --danger: #c0453a;
+  --danger-deep: #9c3d29;
   --sans: "Geist Sans", Arial, sans-serif;
   --mono: "Geist Mono", monospace;
   --serif: "Newsreader", Georgia, serif;
+  --script: "Caveat", "Newsreader", cursive;
+  /* Depth: warm, low, physical. Never a grey drop shadow. */
+  --lift-1: 0 1px 2px #2a1c0a0a, 0 1px 1px #2a1c0a08;
+  --lift-2: 0 2px 4px #2a1c0a0d, 0 4px 12px #2a1c0a0a;
+  --lift-3: 0 8px 24px #2a1c0a14, 0 2px 6px #2a1c0a0d;
+  --radius: 14px;
+  --radius-lg: 20px;
   color-scheme: light;
 }
 * {

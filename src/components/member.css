@@ -1,7 +1,7 @@
 .member-world {
   min-height: 100vh;
   background: #f5f7f9;
-  color: #142437;
+  color: var(--ink);
   --member-mint: #e9f7f1;
   --member-amber: #087f68;
   font-family: "Geist Sans", sans-serif;
@@ -117,7 +117,7 @@
   border: 1px solid #cdd7df;
   border-radius: 10px;
   background: #ffffff;
-  color: #142437;
+  color: var(--ink);
   font: inherit;
 }
 .member-world textarea:focus {
@@ -221,7 +221,7 @@
   padding: 12px;
   background: #ffffff;
   margin-top: 9px;
-  color: #142437;
+  color: var(--ink);
 }
 .member-join-form input:focus {
   outline: 2px solid #087f68;
@@ -531,7 +531,7 @@
   font:
     650 38px/1.05 "Geist Sans",
     sans-serif;
-  color: #142437;
+  color: var(--ink);
   letter-spacing: -0.04em;
 }
 .member-condition {
@@ -669,7 +669,7 @@
 .member-invite {
   max-width: 610px;
   margin: 30px auto;
-  background: #142437;
+  background: var(--marine);
   color: #ffffff;
   padding: 29px;
   border-radius: 15px;
@@ -689,9 +689,24 @@
   color: #c1ccd6;
 }
 .member-invite .text-link {
-  color: #a7eadb;
-  font-size: 12px;
-  margin-top: 22px;
+  /* On the dark panel this is the panel's only action, so it reads as a
+     button rather than mint-on-navy text that fails contrast. */
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: #ffffff;
+  color: var(--marine);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 16px;
+  border-radius: 999px;
+  margin-top: 20px;
+}
+.member-invite .text-link:hover {
+  background: #e7f4ec;
+}
+.member-invite p {
+  color: #ffffffc4;
 }
 .member-share-result {
   margin-top: 20px;
@@ -807,7 +822,7 @@
   font:
     650 36px/1.05 "Geist Sans",
     sans-serif;
-  color: #142437;
+  color: var(--ink);
   letter-spacing: -0.04em;
 }
 .member-saved > p:not(.eyebrow) {
@@ -849,7 +864,7 @@
   font:
     650 30px/1.15 "Geist Sans",
     sans-serif;
-  color: #142437;
+  color: var(--ink);
   text-align: center;
   letter-spacing: -0.035em;
 }
@@ -1334,4 +1349,46 @@
 .member-counter-help > summary {
   font-size: 12px;
   color: var(--muted);
+}
+
+/* The invite panel sits on marine. Its action must stay legible there:
+   a ghost button inheriting the light-surface colours washed out. */
+.member-invite .button,
+.member-invite button {
+  background: #ffffff;
+  color: var(--marine);
+  border: 0;
+  font-weight: 600;
+  opacity: 1;
+}
+.member-invite .button:hover,
+.member-invite button:hover {
+  background: #eef7f1;
+}
+.member-invite button:disabled {
+  background: #ffffff2e;
+  color: #ffffffb0;
+}
+
+/* --- Join: the warm close --------------------------------------------------
+   The last thing someone sees before deciding. Illustration, one honest
+   sentence, no second call to action competing with the form above it. */
+.member-join-close {
+  margin-top: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.member-join-close p {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.6;
+  max-width: 56ch;
+  margin-inline: auto;
+  text-align: center;
+}
+@media (min-width: 900px) {
+  .member-join-close {
+    margin-top: 34px;
+  }
 }

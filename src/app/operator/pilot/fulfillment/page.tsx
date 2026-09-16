@@ -211,9 +211,37 @@ export default async function FulfillmentPage({
             <Link href="/operator/network/supply">supply operations</Link>.
           </p>
         </section>
+        {/* Live work first: reporting a failure and making it good is what an
+            operator opens this page to do. */}
         <section className="panel network-panel operator-readiness">
-          <h2>Readiness and recovery</h2>
-          <PilotPromiseControls data={data} organizations={organizations} />
+          <h2>Report a problem and make it good</h2>
+          <p>
+            Recording a failure never removes the original promise. A recovery
+            is issued against it, and a failed recovery can be superseded with
+            evidence.
+          </p>
+          <PilotPromiseControls
+            data={data}
+            organizations={organizations}
+            scope="recovery"
+          />
+        </section>
+        {/* Configuration: the destination contract, set once per supply. */}
+        <section className="panel network-panel operator-readiness">
+          <details>
+            <summary>
+              <h2>Destination setup — terms, fallback and readiness</h2>
+            </summary>
+            <p>
+              These are the standing terms for each counter. Readiness expires,
+              so re-confirm stock and staff before a new week is released.
+            </p>
+            <PilotPromiseControls
+              data={data}
+              organizations={organizations}
+              scope="setup"
+            />
+          </details>
         </section>
         {run && detail ? (
           <section className="panel network-panel operator-weekly-release">
@@ -335,36 +363,59 @@ export default async function FulfillmentPage({
         <section className="panel network-panel operator-record-history">
           <h2>Issued promise records</h2>
           <p>
-            Choose the member’s benefit in the incident form below. These
+            Choose the member’s benefit in the incident form above. These
             records show digital status; they do not prove the item was handed
             over.
           </p>
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Week</th>
-                  <th>Member reference</th>
-                  <th>Merchant</th>
-                  <th>Status</th>
-                  <th>Grant ID</th>
-                </tr>
-              </thead>
-              <tbody>
-                {grants.map((g) => (
-                  <tr key={g.id}>
-                    <td>{g.week_key}</td>
-                    <td>{g.member_id.slice(-8)}</td>
-                    <td>{g.merchant}</td>
-                    <td>{g.state}</td>
-                    <td>
-                      <code>{g.id}</code>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {/* A live week issues one record per member. Summarise first, then
+              let the operator open the full ledger deliberately. */}
+          <div className="operator-ledger-summary">
+            {Object.entries(
+              grants.reduce<Record<string, number>>((counts, g) => {
+                counts[g.state] = (counts[g.state] || 0) + 1;
+                return counts;
+              }, {}),
+            )
+              .sort((a, b) => b[1] - a[1])
+              .map(([state, count]) => (
+                <span key={state}>
+                  <strong>{count}</strong> {state.replaceAll("_", " ")}
+                </span>
+              ))}
+            {!grants.length && <span>No promises issued yet.</span>}
           </div>
+          <details className="operator-ledger">
+            <summary>
+              Open the full ledger ({grants.length} record
+              {grants.length === 1 ? "" : "s"})
+            </summary>
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Week</th>
+                    <th>Member reference</th>
+                    <th>Merchant</th>
+                    <th>Status</th>
+                    <th>Grant ID</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {grants.map((g) => (
+                    <tr key={g.id}>
+                      <td>{g.week_key}</td>
+                      <td>{g.member_id.slice(-8)}</td>
+                      <td>{g.merchant}</td>
+                      <td>{g.state}</td>
+                      <td>
+                        <code>{g.id}</code>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
         </section>
       </div>
     </Shell>

@@ -4,8 +4,12 @@ import "@fontsource/geist-sans/400.css";
 import "@fontsource/geist-sans/500.css";
 import "@fontsource/geist-sans/600.css";
 import "@fontsource/geist-mono/400.css";
+import "@fontsource/newsreader/400.css";
 import "@fontsource/newsreader/400-italic.css";
+import "@fontsource/newsreader/600.css";
+import "@fontsource/caveat/600.css";
 import "./globals.css";
+import "./uptick-system.css";
 import {
   sampleDemoMode as demoMode,
   assertSampleDemoEnvironment as assertDemoEnvironment,
