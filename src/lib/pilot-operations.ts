@@ -536,7 +536,7 @@ export async function setPilotState(db: DB, actor: Actor, raw: unknown) {
       if (run.data_kind === "real")
         await (
           await import("./release-readiness")
-        ).assertRealEnrollmentCommissioned(tx);
+        ).assertRealEnrollmentCommissioned(tx, run.id);
       /* The shared proof, so this gate and the readiness map cannot disagree
          about whether the same run is backed. */
       const backing = await pilotBacking(tx, run);

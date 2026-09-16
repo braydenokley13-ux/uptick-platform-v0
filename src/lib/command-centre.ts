@@ -70,6 +70,17 @@ export async function destinationPins(
   weekKey: string,
   capacity: Awaited<ReturnType<typeof pilotCapacity>>,
 ): Promise<DestinationPin[]> {
+  /* The operator can page through all four weeks, so these figures belong to
+     the week that is open, not to today. Saying "this week" while looking at
+     week three tells staff to act on the wrong week's capacity. */
+  const weeks = pilotWeeks(run);
+  const index = weeks.indexOf(weekKey) + 1;
+  const when =
+    run.timezone && marketWeekWindow(new Date(), run.timezone).weekKey === weekKey
+      ? "this week"
+      : index
+        ? `in week ${index}`
+        : `in ${weekKey}`;
   const rows = await db.query<{
     supply_id: string;
     organization_id: string;
@@ -138,7 +149,7 @@ export async function destinationPins(
     const backed = plan?.quantity ?? 0;
     const remaining = Math.max(0, backed - row.issued);
     let state: DestinationPin["state"] = "active";
-    let why = `${remaining} of ${backed} backed units remain this week.`;
+    let why = `${remaining} of ${backed} backed units remain ${when}.`;
     if (row.outage_reason) {
       state = "outage";
       why = `Closed to routing. ${row.outage_reason}`;
@@ -159,11 +170,11 @@ export async function destinationPins(
       state = "not_ready";
       why =
         row.committed > 0
-          ? `Committed ${row.committed} this week, but none of it is currently usable. Check the fallback, the staff QR credential and the supply's dates.`
-          : "Nothing is committed to this week at this counter.";
+          ? `Committed ${row.committed} ${when}, but none of it is currently usable. Check the fallback, the staff QR credential and the supply's dates.`
+          : `Nothing is committed ${when} at this counter.`;
     } else if (remaining <= Math.max(3, Math.round(backed * 0.15))) {
       state = "low_supply";
-      why = `Only ${remaining} of ${backed} backed units remain this week.`;
+      why = `Only ${remaining} of ${backed} backed units remain ${when}.`;
     }
     if (row.open_incidents && state === "active") {
       why = `${row.open_incidents} open incident(s) at this counter. ${why}`;

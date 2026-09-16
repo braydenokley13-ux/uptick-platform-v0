@@ -87,6 +87,9 @@ export type MerchantWeek = {
   index: number;
   label: string;
   current: boolean;
+  /** The week is behind the current one. A past week with no release was
+      missed, which is a different fact from a week that has not arrived. */
+  past: boolean;
   issued: number;
   /** Redemptions recorded. Not visits, not purchases, not handoffs. */
   recorded: number;
@@ -298,6 +301,7 @@ export async function merchantOverview(
       index: i + 1,
       label: `Week ${i + 1}`,
       current: !completed && weekKey === currentWeek,
+      past: weekKey < currentWeek,
       issued: row?.issued || 0,
       recorded: row?.recorded || 0,
       staffVerified: row?.staff_verified || 0,

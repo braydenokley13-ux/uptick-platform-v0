@@ -367,3 +367,24 @@ test("G · the current week is still reported as current", async () => {
     assert.equal(data.commitmentWeek, fixture.weekKey);
   });
 });
+
+test("H · a week that passed without a release is missed, not unstarted", async () => {
+  await withDatabase(async (db) => {
+    const fixture = await seedSyntheticPilot(db, 4, "mc-missed");
+    /* Read from week three of the run, with nothing ever released. Weeks one
+       and two are behind us: calling them "not started yet" tells the merchant
+       the timeline is fine at exactly the moment a release was missed. */
+    const later = new Date(
+      Date.parse(`${fixture.weekKey}T12:00:00Z`) + 15 * 86400000,
+    );
+    const data = await merchantOverview(db, fixture.actor, later);
+    assert.deepEqual(
+      data.weeks.map((week) => week.past),
+      [true, true, false, false],
+    );
+    assert.deepEqual(
+      data.weeks.map((week) => week.released),
+      [false, false, false, false],
+    );
+  });
+});

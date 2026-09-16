@@ -362,3 +362,69 @@ test("H · a second obligated run in the same cell cannot be covered by the firs
     assert.match(cell.evidence, /Paused synthetic run: Week 1: 0 usable units/);
   });
 });
+
+test("I · a draft run being taken live is proved, not refused for not existing yet", async () => {
+  await withDatabase(async (db) => {
+    const fixture = await seedSyntheticPilot(db, 20, "mr-draft");
+    /* The first real run is checked before its state changes, so it is not in
+       the enrolling/live/paused set the market proof reads. Omitting it left
+       its cell looking runless, and the gate refused a transition for a run
+       that was fully backed. */
+    await db.query(
+      "insert into market_cells(id,name,slug,timezone,state,data_kind) values('mr-draft-cell','Draft Cell','mr-draft-cell','America/New_York','pilot','real')",
+    );
+    await db.query(
+      `insert into pilot_runs(
+         id,market_id,name,starts_on,ends_on,state,data_kind,target_members,hard_cap,
+         operator_owner,support_owner,backup_support_owner,checklist,created_by
+       ) values('mr-draft-candidate','mr-draft-cell','Draft real run',
+         date_trunc('week',current_date)::date,date_trunc('week',current_date)::date+28,
+         'draft','real',150,150,$1,'support','backup','{}',$1)`,
+      [fixture.actor.id],
+    );
+
+    const without = (await marketReadiness(db)).find(
+      (cell) => cell.id === "mr-draft-cell",
+    )!;
+    assert.deepEqual(without.runs, [], "a draft run is not an obligation");
+
+    const with_ = (await marketReadiness(db, "mr-draft-candidate")).find(
+      (cell) => cell.id === "mr-draft-cell",
+    )!;
+    assert.equal(with_.runs.length, 1, "but the candidate is proved on request");
+    assert.equal(with_.runs[0].id, "mr-draft-candidate");
+    assert.match(with_.evidence, /0 usable units backed for 150 required/);
+  });
+});
+
+test("J · a live Market Cell still routes members, so it still has to be backed", async () => {
+  await withDatabase(async (db) => {
+    const fixture = await seedSyntheticPilot(db, 20, "mr-live-cell");
+    await db.query(
+      "insert into market_cells(id,name,slug,timezone,state,data_kind) values('mr-live','Live Cell','mr-live-cell','America/New_York','live','real')",
+    );
+    await db.query(
+      `insert into pilot_runs(
+         id,market_id,name,starts_on,ends_on,state,data_kind,target_members,hard_cap,
+         operator_owner,support_owner,backup_support_owner,checklist,created_by
+       ) values('mr-live-run','mr-live','Live real run',
+         date_trunc('week',current_date)::date,date_trunc('week',current_date)::date+28,
+         'enrolling','real',150,150,$1,'support','backup','{}',$1)`,
+      [fixture.actor.id],
+    );
+
+    /* `memberMarket` accepts pilot and live alike, so a live cell with nothing
+       behind it must block enrollment exactly as a pilot one does. */
+    const blockers = enrollmentBlockers(await releaseReadiness(db)).filter(
+      (blocker) => blocker.gate === "market",
+    );
+    assert.ok(
+      blockers.some((blocker) => /Live Cell/.test(blocker.detail)),
+      `the live cell must be evaluated: ${blockers.map((b) => b.detail).join(" | ")}`,
+    );
+    assert.ok(
+      !blockers.some((blocker) => /none in pilot or live state/.test(blocker.detail)),
+      "and it counts as a cell that exists",
+    );
+  });
+});

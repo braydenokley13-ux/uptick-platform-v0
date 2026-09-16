@@ -317,7 +317,14 @@ export type MarketReadiness = {
    cohort that week owes against the usable eligible committed capacity behind
    it, through `pilotBacking`: the same function the run-state gate uses and the
    same `pilotCapacity` engine admission and release use. */
-export async function marketReadiness(db: DB): Promise<MarketReadiness[]> {
+export async function marketReadiness(
+  db: DB,
+  /* A run being taken out of draft is checked before its state changes, so it
+     is not yet in the obligated set below. Without it the candidate's own cell
+     looks runless and the gate refuses the transition — including when that
+     draft has all four weeks fully backed. */
+  candidateRunId?: string,
+): Promise<MarketReadiness[]> {
   const cells = await db.query<{
     id: string;
     name: string;
@@ -355,10 +362,11 @@ export async function marketReadiness(db: DB): Promise<MarketReadiness[]> {
   const runs = await db.query<PilotRun>(
     `select r.*,r.starts_on::text starts_on,r.ends_on::text ends_on,m.timezone
        from pilot_runs r join market_cells m on m.id=r.market_id
-      where r.state in ('enrolling','live','paused')
+      where r.state in ('enrolling','live','paused') or r.id=$1
       order by r.market_id,
                case r.state when 'enrolling' then 0 when 'live' then 1 else 2 end,
                r.starts_on`,
+    [candidateRunId ?? ""],
   );
   const named = (
     proofs: { name: string; evidence: string }[],
@@ -430,7 +438,7 @@ export function callbackIsCurrent(
   );
 }
 
-export async function releaseReadiness(db: DB) {
+export async function releaseReadiness(db: DB, candidateRunId?: string) {
   const [
     schema,
     jobs,
@@ -464,7 +472,7 @@ export async function releaseReadiness(db: DB) {
     db.query<{ open: number; oldest: string | null }>(
       "select count(*)::int open,min(created_at) oldest from member_support_requests where state in ('queued','working')",
     ),
-    marketReadiness(db),
+    marketReadiness(db, candidateRunId),
   ]);
   const releaseSha = process.env.VERCEL_GIT_COMMIT_SHA || "local";
   const messagingScope = await messagingCommissioningScope(db);
@@ -633,14 +641,17 @@ export function enrollmentBlockers(
      cell with nothing behind it blocked nothing. A cohort that cannot be served
      is exactly what enrollment must not step past, and the proof is the same
      per-week one the gate renders. */
+  /* `pilot` and `live` both route members — `memberMarket` accepts either — so
+     promoting a working cell to live must not blank the gate that stands for
+     it, nor quietly skip its backing when another cell is still in pilot. */
   const pilotCells = readiness.markets.filter(
-    (m) => m.data_kind === "real" && m.state === "pilot",
+    (m) => m.data_kind === "real" && ["pilot", "live"].includes(m.state),
   );
   if (!pilotCells.length)
     add(
       "market_cell",
       "market",
-      "No real Market Cell is in pilot state, so there is nowhere to admit anyone.",
+      "No real Market Cell is in pilot or live state, so there is nowhere to admit anyone.",
     );
   else
     /* Every cell in pilot state, not "at least one of them". A member's home ZIP
@@ -666,7 +677,12 @@ export function enrollmentBlockers(
   return blockers;
 }
 
-export async function assertRealEnrollmentCommissioned(db: DB) {
+export async function assertRealEnrollmentCommissioned(
+  db: DB,
+  /* The run this check is being made on behalf of, when it is not yet in a
+     state the market proof would find. */
+  candidateRunId?: string,
+) {
   /* The switch itself. `setPilotState` refused a real run without it, but the
      admission path did not, so the readiness map could read "deliberately
      closed" while a real member was being admitted through another door. */
@@ -675,7 +691,7 @@ export async function assertRealEnrollmentCommissioned(db: DB) {
       "Real enrollment is waiting for verified release, account, messaging and support commissioning.",
       503,
     );
-  const readiness = await releaseReadiness(db);
+  const readiness = await releaseReadiness(db, candidateRunId);
   /* The reason stays generic: this also guards the public signup path, and an
      unauthenticated caller should not be handed a list of what is unfinished.
      Operators get the detail through the readiness map. */

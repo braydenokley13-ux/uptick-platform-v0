@@ -259,7 +259,10 @@ export function MerchantOverview({ data }: { data: Data }) {
                 </span>
               ) : (
                 <span className="mo-week-figs muted">
-                  {completed ? "Not released" : "Not started yet"}
+                  {/* A week that has already passed without a release was
+                      missed. Calling it "not started yet" gives the merchant a
+                      false timeline at exactly the moment something went wrong. */}
+                  {completed || w.past ? "Not released" : "Not started yet"}
                 </span>
               )}
               <span className="mo-week-bar" aria-hidden="true">

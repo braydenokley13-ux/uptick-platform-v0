@@ -302,3 +302,23 @@ test("week backing compares capacity against that requirement, and names the sho
     assert.equal(first.short, 15, "a short week says how short");
   });
 });
+
+test("G · a pin explains the week the operator is looking at, not today", async () => {
+  await withDatabase(async (db) => {
+    const fixture = await seedSyntheticPilot(db, 20, "cc-week-label");
+    const run = await loadPilotRun(db, fixture.runId);
+    const weeks = pilotWeeks(run);
+    await addEligibleCounter(db, fixture, "cc-week-label-three", 6, weeks[2]);
+
+    const capacity = await pilotCapacity(db, run);
+    const current = await destinationPins(db, run, weeks[0], capacity);
+    assert.match(current[0].why, /remain this week/);
+
+    /* The operator can page to another week. Its figures are that week's, and
+       dating them to today would have staff act on the wrong week's capacity. */
+    const later = await destinationPins(db, run, weeks[2], capacity);
+    const backed = later.find((pin) => pin.backed > 0)!;
+    assert.match(backed.why, /remain in week 3/);
+    assert.ok(!/this week/.test(backed.why));
+  });
+});

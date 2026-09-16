@@ -219,7 +219,10 @@ export async function readinessGates(
      below are derived from that same proof — so this gate cannot be greener
      than what the server will actually allow. */
   const realMarkets = readiness.markets.filter((m) => m.data_kind === "real");
-  const intended = realMarkets.filter((m) => m.state === "pilot");
+  /* `pilot` and `live` both route members, so both are obligations. */
+  const intended = realMarkets.filter((m) =>
+    ["pilot", "live"].includes(m.state),
+  );
   const backed = intended.filter((m) => m.backed);
   /* Every cell in pilot state has to hold, not one of them. A member's home ZIP
      decides which cell they are routed into, so a backed cell in one
@@ -250,7 +253,7 @@ export async function readinessGates(
       : intended.length
         ? backed.map((m) => `${m.name}: ${m.evidence}`).join("; ")
         : realMarkets.length
-          ? `${realMarkets.length} real Market Cell(s) recorded but none in pilot state.`
+          ? `${realMarkets.length} real Market Cell(s) recorded but none in pilot or live state.`
           : "No real Market Cell exists yet. Only test classifications are present.",
     consequence:
       "There is no real neighbourhood, destination or four-week supply to admit anyone into.",
