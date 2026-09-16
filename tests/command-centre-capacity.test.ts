@@ -322,3 +322,97 @@ test("G · a pin explains the week the operator is looking at, not today", async
     assert.ok(!/this week/.test(backed.why));
   });
 });
+
+test("H · a commercial counter's remaining units are not subtracted twice", async () => {
+  await withDatabase(async (db) => {
+    const fixture = await seedSyntheticPilot(db, 20, "cc-program");
+    const [source] = await db.query<{
+      organization_id: string;
+      starts_at: string;
+      expires_at: string;
+    }>(
+      "select organization_id,starts_at,expires_at from network_drop_supplies where id=$1",
+      [fixture.supplyId],
+    );
+    const org = source.organization_id;
+    /* A Growth Program planning twenty placements for this week. Its
+       `remaining_capacity` is already net of grants issued, so once eighteen
+       are out the placeable figure is two — and a display that subtracts the
+       eighteen again shows nobody anything left. */
+    /* The program and its version reference each other, and the program's
+       version FK is deferrable, so both rows go in one transaction. */
+    await db.transaction(async (tx) => {
+      await tx.query(
+        `insert into growth_programs(id,buyer_organization_id,market_id,status,current_version,approved_version,created_by)
+         values('cc-program-p',$1,$2,'active',1,1,$3)`,
+        [org, fixture.marketId, fixture.actor.id],
+      );
+      await tx.query(
+        `insert into growth_program_versions(
+           program_id,version,name,objective,starts_on,ends_on,buyer_organization_id,
+           funder_organization_id,fulfiller_organization_id,negotiated_fee_cents,
+           commercial_status,benefit_ceiling,operating_constraints,evaluation_plan,proposed_by
+         ) values('cc-program-p',1,'Synthetic program','introduce_store',$1::date,$1::date+28,$2,$2,$2,
+           0,'agreed',80,'Synthetic operating constraints for this test.',
+           'Synthetic evaluation plan for this test.',$3)`,
+        [fixture.weekKey, org, fixture.actor.id],
+      );
+    });
+    await db.query(
+      "insert into growth_program_week_plans(program_id,program_version,week_key,planned_placements) values('cc-program-p',1,$1,20)",
+      [fixture.weekKey],
+    );
+    await db.query(
+      `insert into growth_program_approvals(id,program_id,program_version,run_id,decision,capacity_snapshot,note,decided_by)
+       values('cc-program-approval','cc-program-p',1,$1,'approved','{}','Synthetic approval.',$2)`,
+      [fixture.runId, fixture.actor.id],
+    );
+    await db.query(
+      "insert into program_supply_links(program_id,program_version,supply_id,week_key,linked_by) values('cc-program-p',1,$1,$2,$3)",
+      [fixture.supplyId, fixture.weekKey, fixture.actor.id],
+    );
+
+    await withdraw(db, fixture, 2, "cc-program"); // eighteen members remain
+    await issue(db, fixture, "cc-program");
+
+    const run = await loadPilotRun(db, fixture.runId);
+    const capacity = await pilotCapacity(db, run);
+    const plan = capacity.supplies.find(
+      (supply) => supply.supply_id === fixture.supplyId,
+    )!;
+    assert.equal(plan.issued, 18);
+    assert.equal(
+      plan.quantity,
+      2,
+      "two placements are still available under the program",
+    );
+    assert.equal(
+      plan.weekTotal,
+      20,
+      "and twenty is what the week was planned to back",
+    );
+
+    const pin = (await destinationPins(db, run, fixture.weekKey, capacity))[0];
+    assert.equal(pin.backed, 20);
+    assert.equal(
+      pin.remaining,
+      2,
+      "the eighteen issued grants are subtracted once, not twice",
+    );
+    assert.match(pin.why, /Only 2 of 20 backed units remain this week/);
+  });
+});
+
+test("a supply outside any programme reports the same total it can place", async () => {
+  await withDatabase(async (db) => {
+    const fixture = await seedSyntheticPilot(db, 20, "cc-organic");
+    const run = await loadPilotRun(db, fixture.runId);
+    const capacity = await pilotCapacity(db, run);
+    for (const supply of capacity.supplies)
+      assert.equal(
+        supply.weekTotal,
+        supply.quantity,
+        "with no commercial limit the placeable figure is already the total",
+      );
+  });
+});

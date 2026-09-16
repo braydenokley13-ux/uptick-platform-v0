@@ -155,3 +155,32 @@ test("the unresolved-message badge counts every failure, not the page it shows",
     assert.equal(unresolved, 1, "and is still counted");
   });
 });
+
+test("a callback row is green only when the shared currency rule says so", async () => {
+  await withDatabase(async (db) => {
+    await seedSyntheticPilot(db, 2, "tc-callback");
+    /* A success that is old, and older still than nothing — no failure has ever
+       been recorded. Ordering the timestamps calls that healthy; the rule the
+       enrollment gate uses does not, because it is not a success for this
+       sender and release inside seven days. */
+    await db.query(
+      `insert into member_callback_health(kind,successful_count,failed_count,last_success_at,last_success_scope)
+       values('inbound',1,0,now()-interval '30 days','some-earlier-scope')`,
+    );
+
+    const data = await membershipMessagingOperations(db, {
+      id: "tc-operator",
+      role: "operator",
+      organizationId: "tc-callback-merchant",
+    });
+    const inbound = data.callbacks.find((c) => c.kind === "inbound")!;
+    assert.ok(inbound.last_success_at, "a success is on record");
+    assert.equal(inbound.last_failure_at, null, "and no failure is");
+    assert.equal(
+      inbound.current,
+      false,
+      "but it is not current for this sender and release",
+    );
+    assert.equal(data.readiness.ready, false);
+  });
+});

@@ -326,6 +326,7 @@ export async function pilotCapacity(
     eligible: boolean;
     fallback_available: number;
     commercial: boolean;
+    own_issued: number;
   }>(
     `select p.week_key,p.supply_id,p.committed_quantity,
       coalesce(s.quantity,0)+(select coalesce(sum(delta),0)::int from supply_adjustments where supply_id=s.id) inventory,
@@ -352,7 +353,9 @@ export async function pilotCapacity(
           and (rg.state='redeemed' or (rg.superseded_at is null and rg.expires_at>now())))
        +(select count(*)::int from fulfillment_grants g join weekly_releases r on r.id=g.release_id
           where g.supply_id=s.id and (r.run_id is distinct from p.run_id or r.week_key<>p.week_key)
-           and (g.state='redeemed' or g.expires_at>now()))) competing
+           and (g.state='redeemed' or g.expires_at>now()))) competing,
+      (select count(*)::int from fulfillment_grants g join weekly_releases r on r.id=g.release_id
+        where g.supply_id=s.id and r.run_id=p.run_id and r.week_key=p.week_key) own_issued
      from effective_pilot_week_supplies p join network_drop_supplies s on s.id=p.supply_id
      join market_cells m on m.id=s.market_id
      left join pilot_supply_terms t on t.supply_id=s.id left join destination_readiness d on d.supply_id=s.id left join pilot_supply_fallbacks f on f.supply_id=s.id
@@ -379,22 +382,38 @@ export async function pilotCapacity(
           commercialCapacity = 0;
         }
       }
+      /* The terms that are totals for the week: the commitment, the stock left
+         after other obligations, and the fallback behind it. */
+      const total = p.eligible
+        ? Math.max(
+            0,
+            Math.min(
+              p.committed_quantity,
+              p.inventory - p.competing,
+              p.fallback_available,
+            ),
+          )
+        : 0;
+      const quantity = Math.min(total, commercialCapacity ?? Infinity);
       return {
         week_key: p.week_key,
         supply_id: p.supply_id,
         programId,
         commercialCapacity,
-        quantity: p.eligible
-          ? Math.max(
-              0,
-              Math.min(
-                p.committed_quantity,
-                p.inventory - p.competing,
-                p.fallback_available,
-                commercialCapacity ?? Infinity,
-              ),
-            )
-          : 0,
+        /* What can still be placed. A Growth Program's remaining_capacity is
+           already net of the grants it has issued, so when it binds this is a
+           remainder rather than a total — which is exactly the number admission
+           and release want. */
+        quantity,
+        /* What this supply backs for the whole week, grants already issued
+           against it included. Subtracting those issued grants from `quantity`
+           would count them twice whenever the commercial limit is the binding
+           term, so anything displaying "N of M remain" reads this. */
+        weekTotal:
+          commercialCapacity !== null && commercialCapacity < total
+            ? Math.min(total, commercialCapacity + p.own_issued)
+            : total,
+        issued: p.own_issued,
       };
     }),
   );

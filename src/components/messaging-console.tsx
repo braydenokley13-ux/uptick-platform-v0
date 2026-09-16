@@ -188,11 +188,13 @@ export function MessagingConsole({
                 ["Delivery status", status],
               ].map(([label, row]) => {
                 const health = row as (typeof callbacks)[number] | undefined;
-                const ok =
-                  !!health?.last_success_at &&
-                  (!health.last_failure_at ||
-                    new Date(health.last_success_at) >
-                      new Date(health.last_failure_at));
+                /* `current` is the shared rule the enrollment gate uses: a
+                   signed success for this sender and release, inside seven
+                   days. Ordering a stale success against an older failure
+                   painted the row green while the banner above said replies
+                   were unconfirmed, sending the operator away from the webhook
+                   that needs recommissioning. */
+                const ok = !!health?.current;
                 return (
                   <div className="u-row" key={String(label)}>
                     <Dot tone={health ? (ok ? "ok" : "bad") : "idle"} />
@@ -203,7 +205,9 @@ export function MessagingConsole({
                           ? "No signed callback has been received yet."
                           : ok
                             ? `Last signed success ${ago(health.last_success_at!)}.`
-                            : `Last failure ${health.last_failure_at ? ago(health.last_failure_at) : "recorded"}${health.last_failure_code ? ` (${health.last_failure_code})` : ""}.`}
+                            : health.last_success_at
+                              ? `Last signed success ${ago(health.last_success_at)}, but not for this sender and release within seven days. Recommission this callback.`
+                              : `Last failure ${health.last_failure_at ? ago(health.last_failure_at) : "recorded"}${health.last_failure_code ? ` (${health.last_failure_code})` : ""}.`}
                       </small>
                     </div>
                   </div>

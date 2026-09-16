@@ -146,7 +146,12 @@ export async function destinationPins(
       (supply) =>
         supply.week_key === weekKey && supply.supply_id === row.supply_id,
     );
-    const backed = plan?.quantity ?? 0;
+    /* `weekTotal` rather than `quantity`: for a supply inside a Growth Program
+       the placeable figure is already net of the grants that program has
+       issued, so subtracting them again here reported a counter with two
+       placements left as having none. `weekTotal` is always the week's total,
+       which is what "N of M remain" needs. */
+    const backed = plan?.weekTotal ?? 0;
     const remaining = Math.max(0, backed - row.issued);
     let state: DestinationPin["state"] = "active";
     let why = `${remaining} of ${backed} backed units remain ${when}.`;
