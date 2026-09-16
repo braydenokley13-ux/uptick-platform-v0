@@ -43,7 +43,7 @@ export async function installCloudDemoSchema(
         sql: await readFile(resolve("db/migrations", name), "utf8"),
       })),
   );
-  if (sources.at(-1)?.name !== "034_callback_commissioning_scope.sql")
+  if (sources.at(-1)?.name !== "035_restore_public_schema_hardening.sql")
     throw Error(
       "Review the cloud schema renderer before installing newer migrations.",
     );
@@ -99,6 +99,11 @@ export async function installCloudDemoSchema(
         ],
       );
     }
+    /* Migration 035 now performs these three repairs for every schema, and the
+       renderer rewrites its `search_path=public,pg_temp` to this schema like
+       any other. They are kept here as a belt-and-braces assertion: this
+       installer is the only place that verified them before 035 existed, and
+       re-stating them costs one idempotent statement each. */
     await tx.query(
       "alter function protect_consent_with_erasure() set search_path=uptick_cloud_demo,pg_temp",
     );

@@ -57,7 +57,18 @@ export async function getDb() {
     globalDb.uptickDb = (async () => {
       if (process.env.DATABASE_URL) {
         const hosted = pgAdapter(
-          postgres(process.env.DATABASE_URL, { prepare: false, max: 5 }),
+          postgres(process.env.DATABASE_URL, {
+            prepare: false,
+            max: 5,
+            // Every object in db/migrations is written unqualified, so the
+            // schema they land in is decided entirely by the connecting role's
+            // search_path. The hosted database also carries uptick_cloud_demo,
+            // installed by a path that pins its own search_path on every
+            // transaction. Pinning this one too means the normal application
+            // and its migrations can only ever address `public`, whatever a
+            // role's default happens to be.
+            connection: { search_path: "public, pg_temp" },
+          }),
         );
         // Hosted databases are migrated deliberately, never on connect. Refuse
         // to serve a database that is behind this release rather than letting a
@@ -131,10 +142,19 @@ function guardSchemaDrift(db: DB): DB {
   return wrapped;
 }
 
+/** Serialises migration runs against each other. Distinct from CLOUD_DEMO_LOCK
+    (723914208) and from the 73418 held inside migration 013. */
+export const MIGRATION_LOCK = 723914209;
+
 export async function migrate(db: DB) {
   await db.query(
     "create table if not exists schema_migrations (name text primary key, applied_at timestamptz default now())",
   );
+  // The sibling ledger below has had row level security since it was added.
+  // This one predates that habit, and on a managed Postgres a table created in
+  // public inherits default grants, so leaving it open is a gap on a fresh
+  // database. Enabling it is idempotent and costs nothing on every later run.
+  await db.query("alter table schema_migrations enable row level security");
   await db.query(
     "create table if not exists schema_migration_checksums(name text primary key references schema_migrations(name),sha256 text not null check(sha256 ~ '^[a-f0-9]{64}$'),recorded_at timestamptz not null default now(),basis text not null check(basis in ('applied','reviewed_baseline')))",
   );
@@ -163,7 +183,27 @@ export async function migrate(db: DB) {
     )
       continue;
     // Split through the driver's multi-statement support: PGlite exec required for migration blocks.
+    //
+    // Every migration runs inside one transaction, so a failure part-way
+    // through a file cannot leave a half-changed schema. The consequence worth
+    // knowing before writing a migration: CREATE INDEX CONCURRENTLY cannot run
+    // inside a transaction block, so no migration this runner executes may use
+    // it. Building an index on a large table will take a write-blocking lock.
     await db.transaction(async (tx) => {
+      // The applied-check above is a cheap skip, not a guarantee: it reads
+      // outside this transaction, and on a pooled connection a second runner
+      // (a deploy hook and an operator at a terminal, say) can pass it at the
+      // same moment. Take the lock and re-read inside, so the loser of that
+      // race returns quietly instead of failing half-way through the file.
+      await tx.query("select pg_advisory_xact_lock($1)", [MIGRATION_LOCK]);
+      if (
+        (
+          await tx.query("select name from schema_migrations where name=$1", [
+            name,
+          ])
+        ).length
+      )
+        return;
       for (const statement of splitSql(sql)) await tx.query(statement);
       await tx.query("insert into schema_migrations(name) values($1)", [name]);
       await tx.query(
