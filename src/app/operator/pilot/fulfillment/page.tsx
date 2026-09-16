@@ -16,11 +16,12 @@ export const dynamic = "force-dynamic";
 export default async function FulfillmentPage({
   searchParams,
 }: {
-  searchParams: Promise<{ run?: string }>;
+  searchParams: Promise<{ run?: string; grant?: string }>;
 }) {
   const actor = await requireActor(true),
     db = await getDb();
-  const operations = await pilotOperations(db, actor, (await searchParams).run);
+  const query = await searchParams;
+  const operations = await pilotOperations(db, actor, query.run);
   const { run, detail } = operations;
   // Keep uncommitted supplies available here so their free terms can be certified before commitment.
   const data = await pilotPromiseOperations(db, actor);
@@ -384,7 +385,18 @@ export default async function FulfillmentPage({
               ))}
             {!grants.length && <span>No promises issued yet.</span>}
           </div>
-          <details className="operator-ledger">
+          {/* Support links here with ?grant=<id> to put the operator on one
+              record. The parameter used to be dropped, landing them on an
+              unfiltered page with the ledger closed. */}
+          {query.grant && (
+            <p>
+              Opened from support for grant <code>{query.grant}</code>
+              {grants.some((g) => g.id === query.grant)
+                ? "."
+                : " — that record is not in this run's ledger."}
+            </p>
+          )}
+          <details className="operator-ledger" open={!!query.grant}>
             <summary>
               Open the full ledger ({grants.length} record
               {grants.length === 1 ? "" : "s"})
@@ -402,7 +414,10 @@ export default async function FulfillmentPage({
                 </thead>
                 <tbody>
                   {grants.map((g) => (
-                    <tr key={g.id}>
+                    <tr
+                      key={g.id}
+                      className={g.id === query.grant ? "is-focused" : undefined}
+                    >
                       <td>{g.week_key}</td>
                       <td>{g.member_id.slice(-8)}</td>
                       <td>{g.merchant}</td>

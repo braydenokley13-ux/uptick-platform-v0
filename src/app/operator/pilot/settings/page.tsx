@@ -15,7 +15,7 @@ export default async function PilotSettings() {
   const actor = await requireActor(true),
     db = await getDb(),
     data = await releaseReadiness(db),
-    gates = await readinessGates(db);
+    gates = await readinessGates(db, data);
   const { schema, messaging } = data;
   const controls = [
     ["Canonical app origin", appUrl() === "https://pilot.upticklocal.com"],
@@ -263,9 +263,32 @@ export default async function PilotSettings() {
             </Link>
           </p>
           {data.markets.map((market) => (
-            <p key={market.id}>
-              {market.name} · {market.data_kind} · {market.state}
-            </p>
+            <div className="network-status-row" key={market.id}>
+              <Badge tone={market.backed ? "mint" : "amber"}>
+                {market.backed ? "Backed" : "Not backed"}
+              </Badge>
+              <p>
+                {market.name} · {market.data_kind} · {market.state}
+                <br />
+                {/* The proof, per week, in the same words the server uses to
+                    refuse. A count of cells never showed whether the cohort
+                    could actually be served. */}
+                <small>{market.evidence}</small>
+                {market.weeks.length > 0 && (
+                  <>
+                    <br />
+                    <small>
+                      {market.weeks
+                        .map(
+                          (week) =>
+                            `Week ${week.index}: ${week.usable}/${week.required}${week.released ? " (released)" : ""}`,
+                        )
+                        .join(" · ")}
+                    </small>
+                  </>
+                )}
+              </p>
+            </div>
           ))}
         </section>
         <section className="panel network-panel">

@@ -4,11 +4,13 @@ import { redirect } from "next/navigation";
 import { ArrowUpRight, Check, Clock3, Gift, MapPin } from "lucide-react";
 import { getDb } from "@/lib/db";
 import { decrypt } from "@/lib/security";
-import { memberHome } from "@/lib/member-experience";
+import { memberHome, memberPlaces } from "@/lib/member-experience";
 import { MEMBER_SESSION_COOKIE } from "@/lib/member-session";
 import { MemberPrivacyRequest } from "@/components/member-privacy";
 import { memberPrivacyRequests } from "@/lib/privacy-admin";
 import { MemberInvite } from "@/components/member-ui";
+import { MemberPlaces } from "@/components/member-places";
+import { activeMemberTab, memberView } from "@/lib/member-views";
 import {
   MemberShell,
   MemberState,
@@ -37,7 +39,10 @@ export default async function YourUptick({
   } catch {
     redirect("/join");
   }
-  const { view } = await searchParams;
+  /* Anything that is not a real view is Home, including the greeting. An
+     unrecognised value used to render Home with `greet` suppressed, so a typo
+     or a stale link produced a subtly broken page rather than the home one. */
+  const view = memberView((await searchParams).view);
   const current = data.current as
     | (NonNullable<typeof data.current> & {
         grant?: {
@@ -88,13 +93,10 @@ export default async function YourUptick({
 
   return (
     <MemberShell
-      active={
-        view === "history"
-          ? "Uptick"
-          : view === "preferences"
-            ? "Profile"
-            : "Home"
-      }
+      /* Every tab in the bottom bar has to light its own view. `places` used
+         to fall through to Home, so the one tab that changed nothing also
+         looked like it had not been pressed. */
+      active={activeMemberTab(view)}
       greet={!view}
       subtitle={
         data.serviceStatus?.blocks_future_release
@@ -108,7 +110,9 @@ export default async function YourUptick({
                 : "Your membership is active."
       }
     >
-      {view === "preferences" ? (
+      {view === "places" ? (
+        <MemberPlaces data={await memberPlaces(await getDb(), credential)} />
+      ) : view === "preferences" ? (
         <section className="member-settings">
           <p className="eyebrow">LOCAL, ON YOUR TERMS</p>
           <h1>

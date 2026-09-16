@@ -282,3 +282,20 @@
     align-items: flex-start;
   }
 }
+
+/* A merchant can owe more than one thing in a week — two counters, or two
+   benefits at the same counter. Each keeps its own row and its own fallback. */
+.mo-commit-list {
+  list-style: none;
+  display: grid;
+  gap: 16px;
+}
+.mo-commit-list > li + li {
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.mo-commit-count {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}

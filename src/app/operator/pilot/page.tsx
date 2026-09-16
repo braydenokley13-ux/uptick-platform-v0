@@ -84,7 +84,7 @@ export default async function PilotPage({
   // the view itself stays a pure rendering of already-decided facts.
   const centre =
     run && view === "overview"
-      ? await commandCentre(db, actor, run, query.week)
+      ? await commandCentre(db, actor, run, query.week, data.detail.capacity)
       : null;
   const readinessRows = centre ? await operatorReadinessRows(db) : [];
   const marketName =

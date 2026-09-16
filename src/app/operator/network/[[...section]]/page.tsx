@@ -2208,7 +2208,10 @@ export default async function NetworkPage({
   return (
     <Shell
       actor={actor}
-      active="network"
+      /* The sidebar keys on the route, so the route is what it is told.
+         Passing a bare "network" matched no entry, leaving Markets and
+         Messaging permanently unlit and the drawer that holds them closed. */
+      active={active ? `network/${active}` : "network"}
       name={data.market?.name || "Local demand network"}
     >
       <div className="network-operations">

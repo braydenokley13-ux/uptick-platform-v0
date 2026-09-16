@@ -315,14 +315,14 @@ test("this week's commitment is the week's effective supply, not the newest row"
     );
 
     const data = await overviewFor(db, fixture);
+    assert.equal(data.commitments.length, 1);
     assert.equal(
-      data.commitment?.week_key,
+      data.commitments[0].weekKey,
       fixture.weekKey,
-      "the commitment shown must be scoped to the week being shown",
+      "the commitments shown must be scoped to the week being shown",
     );
-    assert.notEqual(
-      data.commitment?.exact_item,
-      "NEXT WEEK ITEM",
+    assert.ok(
+      !data.commitments.some((c) => c.exactItem === "NEXT WEEK ITEM"),
       "a future week's item must never become today's counter instruction",
     );
   });
@@ -332,7 +332,7 @@ test("a future-week amendment does not rewrite this week's counter instruction",
   await withDatabase(async (db) => {
     const fixture = await seedSyntheticPilot(db, 2, "mo-amended");
     const before = await overviewFor(db, fixture);
-    const originalItem = before.commitment?.exact_item;
+    const originalItem = before.commitments[0]?.exactItem;
     assert.ok(originalItem);
 
     const futureWeek = addDays(fixture.weekKey, 7);
@@ -447,11 +447,11 @@ test("a future-week amendment does not rewrite this week's counter instruction",
 
     const after = await overviewFor(db, fixture);
     assert.equal(
-      after.commitment?.exact_item,
+      after.commitments[0]?.exactItem,
       originalItem,
       "amending a later week must not change what the counter does today",
     );
-    assert.equal(after.commitment?.week_key, fixture.weekKey);
+    assert.equal(after.commitments[0]?.weekKey, fixture.weekKey);
   });
 });
 

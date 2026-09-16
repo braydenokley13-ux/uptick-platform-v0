@@ -73,8 +73,14 @@ function ago(value: string | null | undefined) {
   return `${Math.max(1, Math.floor(ms / 60000))}m ago`;
 }
 
-export async function readinessGates(db: DB): Promise<Gate[]> {
-  const readiness = await releaseReadiness(db);
+export async function readinessGates(
+  db: DB,
+  /* Callers that already hold a readiness read pass it back in. The settings
+     page needs both the raw readiness and the gates, and computing it twice now
+     costs a full four-week capacity proof per Market Cell. */
+  existing?: Awaited<ReturnType<typeof releaseReadiness>>,
+): Promise<Gate[]> {
+  const readiness = existing ?? (await releaseReadiness(db));
   /* The same list the server gate enforces. Gates are reconciled against it
      below so the map cannot show green where enrollment would be refused. */
   const blockers = enrollmentBlockers(readiness);
@@ -203,37 +209,46 @@ export async function readinessGates(db: DB): Promise<Gate[]> {
 
   /* --- Market Cell -------------------------------------------------------- */
   /* `state` is a free operator-set text column, so "pilot" is a statement of
-     intent. A cell is only ready when something is actually behind it: four
-     distinct backed weeks, approved supply, an approved fallback and a
-     destination rehearsed within its validity window. Reading `state` alone
-     let a cell with no supply at all report the gate green. */
+     intent. Neither is a count of rows evidence: four weeks that each hold *a*
+     commitment, one approved supply and one rehearsed destination are all
+     satisfied by a single unit per week, which would let a 200-member pilot
+     read as ready while backing two people a month.
+
+     `marketReadiness` proves it per week instead, against the same
+     `pilotCapacity` engine admission and release use, and the market blockers
+     below are derived from that same proof — so this gate cannot be greener
+     than what the server will actually allow. */
   const realMarkets = readiness.markets.filter((m) => m.data_kind === "real");
-  const backed = realMarkets.filter(
-    (m) =>
-      m.state === "pilot" &&
-      m.backed_weeks >= 4 &&
-      m.approved_supplies > 0 &&
-      m.approved_fallbacks > 0 &&
-      m.ready_destinations > 0,
-  );
   const intended = realMarkets.filter((m) => m.state === "pilot");
+  const backed = intended.filter((m) => m.backed);
+  /* Every cell in pilot state has to hold, not one of them. A member's home ZIP
+     decides which cell they are routed into, so a backed cell in one
+     neighbourhood does not make a second neighbourhood able to serve anyone —
+     and reading "ready" off the first one is how the unbacked cell keeps
+     admitting. */
+  const unbacked = intended.filter((m) => !m.backed);
   const shortfall = (m: (typeof realMarkets)[number]) =>
     [
-      m.backed_weeks < 4 ? `${m.backed_weeks}/4 weeks backed` : null,
-      m.approved_supplies ? null : "no approved supply",
-      m.approved_fallbacks ? null : "no approved fallback",
-      m.ready_destinations ? null : "no destination rehearsed and in date",
+      m.evidence,
+      m.approvedSupplies ? null : "no approved supply",
+      m.approvedFallbacks ? null : "no approved fallback",
+      m.readyDestinations ? null : "no destination rehearsed and in date",
     ]
       .filter(Boolean)
       .join(", ");
   const market: Gate = {
     key: "market",
     label: GATE_LABEL.market,
-    state: backed.length ? "ready" : realMarkets.length ? "pending" : "blocked",
-    blocker: backed.length
-      ? `${backed.length} real Market Cell(s) with four backed weeks, approved supply, fallback and a rehearsed destination.`
+    state:
+      intended.length && !unbacked.length
+        ? "ready"
+        : realMarkets.length
+          ? "pending"
+          : "blocked",
+    blocker: unbacked.length
+      ? `${unbacked.map((m) => `${m.name}: ${shortfall(m)}`).join("; ")}.`
       : intended.length
-        ? `${intended.map((m) => `${m.name}: ${shortfall(m)}`).join("; ")}.`
+        ? backed.map((m) => `${m.name}: ${m.evidence}`).join("; ")
         : realMarkets.length
           ? `${realMarkets.length} real Market Cell(s) recorded but none in pilot state.`
           : "No real Market Cell exists yet. Only test classifications are present.",
@@ -241,10 +256,10 @@ export async function readinessGates(db: DB): Promise<Gate[]> {
       "There is no real neighbourhood, destination or four-week supply to admit anyone into.",
     owner: "Operator owner",
     action: realMarkets.length
-      ? "Confirm destinations, four-week supply and fallback, then move the cell to pilot."
+      ? "Raise the committed quantity, or the stock behind it, until every week covers the cohort."
       : "Create the real Market Cell, its locations and its approved supply.",
     evidence: realMarkets.length
-      ? realMarkets.map((m) => m.name).join(", ")
+      ? realMarkets.map((m) => `${m.name} (${m.evidence})`).join(" · ")
       : null,
     expiresAt: null,
     dependsOn: ["database"],

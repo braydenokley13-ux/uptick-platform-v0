@@ -114,6 +114,9 @@ test("a Market Cell is not ready merely because its state column says pilot", as
       "ready",
       "no supply, no fallback and no rehearsed destination exist behind this cell",
     );
-    assert.match(market.blocker, /weeks backed|approved supply|fallback/i);
+    assert.match(
+      market.blocker,
+      /no week is backed|usable units backed|approved supply|fallback/i,
+    );
   });
 });

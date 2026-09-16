@@ -47,8 +47,15 @@ function recoveryNote(incident: MerchantIncident) {
 }
 
 export function MerchantOverview({ data }: { data: Data }) {
-  const { organization, run, commitment, totals, weeks, incidents, completed } =
-    data;
+  const {
+    organization,
+    run,
+    commitments,
+    totals,
+    weeks,
+    incidents,
+    completed,
+  } = data;
 
   if (!run)
     return (
@@ -173,36 +180,51 @@ export function MerchantOverview({ data }: { data: Data }) {
         and a recorded redemption on its own isn’t proof an item changed hands.
       </p>
 
-      {/* 2. What do I need to provide? */}
-      {commitment && (
+      {/* 2. What do I need to provide? Everything, not the first one. */}
+      {commitments.length > 0 && (
         <section className="u-card u-card-pad mo-commit">
           <div className="u-head">
             <h2>{completed ? "What you provided" : "What you provide"}</h2>
+            {commitments.length > 1 && (
+              <span className="mo-commit-count">
+                {commitments.length} commitments this week
+              </span>
+            )}
           </div>
-          <div className="mo-commit-row">
-            <span className="mo-commit-mark">
-              <Coffee size={22} />
-            </span>
-            <div>
-              <strong>{commitment.exact_item}</strong>
-              <p>
-                {commitment.size_label} · {commitment.qualification}
-              </p>
-              <small>{commitment.usable_hours}</small>
-            </div>
-          </div>
-          {commitment.substitute_item && (
-            <div className="mo-commit-fallback">
-              <Dot tone="ok" />
-              <div>
-                <strong>If you run out: {commitment.substitute_item}</strong>
-                <small>
-                  {commitment.fallback_available ?? 0} substitutes still
-                  reserved. Hand one over and scan the same staff QR.
-                </small>
-              </div>
-            </div>
-          )}
+          <ul className="mo-commit-list">
+            {commitments.map((commitment) => (
+              <li key={commitment.supplyId}>
+                <div className="mo-commit-row">
+                  <span className="mo-commit-mark">
+                    <Coffee size={22} />
+                  </span>
+                  <div>
+                    <strong>{commitment.exactItem}</strong>
+                    <p>
+                      {commitment.sizeLabel} · {commitment.qualification}
+                    </p>
+                    <small>{commitment.usableHours}</small>
+                    <small>
+                      {commitment.committedQuantity} committed this week
+                      {commitment.address ? ` · ${commitment.address}` : ""}
+                    </small>
+                  </div>
+                </div>
+                {commitment.substituteItem && (
+                  <div className="mo-commit-fallback">
+                    <Dot tone="ok" />
+                    <div>
+                      <strong>If you run out: {commitment.substituteItem}</strong>
+                      <small>
+                        {commitment.fallbackAvailable ?? 0} substitutes still
+                        reserved. Hand one over and scan the same staff QR.
+                      </small>
+                    </div>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 

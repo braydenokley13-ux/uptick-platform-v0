@@ -23,15 +23,19 @@ import {
 } from "lucide-react";
 import { Brand } from "./ui";
 import { localMode } from "@/lib/config";
+import { memberTabs } from "@/lib/member-views";
 import "./member-home.css";
 
-const TABS = [
-  ["/your-uptick", "Home", House],
-  ["/your-uptick?view=history", "Uptick", Ticket],
-  ["/your-uptick?view=places", "Places", MapPin],
-  ["/sms", "Support", LifeBuoy],
-  ["/your-uptick?view=preferences", "Profile", User],
-] as const;
+/* The bar itself lives in src/lib/member-views.ts, alongside the views the
+   page renders, so a tab cannot exist without somewhere to land. Icons are the
+   only thing this file adds. */
+const TAB_ICON: Record<string, typeof House> = {
+  Home: House,
+  Uptick: Ticket,
+  Places: MapPin,
+  Support: LifeBuoy,
+  Profile: User,
+};
 
 /** App-like chrome. The bottom bar is the member's whole navigation. */
 export function MemberShell({
@@ -71,7 +75,9 @@ export function MemberShell({
         {children}
       </main>
       <nav className="mh-tabs" aria-label="Member navigation">
-        {TABS.map(([href, label, Icon]) => (
+        {memberTabs.map(({ href, label }) => {
+          const Icon = TAB_ICON[label];
+          return (
           <Link
             key={label}
             href={href}
@@ -81,7 +87,8 @@ export function MemberShell({
             <Icon size={19} strokeWidth={1.7} />
             <span>{label}</span>
           </Link>
-        ))}
+          );
+        })}
       </nav>
     </div>
   );
@@ -229,7 +236,10 @@ export function UptickReveal({
         <h2>{benefit}</h2>
         <p className="mh-reveal-where">at {merchant}</p>
         <p className="mh-reveal-meta">
-          {driveMinutes ? <span>{driveMinutes} min away</span> : null}
+          {/* An operator types this estimate in when a location joins a market
+              cell; nothing measures it. "12 min away" reads as a measurement,
+              so it says "about" — the same word the Places tab uses. */}
+          {driveMinutes ? <span>about {driveMinutes} min away</span> : null}
           {endsLabel ? <span>{endsLabel}</span> : null}
           {qualification ? <span>{qualification}</span> : null}
         </p>

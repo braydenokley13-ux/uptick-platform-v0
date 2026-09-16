@@ -210,6 +210,108 @@ export type PilotConstraint = {
 };
 export const constraintOrder: PilotConstraint["urgency"][] = ["bad", "warn"];
 
+/* How many members a week's supply has to back.
+
+   Before the cohort is frozen the run is still admitting, so the requirement is
+   the intention, not the current headcount: a 150-member pilot with five people
+   admitted still needs 150 backed, or every week looks healthy right up until
+   the moment it is not. Once the cohort is frozen the intention stops mattering
+   and the fixed admitted number is the whole obligation.
+
+   This is the rule pilot-supply-amendments.ts already enforced when accepting a
+   replacement supply. It lives here so the amendment path, the command centre
+   and the readiness gate cannot drift apart on what "backed" means. */
+export async function requiredCohort(db: DB, run: PilotRun) {
+  /* The operational audience, not the raw admission count. A withdrawn or
+     suspended member is not owed a benefit — `releaseWeeklyBenefits` refuses a
+     release that does not match this exact set — so counting them would demand
+     backing for people the week will never serve. */
+  const { included } = await operationalPilotAudience(db, run.id);
+  return run.cohort_frozen_at
+    ? included.length
+    : Math.max(included.length, run.target_members);
+}
+
+export type PilotWeekBacking = {
+  week: string;
+  /** 1 to 4. */
+  index: number;
+  /** Usable, eligible, committed units for this week, from pilotCapacity. */
+  usable: number;
+  /** Members this week has to back. */
+  required: number;
+  released: boolean;
+  /** True when the run still has to serve this week, so it still has to be
+      backed. A released week is history; a week already behind a frozen run
+      can no longer be served. */
+  outstanding: boolean;
+  /** How far short this week falls, floored at zero. */
+  short: number;
+};
+
+/* Whether a run is actually backed, week by week.
+
+   One function, because everything that asks "is this backed?" has to get the
+   same answer: the run-state gate, the readiness map, and the operator's
+   command centre. Asking it three ways is how a Market Cell shows a green
+   readiness gate while the run it belongs to cannot be taken live.
+
+   It proves the claim per week. An aggregate — total supplies, total committed
+   units, how many weeks have any commitment at all — cannot: a 200-member
+   cohort with one committed unit in each of four weeks satisfies every
+   aggregate and backs nobody. */
+export async function pilotBacking(
+  db: DB,
+  run: PilotRun,
+  capacity?: Awaited<ReturnType<typeof pilotCapacity>>,
+) {
+  const plan = capacity ?? (await pilotCapacity(db, run));
+  const required = await requiredCohort(db, run);
+  const published = await db.query<{ week_key: string }>(
+    "select week_key from weekly_releases where run_id=$1",
+    [run.id],
+  );
+  const currentWeek = run.timezone
+    ? marketWeekWindow(new Date(), run.timezone).weekKey
+    : new Date().toISOString().slice(0, 10);
+  const weeks: PilotWeekBacking[] = pilotWeeks(run).map((week, index) => {
+    const usable = plan.weeks.find((w) => w.week === week)?.capacity ?? 0;
+    const released = published.some((p) => p.week_key === week);
+    return {
+      week,
+      index: index + 1,
+      usable,
+      required,
+      released,
+      outstanding:
+        !released && (run.cohort_frozen_at ? week >= currentWeek : true),
+      short: Math.max(0, required - usable),
+    };
+  });
+  const outstanding = weeks.filter((w) => w.outstanding);
+  /* A run with nothing left to serve is not short of anything. */
+  const available = outstanding.length
+    ? Math.min(...outstanding.map((w) => w.usable))
+    : required;
+  const worst = outstanding
+    .filter((w) => w.short > 0)
+    .sort((a, b) => b.short - a.short || a.index - b.index)[0];
+  return {
+    capacity: plan,
+    required,
+    weeks,
+    outstanding,
+    available,
+    short: Math.max(0, required - available),
+    /* The sentence an operator can act on, naming the week and both numbers. */
+    evidence: worst
+      ? `Week ${worst.index}: ${worst.usable} usable units backed for ${worst.required} required.`
+      : weeks.length
+        ? `All four weeks back the ${required} members required.`
+        : "This run has no weeks planned.",
+  };
+}
+
 export async function pilotCapacity(
   db: DB,
   run: PilotRun,
@@ -435,33 +537,12 @@ export async function setPilotState(db: DB, actor: Actor, raw: unknown) {
         await (
           await import("./release-readiness")
         ).assertRealEnrollmentCommissioned(tx);
-      const capacity = await pilotCapacity(tx, run);
-      const published = run.cohort_frozen_at
-        ? await tx.query<{ week_key: string }>(
-            "select week_key from weekly_releases where run_id=$1",
-            [run.id],
-          )
-        : [];
-      const operational = run.cohort_frozen_at
-        ? await operationalPilotAudience(tx, run.id)
-        : null;
-      const requiredMembers = operational
-        ? operational.included.length
-        : run.target_members;
-      const currentWeek = marketWeekWindow(new Date(), run.timezone!).weekKey;
-      const upcoming = run.cohort_frozen_at
-        ? capacity.weeks.filter(
-            (w) =>
-              w.week >= currentWeek &&
-              !published.some((p) => p.week_key === w.week),
-          )
-        : capacity.weeks;
-      const available = upcoming.length
-        ? Math.min(...upcoming.map((w) => w.capacity))
-        : requiredMembers;
-      if (available < requiredMembers)
+      /* The shared proof, so this gate and the readiness map cannot disagree
+         about whether the same run is backed. */
+      const backing = await pilotBacking(tx, run);
+      if (backing.available < backing.required)
         throw new RequestError(
-          `Four-week supply backs ${available} members for the unreleased operating weeks; ${requiredMembers} are required. Confirm backing before continuing. Issued history remains unchanged.`,
+          `Four-week supply backs ${backing.available} members for the unreleased operating weeks; ${backing.required} are required. ${backing.evidence} Confirm backing before continuing. Issued history remains unchanged.`,
         );
       const missing = launchChecks.filter((key) => !checklist[key]);
       if (missing.length)

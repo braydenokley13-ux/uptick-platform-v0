@@ -88,3 +88,11 @@
 .operator-readiness > details > summary h2 {
   display: inline;
 }
+
+/* The one record an operator arrived here to see, when support deep-linked it. */
+.operator-ledger tr.is-focused {
+  background: #fdf3e2;
+}
+.operator-ledger tr.is-focused code {
+  font-weight: 600;
+}

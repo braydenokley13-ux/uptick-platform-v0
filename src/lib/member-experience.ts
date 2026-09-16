@@ -5,6 +5,7 @@ import { audit, authorize, weekKey, type Actor } from "./domain";
 import { RequestError } from "./http";
 import {
   allocationView,
+  marketWeekWindow,
   memberAccess,
   demandEvent,
   supplySelect,
@@ -175,6 +176,111 @@ export async function memberHome(
     marketingSubscribed: consent?.accepted === true,
     marketingConsentAction: consent?.consent_action || null,
     admission: admission || { state: "unavailable" as const },
+  };
+}
+
+/** One place in the member's Market Cell, and whether it is actually handing
+    out this week's Uptick. Deliberately not an offer: no item, no terms, no
+    "claim" — that lives on the weekly pass, which is the only place a benefit
+    is ever promised. */
+export type MemberPlace = {
+  supplyId: string;
+  name: string;
+  address: string;
+  driveMinutes: number | null;
+  state: "ready" | "not_ready" | "closed";
+  why: string;
+};
+
+/* "Where does Uptick work around me?"
+
+   The honest answer has three parts and no more: the neighbourhood Uptick runs
+   in, whether it is actually running, and the counters that are genuinely
+   backing this member's pilot week. Everything else a places tab could show —
+   a browsable list of offers, stores Uptick hopes to sign, photographs of
+   places, how many people saw something — is either unverifiable or a promise
+   nobody has made, so none of it is here.
+
+   The per-counter state comes from `destinationPins`, which reads
+   `pilotCapacity`: the same engine admission, release, the readiness gate and
+   the operator's command centre use. A member is therefore never told a counter
+   is ready while the operator is being told it is not. The numbers behind that
+   state stay on the operator's side; a member needs to know whether to walk
+   there, not how many units remain. */
+export async function memberPlaces(
+  db: DB,
+  credential: string,
+  asOf = new Date(),
+) {
+  const { member } = await memberAccess(db, credential);
+  const [market] = await db.query<{
+    id: string;
+    name: string;
+    state: string;
+    timezone: string;
+  }>(
+    "select id,name,state,timezone from market_cells where id=$1",
+    [member.market_id ?? ""],
+  );
+  const zips = market
+    ? await db.query<{ zip: string }>(
+        "select zip from market_zips where market_id=$1 order by zip",
+        [market.id],
+      )
+    : [];
+  /* Only the member's own run. A member who is waitlisted or not admitted has
+     no backed counter, and listing someone else's would be a promise. */
+  const [admission] = await db.query<{ run_id: string }>(
+    `select a.run_id from pilot_admissions a join pilot_runs r on r.id=a.run_id
+      where a.member_id=$1 and r.state<>'complete' limit 1`,
+    [member.id],
+  );
+  let places: MemberPlace[] = [];
+  let week: string | null = null;
+  if (admission) {
+    const { loadPilotRun, pilotCapacity, pilotWeeks } = await import(
+      "./pilot-operations"
+    );
+    const { destinationPins } = await import("./command-centre");
+    const run = await loadPilotRun(db, admission.run_id);
+    const weeks = pilotWeeks(run);
+    const current = marketWeekWindow(asOf, run.timezone!).weekKey;
+    week = weeks.includes(current) ? current : weeks[0];
+    const capacity = await pilotCapacity(db, run);
+    places = (await destinationPins(db, run, week, capacity)).map((pin) => ({
+      supplyId: pin.supplyId,
+      name: pin.label,
+      address: pin.address,
+      driveMinutes: pin.driveMinutes,
+      state:
+        pin.state === "outage"
+          ? ("closed" as const)
+          : pin.state === "not_ready"
+            ? ("not_ready" as const)
+            : ("ready" as const),
+      /* The operator's sentence carries unit counts and the reason a counter
+         failed its checks. A member gets the part that changes what they do. */
+      why:
+        pin.state === "outage"
+          ? "Closed right now. Nothing to pick up here this week."
+          : pin.state === "not_ready"
+            ? "Not handing out Uptick this week."
+            : pin.state === "low_supply"
+              ? "Open this week. Most of this week's Uptick has already been picked up."
+              : "Open this week.",
+    }));
+  }
+  const coverage = zips.map((row) => row.zip);
+  return {
+    market: market || null,
+    /* The neighbourhood, as the operator actually defined it. */
+    coverage,
+    homeZip: member.home_zip,
+    workZip: member.work_zip,
+    inCoverage: coverage.includes(member.home_zip),
+    admitted: !!admission,
+    week,
+    places,
   };
 }
 

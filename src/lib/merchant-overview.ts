@@ -1,7 +1,7 @@
 /* The merchant's whole story, in the order they ask it.
 
      1. What are we trying to accomplish?   → objective
-     2. What do I need to provide?          → commitment
+     2. What do I need to provide?          → commitments
      3. What is Uptick doing?               → activity
      4. What happened?                      → results
      5. What should we do next?             → next
@@ -51,6 +51,35 @@ export type MerchantIncident = {
   /** True when nothing has closed this out: no redeemed recovery and no
       operator resolution. An expired make-good lands here, not in "made good". */
   unresolved: boolean;
+};
+
+/** One thing this merchant has committed to hand over in a given week, at one
+    of their counters.
+
+    Plural on purpose. A merchant can run two locations, or back one week with
+    two different benefits at the same counter, and the schema allows exactly
+    that: `pilot_week_supplies` is keyed on (run, week, supply), so a week holds
+    as many supplies as were committed to it. Reading one row and calling it
+    "your commitment" silently hides the rest — and the rows have no ordering,
+    so which one survived was down to the planner. Staff then get told to hand
+    over an item that is only half of what was agreed. */
+export type MerchantCommitment = {
+  supplyId: string;
+  locationId: string;
+  address: string;
+  /** The exact item staff hand over. */
+  exactItem: string;
+  sizeLabel: string;
+  usableHours: string;
+  qualification: string;
+  terms: string;
+  /** The effective committed quantity for this week, after amendments. */
+  committedQuantity: number;
+  substituteItem: string | null;
+  /** Substitutes still reserved behind this commitment, or null when no
+      approved fallback exists. */
+  fallbackAvailable: number | null;
+  weekKey: string;
 };
 
 export type MerchantWeek = {
@@ -127,7 +156,7 @@ export async function merchantOverview(db: DB, actor: Actor) {
       organization,
       run: null as null,
       completed: false,
-      commitment: null,
+      commitments: [] as MerchantCommitment[],
       weeks: [],
       activeWeek: null,
       totals: null,
@@ -150,11 +179,18 @@ export async function merchantOverview(db: DB, actor: Actor) {
 
      Only approved rows are read. A draft or paused supply, or an unapproved
      fallback, is not something staff should be told to hand over — printing it
-     here would put an item on the counter that nobody agreed to provide. */
+     here would put an item on the counter that nobody agreed to provide.
+
+     Every one of them is read. This was `limit 1` with no order by, so a
+     merchant backing two counters — or one counter backing a week with two
+     benefits — saw whichever row the planner happened to return, and the other
+     obligation simply vanished from the page they run their morning off. */
   const commitmentWeek = weekKeys.includes(currentWeek)
     ? currentWeek
     : weekKeys.filter((key) => key <= currentWeek).pop() || weekKeys[0];
-  const [commitment] = await db.query<{
+  const commitmentRows = await db.query<{
+    supply_id: string;
+    location_id: string;
     exact_item: string;
     size_label: string;
     usable_hours: string;
@@ -164,11 +200,14 @@ export async function merchantOverview(db: DB, actor: Actor) {
     fallback_available: number | null;
     address: string;
     week_key: string;
-    committed_quantity: number | null;
+    committed_quantity: number;
   }>(
-    `select t.exact_item,t.size_label,t.usable_hours,v.qualification,v.terms,
+    `select s.id supply_id,s.location_id,
+            t.exact_item,t.size_label,t.usable_hours,v.qualification,v.terms,
             f.substitute_item,
-            greatest(0,f.usable_capacity-(select count(*)::int from recovery_grants rg where rg.fallback_id=f.id and (rg.state='redeemed' or (rg.superseded_at is null and rg.expires_at>now())))) fallback_available,
+            case when f.id is null then null else
+              greatest(0,f.usable_capacity-(select count(*)::int from recovery_grants rg where rg.fallback_id=f.id and (rg.state='redeemed' or (rg.superseded_at is null and rg.expires_at>now()))))
+            end fallback_available,
             coalesce(l.address,'') address,
             p.week_key, p.committed_quantity
        from effective_pilot_week_supplies p
@@ -179,9 +218,23 @@ export async function merchantOverview(db: DB, actor: Actor) {
        left join pilot_supply_fallbacks f on f.supply_id=s.id and f.state='approved'
       where p.run_id=$1 and p.week_key=$2 and s.organization_id=$3
         and s.state='approved'
-      limit 1`,
+      order by coalesce(l.address,''),t.exact_item,s.id`,
     [run.id, commitmentWeek, organizationId],
   );
+  const commitments: MerchantCommitment[] = commitmentRows.map((row) => ({
+    supplyId: row.supply_id,
+    locationId: row.location_id,
+    address: row.address,
+    exactItem: row.exact_item,
+    sizeLabel: row.size_label,
+    usableHours: row.usable_hours,
+    qualification: row.qualification,
+    terms: row.terms,
+    committedQuantity: row.committed_quantity,
+    substituteItem: row.substitute_item,
+    fallbackAvailable: row.fallback_available,
+    weekKey: row.week_key,
+  }));
 
   /* Week activity, scoped to the run's own classification.
 
@@ -295,8 +348,13 @@ export async function merchantOverview(db: DB, actor: Actor) {
     organization,
     run,
     completed,
-    commitment: commitment || null,
-    location: commitment?.address || null,
+    commitments,
+    /* One address only when there genuinely is one. A merchant backing two
+       counters must not see one of them printed as "where this is happening". */
+    location:
+      new Set(commitments.map((c) => c.address).filter(Boolean)).size === 1
+        ? commitments.find((c) => c.address)!.address
+        : null,
     weeks,
     activeWeek,
     totals: {

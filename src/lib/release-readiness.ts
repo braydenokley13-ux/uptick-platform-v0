@@ -9,6 +9,11 @@ import { RequestError } from "./http";
 import { scheduledJobHealth } from "./scheduled-jobs";
 import { memberMessagingReadiness } from "./member-messaging";
 import { privacyPolicy } from "./privacy-admin";
+import {
+  pilotBacking,
+  type PilotRun,
+  type PilotWeekBacking,
+} from "./pilot-operations";
 
 export const commissioningChecks = [
   ["ci_build", "Software", "CI and build at this release"],
@@ -267,6 +272,108 @@ export async function recordCallbackHealth(
     [kind, success, code ? `http_${code}` : "processing_failed", scope],
   );
 }
+/** A Market Cell, and the proof — or the absence of one — that the cohort it
+    intends to admit is actually backed in every week it still has to serve. */
+export type MarketReadiness = {
+  id: string;
+  name: string;
+  state: string;
+  data_kind: string;
+  /** The run this cell's readiness is about, if it has one. */
+  run: { id: string; name: string; state: string; cohortFrozen: boolean } | null;
+  /** All four weeks, each with what it must back and what it can. */
+  weeks: PilotWeekBacking[];
+  required: number;
+  /** True only when every week the run still has to serve covers the cohort. */
+  backed: boolean;
+  /** The specific sentence: "Week 3: 142 usable units backed for 150 required." */
+  evidence: string;
+  /** Why capacity may be zero. Diagnostics, never the proof itself. */
+  approvedSupplies: number;
+  approvedFallbacks: number;
+  readyDestinations: number;
+};
+
+/* Whether each Market Cell can actually serve the cohort it intends to admit.
+
+   A Market Cell's `state` is a free operator-set text column, so "pilot" is a
+   statement of intent, not evidence. Counting rows is barely better: four weeks
+   that each hold *a* commitment, one approved supply and one rehearsed
+   destination are all satisfied by a single unit per week, which would let a
+   200-member pilot read as ready while backing two people a month.
+
+   So this proves it the only way it can be proved — per week, comparing the
+   cohort that week owes against the usable eligible committed capacity behind
+   it, through `pilotBacking`: the same function the run-state gate uses and the
+   same `pilotCapacity` engine admission and release use. */
+export async function marketReadiness(db: DB): Promise<MarketReadiness[]> {
+  const cells = await db.query<{
+    id: string;
+    name: string;
+    state: string;
+    data_kind: string;
+    approved_supplies: number;
+    approved_fallbacks: number;
+    ready_destinations: number;
+  }>(
+    `select k.id,k.name,k.state,k.data_kind,
+            (select count(*)::int
+               from pilot_runs r join effective_pilot_week_supplies p on p.run_id=r.id
+               join network_drop_supplies s on s.id=p.supply_id
+              where r.market_id=k.id and r.state<>'complete' and s.state='approved') approved_supplies,
+            (select count(*)::int
+               from pilot_runs r join effective_pilot_week_supplies p on p.run_id=r.id
+               join pilot_supply_fallbacks f on f.supply_id=p.supply_id and f.state='approved'
+              where r.market_id=k.id and r.state<>'complete') approved_fallbacks,
+            (select count(*)::int
+               from pilot_runs r join effective_pilot_week_supplies p on p.run_id=r.id
+               join destination_readiness d on d.supply_id=p.supply_id
+              where r.market_id=k.id and r.state<>'complete'
+                and d.state='ready' and d.valid_until>now()) ready_destinations
+       from market_cells k order by k.name`,
+  );
+  /* The run a member of this cell would actually be admitted into, ordered the
+     way that decision is made: what is running now outranks what is planned. */
+  const runs = await db.query<PilotRun>(
+    `select distinct on (r.market_id) r.*,r.starts_on::text starts_on,r.ends_on::text ends_on,m.timezone
+       from pilot_runs r join market_cells m on m.id=r.market_id
+      where r.state<>'complete' and r.data_kind=m.data_kind
+      order by r.market_id,
+               case r.state when 'live' then 0 when 'enrolling' then 1
+                            when 'paused' then 2 else 3 end,
+               r.starts_on`,
+  );
+  return Promise.all(
+    cells.map(async (cell) => {
+      const run = runs.find((r) => r.market_id === cell.id) || null;
+      const backing = run ? await pilotBacking(db, run) : null;
+      return {
+        id: cell.id,
+        name: cell.name,
+        state: cell.state,
+        data_kind: cell.data_kind,
+        run: run
+          ? {
+              id: run.id,
+              name: run.name,
+              state: run.state,
+              cohortFrozen: !!run.cohort_frozen_at,
+            }
+          : null,
+        weeks: backing?.weeks ?? [],
+        required: backing?.required ?? 0,
+        backed: !!backing && backing.weeks.length === 4 && !backing.short,
+        evidence: backing
+          ? backing.evidence
+          : "No pilot run exists for this Market Cell, so no week is backed.",
+        approvedSupplies: cell.approved_supplies,
+        approvedFallbacks: cell.approved_fallbacks,
+        readyDestinations: cell.ready_destinations,
+      };
+    }),
+  );
+}
+
 export async function releaseReadiness(db: DB) {
   const [
     schema,
@@ -301,38 +408,7 @@ export async function releaseReadiness(db: DB) {
     db.query<{ open: number; oldest: string | null }>(
       "select count(*)::int open,min(created_at) oldest from member_support_requests where state in ('queued','working')",
     ),
-    /* A Market Cell's `state` is a free operator-set text column, so it is a
-       statement of intent, not evidence. These counts are the evidence: what
-       is actually backed, approved, substitutable and rehearsed. */
-    db.query<{
-      id: string;
-      name: string;
-      state: string;
-      data_kind: string;
-      backed_weeks: number;
-      approved_supplies: number;
-      approved_fallbacks: number;
-      ready_destinations: number;
-    }>(
-      `select k.id,k.name,k.state,k.data_kind,
-              (select count(distinct p.week_key)::int
-                 from pilot_runs r join effective_pilot_week_supplies p on p.run_id=r.id
-                where r.market_id=k.id and r.state<>'complete') backed_weeks,
-              (select count(*)::int
-                 from pilot_runs r join effective_pilot_week_supplies p on p.run_id=r.id
-                 join network_drop_supplies s on s.id=p.supply_id
-                where r.market_id=k.id and r.state<>'complete' and s.state='approved') approved_supplies,
-              (select count(*)::int
-                 from pilot_runs r join effective_pilot_week_supplies p on p.run_id=r.id
-                 join pilot_supply_fallbacks f on f.supply_id=p.supply_id and f.state='approved'
-                where r.market_id=k.id and r.state<>'complete') approved_fallbacks,
-              (select count(*)::int
-                 from pilot_runs r join effective_pilot_week_supplies p on p.run_id=r.id
-                 join destination_readiness d on d.supply_id=p.supply_id
-                where r.market_id=k.id and r.state<>'complete'
-                  and d.state='ready' and d.valid_until>now()) ready_destinations
-         from market_cells k order by k.name`,
-    ),
+    marketReadiness(db),
   ]);
   const releaseSha = process.env.VERCEL_GIT_COMMIT_SHA || "local";
   const messagingScope = await messagingCommissioningScope(db);
@@ -500,6 +576,30 @@ export function enrollmentBlockers(
       "identity",
       "Operator multi-factor authentication is not required.",
     );
+  /* The Market Cell condition. This used not to exist here at all: the
+     readiness map drew a Market Cell gate that the server never enforced, so a
+     cell with nothing behind it blocked nothing. A cohort that cannot be served
+     is exactly what enrollment must not step past, and the proof is the same
+     per-week one the gate renders. */
+  const pilotCells = readiness.markets.filter(
+    (m) => m.data_kind === "real" && m.state === "pilot",
+  );
+  if (!pilotCells.length)
+    add(
+      "market_cell",
+      "market",
+      "No real Market Cell is in pilot state, so there is nowhere to admit anyone.",
+    );
+  else
+    /* Every cell in pilot state, not "at least one of them". A member's home ZIP
+       decides which cell they land in, so one backed neighbourhood does not
+       make a second one able to serve anybody. */
+    for (const cell of pilotCells.filter((m) => !m.backed))
+      add(
+        `market_backing:${cell.id}`,
+        "market",
+        `${cell.name} cannot back its cohort in every week it must serve. ${cell.evidence}`,
+      );
   for (const kind of ["inbound", "status"])
     if (
       !readiness.callbacks.some(
@@ -515,6 +615,14 @@ export function enrollmentBlockers(
 }
 
 export async function assertRealEnrollmentCommissioned(db: DB) {
+  /* The switch itself. `setPilotState` refused a real run without it, but the
+     admission path did not, so the readiness map could read "deliberately
+     closed" while a real member was being admitted through another door. */
+  if (process.env.PILOT_ENROLLMENT_ENABLED !== "true")
+    throw new RequestError(
+      "Real enrollment is waiting for verified release, account, messaging and support commissioning.",
+      503,
+    );
   const readiness = await releaseReadiness(db);
   /* The reason stays generic: this also guards the public signup path, and an
      unauthenticated caller should not be handed a list of what is unfinished.

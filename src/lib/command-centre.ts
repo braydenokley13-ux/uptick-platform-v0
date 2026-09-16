@@ -12,7 +12,12 @@
    2. Nothing is rounded into reassurance. A week that is short says how short. */
 import type { DB } from "./db";
 import type { Actor } from "./domain";
-import { pilotCapacity, pilotWeeks, type PilotRun } from "./pilot-operations";
+import {
+  pilotCapacity,
+  pilotWeeks,
+  requiredCohort,
+  type PilotRun,
+} from "./pilot-operations";
 import { marketWeekWindow } from "./network";
 
 export type DestinationPin = {
@@ -30,6 +35,13 @@ export type DestinationPin = {
   why: string;
   issued: number;
   redeemed: number;
+  /** Units this counter can actually serve this week, from pilotCapacity. */
+  backed: number;
+  /** What was committed to this week, before eligibility and competition. */
+  committed: number;
+  /** Physical store inventory. Never the same thing as `backed`. */
+  inventory: number;
+  /** `backed` less what has already been issued this week. */
   remaining: number;
   fallbackAvailable: number;
   openIncidents: number;
@@ -46,11 +58,17 @@ export type WeekBacking = {
   short: number;
 };
 
-/** Destinations in this Market Cell with their real current state. */
+/** Destinations in this Market Cell with their real current state.
+
+    Takes the capacity plan rather than recomputing one. What a counter can
+    serve this week is decided by `pilotCapacity`, the same engine admission,
+    release and the amendment guard use; asking a second question here is how
+    two surfaces end up disagreeing about the same store. */
 export async function destinationPins(
   db: DB,
   run: PilotRun,
   weekKey: string,
+  capacity: Awaited<ReturnType<typeof pilotCapacity>>,
 ): Promise<DestinationPin[]> {
   const rows = await db.query<{
     supply_id: string;
@@ -100,9 +118,27 @@ export async function destinationPins(
     [run.id, weekKey],
   );
   return rows.map((row) => {
-    const remaining = Math.max(0, row.inventory - row.issued);
+    /* What this counter can actually serve this week, not what the store holds.
+
+       This read `inventory - issued` and called the result "backed units". A
+       store with 100 of an item that committed 20 to this week and has issued
+       18 has 2 left to give, not 82 — and the operator who sees 82 does not
+       reorder, does not amend, and finds out on Saturday. `quantity` is the
+       usable figure from pilotCapacity: the commitment, capped by inventory
+       net of competing obligations, by the fallback behind it, and by any
+       commercial limit, and zero unless the supply is eligible at all.
+
+       Grants already issued for this run and week are deliberately not in
+       `competing` — they are draws against this commitment, so subtracting
+       them here is the one correct subtraction rather than a second one. */
+    const plan = capacity.supplies.find(
+      (supply) =>
+        supply.week_key === weekKey && supply.supply_id === row.supply_id,
+    );
+    const backed = plan?.quantity ?? 0;
+    const remaining = Math.max(0, backed - row.issued);
     let state: DestinationPin["state"] = "active";
-    let why = `${remaining} of ${row.inventory} backed units remain this week.`;
+    let why = `${remaining} of ${backed} backed units remain this week.`;
     if (row.outage_reason) {
       state = "outage";
       why = `Closed to routing. ${row.outage_reason}`;
@@ -115,9 +151,19 @@ export async function destinationPins(
         row.ready_state === "ready"
           ? "Readiness confirmation has expired. Re-confirm stock and staff."
           : `Destination readiness is ${(row.ready_state || "not recorded").replaceAll("_", " ")}. Confirm before the next release.`;
-    } else if (remaining <= Math.max(3, Math.round(row.inventory * 0.15))) {
+    } else if (!backed) {
+      /* Eligibility failed for a reason the columns above do not name — an
+         unapproved or colliding fallback, a missing staff QR credential, a
+         supply window that does not cover the week, an exhausted commercial
+         limit. Say so plainly rather than reporting "0 of 0 remain". */
+      state = "not_ready";
+      why =
+        row.committed > 0
+          ? `Committed ${row.committed} this week, but none of it is currently usable. Check the fallback, the staff QR credential and the supply's dates.`
+          : "Nothing is committed to this week at this counter.";
+    } else if (remaining <= Math.max(3, Math.round(backed * 0.15))) {
       state = "low_supply";
-      why = `Only ${remaining} of ${row.inventory} backed units remain this week.`;
+      why = `Only ${remaining} of ${backed} backed units remain this week.`;
     }
     if (row.open_incidents && state === "active") {
       why = `${row.open_incidents} open incident(s) at this counter. ${why}`;
@@ -135,6 +181,9 @@ export async function destinationPins(
       why,
       issued: row.issued,
       redeemed: row.redeemed,
+      backed,
+      committed: row.committed,
+      inventory: row.inventory,
       remaining,
       fallbackAvailable: row.fallback_available,
       openIncidents: row.open_incidents,
@@ -171,6 +220,10 @@ export async function commandCentre(
   actor: Actor,
   run: PilotRun,
   weekKey?: string,
+  /* The operator overview already resolves this run's plan through
+     `pilotOperations`. Passing it in means the same page does not pay for the
+     same capacity proof twice. */
+  existingCapacity?: Awaited<ReturnType<typeof pilotCapacity>>,
 ) {
   void actor;
   const weeks = pilotWeeks(run);
@@ -180,8 +233,10 @@ export async function commandCentre(
     : weeks.includes(currentWeek)
       ? currentWeek
       : weeks[0];
+  /* The pins read this plan rather than asking their own capacity question,
+     so it is resolved first and the rest of the reads still run together. */
+  const capacity = existingCapacity ?? (await pilotCapacity(db, run));
   const [
-    capacity,
     pins,
     releases,
     admitted,
@@ -192,8 +247,7 @@ export async function commandCentre(
     messaging,
     incidents,
   ] = await Promise.all([
-    pilotCapacity(db, run),
-    destinationPins(db, run, week),
+    destinationPins(db, run, week, capacity),
     db.query<{ week_key: string }>(
       "select week_key from weekly_releases where run_id=$1",
       [run.id],
@@ -236,7 +290,10 @@ export async function commandCentre(
     ),
   ]);
   const released = releases.map((r) => r.week_key);
-  const owed = admitted[0]?.n || run.target_members;
+  /* Not `admitted || target_members`: with five admitted into a 150-member
+     pilot that reported a requirement of five, and every week read as fully
+     backed. Until the cohort is frozen the intention is the obligation. */
+  const owed = await requiredCohort(db, run);
   const backing = weekBacking(run, capacity, released, owed, currentWeek);
   const index = weeks.indexOf(week);
   const failedMessages = messaging
@@ -262,9 +319,11 @@ export async function commandCentre(
     openIncidents: incidents[0]?.n || 0,
     support: support[0] || { open: 0, oldest: null },
     failedMessages,
-    atRisk:
-      (incidents[0]?.n || 0) +
-      pins.filter((p) => p.state === "outage" || p.state === "not_ready")
-        .length,
+    /* Two different facts, kept apart. Adding them produced a headline that
+       double-counted an open incident at an unavailable counter and named no
+       real quantity — exactly the invented composite this file forbids. */
+    unavailableDestinations: pins.filter(
+      (p) => p.state === "outage" || p.state === "not_ready",
+    ).length,
   };
 }

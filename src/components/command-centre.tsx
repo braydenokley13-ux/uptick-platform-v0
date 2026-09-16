@@ -203,7 +203,12 @@ export function CommandCentre({
   weekHref,
 }: {
   centre: Centre;
-  run: { name: string; state: string; target_members: number };
+  run: {
+    name: string;
+    state: string;
+    target_members: number;
+    cohort_frozen_at: string | null;
+  };
   marketName: string;
   operatorName: string;
   constraints: PilotConstraint[];
@@ -279,10 +284,14 @@ export function CommandCentre({
         <Stat
           label="Members"
           value={centre.admitted}
+          /* The binding limit is not the target: admission stops at
+             min(hard_cap, the smallest backed week), which is what
+             pilotCapacity returns. Printing the target as "cap" named a number
+             that never decides anything. */
           foot={
             centre.waitlisted
-              ? `${centre.waitlisted} waitlisted · cap ${run.target_members}`
-              : `Admitted against a ${run.target_members} target`
+              ? `${centre.waitlisted} waitlisted · ${centre.capacity.capacity} backed places · ${run.target_members} target`
+              : `Admitted against a ${run.target_members} target · ${centre.capacity.capacity} backed places`
           }
           tone={centre.waitlisted ? "warn" : undefined}
         />
@@ -307,15 +316,21 @@ export function CommandCentre({
           tone={centre.issued ? "ok" : "idle"}
         />
         <Stat
-          label="At risk"
-          value={centre.atRisk}
-          attention={centre.atRisk > 0}
+          label="Counters unavailable"
+          value={centre.unavailableDestinations}
+          attention={centre.unavailableDestinations > 0}
           foot={
-            centre.atRisk
-              ? `${centre.openIncidents} open incident(s) · ${centre.pins.filter((p) => p.state === "outage" || p.state === "not_ready").length} destination(s)`
-              : "No open incidents or unavailable counters"
+            centre.openIncidents
+              ? `Separately, ${centre.openIncidents} open incident(s)`
+              : centre.unavailableDestinations
+                ? "No open incidents"
+                : "Every counter is routable, no open incidents"
           }
-          tone={centre.atRisk ? "bad" : "ok"}
+          tone={
+            centre.unavailableDestinations || centre.openIncidents
+              ? "bad"
+              : "ok"
+          }
         />
       </div>
 
@@ -367,6 +382,15 @@ export function CommandCentre({
                   tone={item.tone}
                   title={item.label}
                   why={item.why}
+                  /* operatorReadinessRows already resolves where each gate is
+                     fixed; the strip used to compute that link and drop it. */
+                  end={
+                    item.href ? (
+                      <Link href={item.href} aria-label={`Open ${item.label}`}>
+                        <ArrowRight size={13} />
+                      </Link>
+                    ) : undefined
+                  }
                 />
               ))}
             </div>
@@ -407,9 +431,15 @@ export function CommandCentre({
               ))}
             </ol>
             <p className="cc-weeks-note">
+              {/* This said the comparison was against admitted members "not
+                  the original target", which is the opposite of the rule the
+                  engine applies while a run is still enrolling. */}
               Backing compares each week’s usable supply with the{" "}
-              {centre.admitted} members already admitted — not the original
-              target.
+              {centre.backing[0]?.required ?? centre.admitted} members this run
+              owes a benefit
+              {run.cohort_frozen_at
+                ? " — its fixed cohort, less anyone who has left."
+                : ` — its ${run.target_members}-member intention, because it is still enrolling.`}
             </p>
           </section>
         </div>

@@ -347,3 +347,64 @@
     padding-inline: 14px;
   }
 }
+
+/* --- Places ---------------------------------------------------------------
+   The neighbourhood, its ZIPs and the counters actually backing this member's
+   week. No imagery: Uptick never shows a picture of a store it cannot vouch
+   for, and that rule does not relax because this tab is about places. */
+.member-places {
+  display: grid;
+  gap: 16px;
+}
+.member-places h1 {
+  font-size: 30px;
+  line-height: 1.12;
+  letter-spacing: -0.03em;
+  font-weight: 600;
+}
+.member-places h1 em {
+  font-style: normal;
+  color: var(--mint-deep);
+}
+.member-places-coverage {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: var(--paper);
+}
+.member-places-coverage strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+}
+.member-places-coverage p {
+  font-size: 13.5px;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+.member-places-coverage small {
+  display: block;
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+.member-places-list {
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+.member-places-state {
+  display: block;
+  font-size: 12.5px;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+.member-places-state.ok {
+  color: var(--mint-deep);
+}
+.member-places-state.warn {
+  color: var(--amber-deep);
+}
+.member-places-state.idle {
+  color: var(--muted);
+}
