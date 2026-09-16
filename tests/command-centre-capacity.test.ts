@@ -416,3 +416,119 @@ test("a supply outside any programme reports the same total it can place", async
       );
   });
 });
+
+test("I · two counters under one programme share its placements, they do not each get them", async () => {
+  await withDatabase(async (db) => {
+    const fixture = await seedSyntheticPilot(db, 20, "cc-shared");
+    const run = await loadPilotRun(db, fixture.runId);
+    const [source] = await db.query<{ organization_id: string }>(
+      "select organization_id from network_drop_supplies where id=$1",
+      [fixture.supplyId],
+    );
+    const org = source.organization_id;
+    /* A second eligible counter in the same week, then one twenty-placement
+       programme covering both. The programme's remaining capacity is
+       programme-wide, so capping each counter by it separately would let the
+       two rows offer the same placements twice. */
+    await addEligibleCounter(
+      db,
+      fixture,
+      "cc-shared-second",
+      20,
+      fixture.weekKey,
+    );
+    await db.transaction(async (tx) => {
+      await tx.query(
+        `insert into growth_programs(id,buyer_organization_id,market_id,status,current_version,approved_version,created_by)
+         values('cc-shared-p',$1,$2,'active',1,1,$3)`,
+        [org, fixture.marketId, fixture.actor.id],
+      );
+      await tx.query(
+        `insert into growth_program_versions(
+           program_id,version,name,objective,starts_on,ends_on,buyer_organization_id,
+           funder_organization_id,fulfiller_organization_id,negotiated_fee_cents,
+           commercial_status,benefit_ceiling,operating_constraints,evaluation_plan,proposed_by
+         ) values('cc-shared-p',1,'Synthetic shared program','introduce_store',$1::date,$1::date+28,$2,$2,$2,
+           0,'agreed',80,'Synthetic operating constraints for this test.',
+           'Synthetic evaluation plan for this test.',$3)`,
+        [fixture.weekKey, org, fixture.actor.id],
+      );
+    });
+    await db.query(
+      "insert into growth_program_week_plans(program_id,program_version,week_key,planned_placements) values('cc-shared-p',1,$1,20)",
+      [fixture.weekKey],
+    );
+    await db.query(
+      `insert into growth_program_approvals(id,program_id,program_version,run_id,decision,capacity_snapshot,note,decided_by)
+       values('cc-shared-approval','cc-shared-p',1,$1,'approved','{}','Synthetic approval.',$2)`,
+      [fixture.runId, fixture.actor.id],
+    );
+    for (const supply of [fixture.supplyId, "cc-shared-second"])
+      await db.query(
+        "insert into program_supply_links(program_id,program_version,supply_id,week_key,linked_by) values('cc-shared-p',1,$1,$2,$3)",
+        [supply, fixture.weekKey, fixture.actor.id],
+      );
+
+    /* Eighteen placements already made at the first counter, attributed to the
+       programme — which is what `remaining_capacity` counts. Written directly
+       rather than through `releaseWeeklyBenefits` so the test stays about
+       capacity arithmetic rather than about assignment suitability. */
+    await db.query(
+      `insert into weekly_releases(id,run_id,market_id,week_key,state,data_kind,member_count,reviewed_by,request_key,request_fingerprint)
+       values('cc-shared-release',$1,$2,$3,'published','synthetic',18,$4,'cc-shared-release','synthetic')`,
+      [fixture.runId, fixture.marketId, fixture.weekKey, fixture.actor.id],
+    );
+    for (const [index, member] of fixture.members.slice(0, 18).entries()) {
+      await db.query(
+        `insert into member_allocations(id,member_id,market_id,week_key) values($1,$2,$3,$4)`,
+        [`cc-shared-alloc-${index}`, member.id, fixture.marketId, fixture.weekKey],
+      );
+      await db.query(
+        "insert into allocation_options(allocation_id,supply_id,market_id,rank,reason) values($1,$2,$3,1,'{}')",
+        [`cc-shared-alloc-${index}`, fixture.supplyId, fixture.marketId],
+      );
+      await db.query(
+        `insert into fulfillment_grants(
+           id,release_id,allocation_id,member_id,market_id,week_key,supply_id,
+           organization_id,location_id,offer_id,offer_version,member_snapshot,
+           expires_at,data_kind,source_program_id,source_program_version
+         ) select $1,'cc-shared-release',$2,$3,$4,$5,s.id,s.organization_id,s.location_id,
+           s.offer_id,s.offer_version,'{}'::jsonb,now()+interval '7 days','synthetic',
+           'cc-shared-p',1
+           from network_drop_supplies s where s.id=$6`,
+        [
+          `cc-shared-grant-${index}`,
+          `cc-shared-alloc-${index}`,
+          member.id,
+          fixture.marketId,
+          fixture.weekKey,
+          fixture.supplyId,
+        ],
+      );
+    }
+
+    const capacity = await pilotCapacity(db, run);
+    const week = capacity.supplies.filter(
+      (supply) => supply.week_key === fixture.weekKey,
+    );
+    assert.equal(
+      week.reduce((n, supply) => n + supply.quantity, 0),
+      2,
+      "the programme has two placements left in total, not two per counter",
+    );
+    assert.equal(
+      week.reduce((n, supply) => n + supply.weekTotal, 0),
+      20,
+      "and twenty is what the week was planned to back, across both counters",
+    );
+
+    const pins = await destinationPins(db, run, fixture.weekKey, capacity);
+    assert.equal(
+      pins.reduce((n, pin) => n + pin.remaining, 0),
+      2,
+      "the two rows together offer two placements, not four",
+    );
+    const spent = pins.find((pin) => pin.remaining === 0)!;
+    assert.match(spent.why, /Growth Program has no placements left/);
+  });
+});

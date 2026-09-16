@@ -173,8 +173,9 @@ export async function destinationPins(
          supply window that does not cover the week, an exhausted commercial
          limit. Say so plainly rather than reporting "0 of 0 remain". */
       state = "not_ready";
-      why =
-        row.committed > 0
+      why = plan?.commercialExhausted
+        ? `Committed ${row.committed} ${when}, but this counter's Growth Program has no placements left to give here.`
+        : row.committed > 0
           ? `Committed ${row.committed} ${when}, but none of it is currently usable. Check the fallback, the staff QR credential and the supply's dates.`
           : `Nothing is committed ${when} at this counter.`;
     } else if (remaining <= Math.max(3, Math.round(backed * 0.15))) {

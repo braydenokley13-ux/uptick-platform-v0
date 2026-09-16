@@ -184,3 +184,35 @@ test("a callback row is green only when the shared currency rule says so", async
     assert.equal(data.readiness.ready, false);
   });
 });
+
+test("a failure after the last good callback is the current state of that webhook", async () => {
+  await withDatabase(async (db) => {
+    await seedSyntheticPilot(db, 2, "tc-newer-failure");
+    const { messagingCommissioningScope } = await import(
+      "../src/lib/release-readiness"
+    );
+    const scope = await messagingCommissioningScope(db);
+    /* A success for the current scope an hour ago, then a failure since. The
+       recency-and-scope test alone still passes, so ignoring the failure kept
+       the gate green for a week while STOP and HELP were failing. */
+    await db.query(
+      `insert into member_callback_health(kind,successful_count,failed_count,last_success_at,last_success_scope,last_failure_at,last_failure_code)
+       values('inbound',1,1,now()-interval '1 hour',$1,now()-interval '5 minutes','processing_failed')`,
+      [scope],
+    );
+
+    const data = await membershipMessagingOperations(db, {
+      id: "tc-operator",
+      role: "operator",
+      organizationId: "tc-newer-failure-merchant",
+    });
+    const inbound = data.callbacks.find((c) => c.kind === "inbound")!;
+    assert.equal(inbound.last_success_scope, scope, "the scope is right");
+    assert.equal(
+      inbound.current,
+      false,
+      "but a failure since is what this webhook is doing now",
+    );
+    assert.equal(data.readiness.ready, false);
+  });
+});

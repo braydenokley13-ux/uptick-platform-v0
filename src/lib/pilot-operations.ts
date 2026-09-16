@@ -366,7 +366,7 @@ export async function pilotCapacity(
   // this pilot's reservation and clamps shortages to zero, so adding a whole
   // commitment to it can fabricate units. Issued grants for this same plan are
   // part of its commitment; they must not be subtracted a second time.
-  const quantities = await Promise.all(
+  const measured = await Promise.all(
     plans.map(async (p) => {
       let programId: string | null = null,
         commercialCapacity: number | null = null;
@@ -394,29 +394,67 @@ export async function pilotCapacity(
             ),
           )
         : 0;
-      const quantity = Math.min(total, commercialCapacity ?? Infinity);
       return {
         week_key: p.week_key,
         supply_id: p.supply_id,
         programId,
         commercialCapacity,
-        /* What can still be placed. A Growth Program's remaining_capacity is
-           already net of the grants it has issued, so when it binds this is a
-           remainder rather than a total — which is exactly the number admission
-           and release want. */
-        quantity,
-        /* What this supply backs for the whole week, grants already issued
-           against it included. Subtracting those issued grants from `quantity`
-           would count them twice whenever the commercial limit is the binding
-           term, so anything displaying "N of M remain" reads this. */
-        weekTotal:
-          commercialCapacity !== null && commercialCapacity < total
-            ? Math.min(total, commercialCapacity + p.own_issued)
-            : total,
+        total,
         issued: p.own_issued,
       };
     }),
   );
+
+  /* A Growth Program's remaining placements belong to the programme, not to
+     each counter linked to it. Capping every supply by the same figure let two
+     counters under one twenty-placement plan each report the same two
+     placements left — twice what the programme could actually serve. The
+     remainder is therefore allocated once across the supplies that share it,
+     busiest counter first so the one already serving people keeps its headroom.
+
+     The run-level totals below are unchanged by this: they already grouped by
+     programme and took `min(sum, limit)`, and an allocation that never exceeds
+     the limit makes that min a no-op. */
+  const shares = new Map<string, number>();
+  for (const group of new Set(
+    measured
+      .filter((m) => m.programId && m.commercialCapacity !== null)
+      .map((m) => `${m.week_key}\u0000${m.programId}`),
+  )) {
+    const [week, programId] = group.split("\u0000");
+    const members = measured
+      .filter((m) => m.week_key === week && m.programId === programId)
+      .sort((a, b) => b.issued - a.issued || a.supply_id.localeCompare(b.supply_id));
+    let left = members[0]?.commercialCapacity ?? 0;
+    for (const member of members) {
+      const share = Math.min(member.total, Math.max(0, left));
+      shares.set(`${member.week_key}\u0000${member.supply_id}`, share);
+      left -= share;
+    }
+  }
+
+  const quantities = measured.map((m) => {
+    const share = shares.get(`${m.week_key}\u0000${m.supply_id}`);
+    /* What can still be placed at this counter. */
+    const quantity = share ?? m.total;
+    return {
+      week_key: m.week_key,
+      supply_id: m.supply_id,
+      programId: m.programId,
+      commercialCapacity: m.commercialCapacity,
+      quantity,
+      /* What this counter backs for the whole week, grants already issued
+         against it included. Subtracting those from `quantity` would count them
+         twice whenever a commercial limit is the binding term. */
+      weekTotal:
+        share === undefined ? m.total : Math.min(m.total, share + m.issued),
+      issued: m.issued,
+      /* True when this counter's own plan is not what limits it: the programme
+         it belongs to has no placements left to give here. */
+      commercialExhausted: share !== undefined && share < m.total,
+    };
+  });
+
   const weeks = pilotWeeks(run).map((week) => {
     const groups = new Map<string, { quantity: number; limit: number }>();
     for (const supply of quantities.filter((q) => q.week_key === week)) {

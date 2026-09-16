@@ -428,13 +428,20 @@ export function callbackIsCurrent(
   callback: {
     last_success_at: string | null;
     last_success_scope: string | null;
+    last_failure_at?: string | null;
   },
   messagingScope: string,
 ) {
   return (
     !!callback.last_success_at &&
     callback.last_success_scope === messagingScope &&
-    Date.now() - new Date(callback.last_success_at).getTime() < 7 * 86400000
+    Date.now() - new Date(callback.last_success_at).getTime() < 7 * 86400000 &&
+    /* A failure after the last good one is the current state of this webhook.
+       `recordCallbackHealth` only stamps `last_failure_at` when processing
+       fails, leaving the earlier scoped success in place, so ignoring it kept
+       the gate green for up to a week while STOP and HELP were failing. */
+    (!callback.last_failure_at ||
+      new Date(callback.last_success_at) > new Date(callback.last_failure_at))
   );
 }
 
