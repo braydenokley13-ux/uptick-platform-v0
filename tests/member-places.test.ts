@@ -15,6 +15,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { memoryDb, type DB } from "../src/lib/db";
 import { memberPlaces } from "../src/lib/member-experience";
+import { releaseWeeklyBenefits } from "../src/lib/pilot-promise";
 import { hash, id, token, encrypt } from "../src/lib/security";
 import {
   seedSyntheticPilot,
@@ -198,6 +199,83 @@ test("a member with no Market Cell gets the unavailable state, not an empty map"
     assert.deepEqual(data.coverage, []);
     assert.equal(data.admitted, false);
     assert.deepEqual(data.places, []);
+  });
+});
+
+test("a week that has not started is never described as open now", async () => {
+  await withDatabase(async (db) => {
+    const fixture = await seedSyntheticPilot(db, 4, "mp-upcoming");
+    /* The fixture starts its run in the current week. Reading the same data a
+       week early is exactly the position of a member admitted into an enrolling
+       run whose first week is still ahead. */
+    const early = new Date(Date.parse(`${fixture.weekKey}T12:00:00Z`) - 5 * 86400000);
+    const data = await memberPlaces(
+      db,
+      await credentialFor(db, fixture.members[0].id),
+      early,
+    );
+    assert.equal(data.weekState, "upcoming");
+    assert.equal(data.weekIndex, 1);
+    assert.equal(data.places.length, 1);
+    assert.ok(
+      !data.places.some((place) => /open this week/i.test(place.why)),
+      "a counter backing a week that has not begun is not open today",
+    );
+    assert.match(data.places[0].why, /Backing week 1, which starts/);
+  });
+});
+
+test("a week that has already passed is not described as open now", async () => {
+  await withDatabase(async (db) => {
+    const fixture = await seedSyntheticPilot(db, 4, "mp-ended");
+    const late = new Date(
+      Date.parse(`${fixture.weekKey}T12:00:00Z`) + 40 * 86400000,
+    );
+    const data = await memberPlaces(
+      db,
+      await credentialFor(db, fixture.members[0].id),
+      late,
+    );
+    assert.equal(data.weekState, "ended");
+    assert.ok(!data.places.some((place) => /open this week/i.test(place.why)));
+  });
+});
+
+test("issued grants are never told to a member as having been picked up", async () => {
+  await withDatabase(async (db) => {
+    const fixture = await seedSyntheticPilot(db, 4, "mp-issued");
+    /* Four grants issued against a commitment of four, and nothing redeemed.
+       The low-supply state is computed from issue, not redemption, so the
+       member copy must not claim anything physically changed hands — Uptick
+       cannot prove that, and `redemption_evidence` forbids the column that
+       would. */
+    await releaseWeeklyBenefits(db, fixture.actor, {
+      runId: fixture.runId,
+      marketId: fixture.marketId,
+      weekKey: fixture.weekKey,
+      dataKind: "synthetic",
+      requestKey: "mp-issued-release",
+      assignments: fixture.members.map((member) => ({
+        memberId: member.id,
+        supplyId: fixture.supplyId,
+      })),
+    });
+    const [{ n }] = await db.query<{ n: number }>(
+      "select count(*)::int n from fulfillment_grants where state='redeemed'",
+    );
+    assert.equal(n, 0, "nothing has been redeemed");
+
+    const data = await memberPlaces(
+      db,
+      await credentialFor(db, fixture.members[0].id),
+    );
+    const why = data.places.map((place) => place.why).join(" ");
+    assert.match(why, /reserved for other members/);
+    for (const claim of [/picked up/i, /handed over/i, /collected/i])
+      assert.ok(
+        !claim.test(why),
+        `a member must not be told a benefit was ${claim} when only a grant was issued`,
+      );
   });
 });
 

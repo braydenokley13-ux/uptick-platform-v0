@@ -24,7 +24,16 @@ const TONE = {
 } as const;
 
 export function MemberPlaces({ data }: { data: Data }) {
-  const { market, coverage, places, admitted, inCoverage, homeZip } = data;
+  const {
+    market,
+    coverage,
+    places,
+    admitted,
+    inCoverage,
+    homeZip,
+    weekState,
+    weekIndex,
+  } = data;
 
   /* No Market Cell at all. Uptick runs one neighbourhood at a time, and saying
      so is better than showing an empty map that implies one is coming. */
@@ -63,9 +72,15 @@ export function MemberPlaces({ data }: { data: Data }) {
         <em>Your neighborhood.</em>
       </h1>
       <p>
-        {operating
-          ? "Uptick runs one neighborhood at a time. This is the one you're in."
-          : "This neighborhood is set up but isn't running yet. Nothing is being handed out here right now."}
+        {!operating
+          ? "This neighborhood is set up but isn't running yet. Nothing is being handed out here right now."
+          : /* A run whose first week has not begun is not a run handing
+               anything out today, and the page must not imply it is. */
+            weekState === "upcoming"
+            ? `Uptick runs one neighborhood at a time. Yours is getting ready for week ${weekIndex}; nothing is being handed out yet.`
+            : weekState === "ended"
+              ? "Uptick runs one neighborhood at a time. Your four weeks here are finished."
+              : "Uptick runs one neighborhood at a time. This is the one you're in."}
       </p>
 
       {coverage.length > 0 && (

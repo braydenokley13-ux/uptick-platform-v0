@@ -192,6 +192,11 @@ export type MemberPlace = {
   why: string;
 };
 
+/** Where "now" sits relative to the run's four weeks. A counter backing a week
+    that has not started is not a counter that is open today, and saying so
+    would send a member to a store before fulfilment begins. */
+export type MemberPlaceWeek = "current" | "upcoming" | "ended";
+
 /* "Where does Uptick work around me?"
 
    The honest answer has three parts and no more: the neighbourhood Uptick runs
@@ -237,6 +242,8 @@ export async function memberPlaces(
   );
   let places: MemberPlace[] = [];
   let week: string | null = null;
+  let weekState: MemberPlaceWeek | null = null;
+  let weekIndex: number | null = null;
   if (admission) {
     const { loadPilotRun, pilotCapacity, pilotWeeks } = await import(
       "./pilot-operations"
@@ -245,7 +252,26 @@ export async function memberPlaces(
     const run = await loadPilotRun(db, admission.run_id);
     const weeks = pilotWeeks(run);
     const current = marketWeekWindow(asOf, run.timezone!).weekKey;
-    week = weeks.includes(current) ? current : weeks[0];
+    /* An enrolling run's first week is often still in the future. Falling back
+       to it and describing its counters as open today would promise a benefit
+       before the week it belongs to has begun. */
+    weekState = weeks.includes(current)
+      ? "current"
+      : current < weeks[0]
+        ? "upcoming"
+        : "ended";
+    week =
+      weekState === "current"
+        ? current
+        : weekState === "upcoming"
+          ? weeks[0]
+          : weeks[weeks.length - 1];
+    weekIndex = weeks.indexOf(week) + 1;
+    const starts = new Date(`${week}T12:00:00Z`).toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      timeZone: "UTC",
+    });
     const capacity = await pilotCapacity(db, run);
     places = (await destinationPins(db, run, week, capacity)).map((pin) => ({
       supplyId: pin.supplyId,
@@ -259,15 +285,27 @@ export async function memberPlaces(
             ? ("not_ready" as const)
             : ("ready" as const),
       /* The operator's sentence carries unit counts and the reason a counter
-         failed its checks. A member gets the part that changes what they do. */
+         failed its checks. A member gets the part that changes what they do,
+         and only what the database can stand behind.
+
+         In particular `low_supply` is computed from grants issued, not from
+         redemptions, so it cannot be told as "already picked up" — that would
+         claim a physical handoff Uptick can never prove. Issued means reserved
+         for another member, which is exactly what happened. */
       why:
         pin.state === "outage"
           ? "Closed right now. Nothing to pick up here this week."
           : pin.state === "not_ready"
-            ? "Not handing out Uptick this week."
-            : pin.state === "low_supply"
-              ? "Open this week. Most of this week's Uptick has already been picked up."
-              : "Open this week.",
+            ? weekState === "current"
+              ? "Not handing out Uptick this week."
+              : `Not set up for week ${weekIndex} yet.`
+            : weekState === "upcoming"
+              ? `Backing week ${weekIndex}, which starts ${starts}.`
+              : weekState === "ended"
+                ? `Backed week ${weekIndex}. This pilot's four weeks are finished.`
+                : pin.state === "low_supply"
+                  ? "Open this week. Most of this week's Uptick is already reserved for other members."
+                  : "Open this week.",
     }));
   }
   const coverage = zips.map((row) => row.zip);
@@ -280,6 +318,9 @@ export async function memberPlaces(
     inCoverage: coverage.includes(member.home_zip),
     admitted: !!admission,
     week,
+    /* Never null while `week` is set; the two travel together. */
+    weekState,
+    weekIndex,
     places,
   };
 }
