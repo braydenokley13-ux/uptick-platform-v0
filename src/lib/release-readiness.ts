@@ -279,9 +279,20 @@ export type MarketReadiness = {
   name: string;
   state: string;
   data_kind: string;
-  /** The run this cell's readiness is about, if it has one. */
-  run: { id: string; name: string; state: string; cohortFrozen: boolean } | null;
-  /** All four weeks, each with what it must back and what it can. */
+  /** Every run this cell is currently obligated by — enrolling, live or
+      paused — each with its own four-week proof. Plural because proving one of
+      them says nothing about the others. */
+  runs: {
+    id: string;
+    name: string;
+    state: string;
+    cohortFrozen: boolean;
+    weeks: PilotWeekBacking[];
+    required: number;
+    backed: boolean;
+    evidence: string;
+  }[];
+  /** The weeks of the run a member joining today would land in, for display. */
   weeks: PilotWeekBacking[];
   required: number;
   /** True only when every week the run still has to serve covers the cohort. */
@@ -332,45 +343,90 @@ export async function marketReadiness(db: DB): Promise<MarketReadiness[]> {
                 and d.state='ready' and d.valid_until>now()) ready_destinations
        from market_cells k order by k.name`,
   );
-  /* The run a member of this cell would actually be admitted into, ordered the
-     way that decision is made: what is running now outranks what is planned. */
+  /* Every run this cell is obligated by, not one chosen from among them.
+
+     A draft run promises nothing yet and a complete one is finished, but an
+     enrolling, live or paused run is an obligation to real people, and proving
+     one of them says nothing about the rest. Which one to prove was a live
+     question in its own right: `tryAdmitMemberInTransaction` sends a new member
+     to the *enrolling* run specifically, so a gate that happened to read a
+     different run could stay green while the run actually accepting members
+     lost its backing. Evaluating all of them removes the question. */
   const runs = await db.query<PilotRun>(
-    `select distinct on (r.market_id) r.*,r.starts_on::text starts_on,r.ends_on::text ends_on,m.timezone
+    `select r.*,r.starts_on::text starts_on,r.ends_on::text ends_on,m.timezone
        from pilot_runs r join market_cells m on m.id=r.market_id
-      where r.state<>'complete' and r.data_kind=m.data_kind
+      where r.state in ('enrolling','live','paused')
       order by r.market_id,
-               case r.state when 'live' then 0 when 'enrolling' then 1
-                            when 'paused' then 2 else 3 end,
+               case r.state when 'enrolling' then 0 when 'live' then 1 else 2 end,
                r.starts_on`,
   );
+  const named = (
+    proofs: { name: string; evidence: string }[],
+    subset: { name: string; evidence: string }[],
+  ) =>
+    subset
+      .map((proof) =>
+        proofs.length > 1 ? `${proof.name}: ${proof.evidence}` : proof.evidence,
+      )
+      .join(" ");
   return Promise.all(
     cells.map(async (cell) => {
-      const run = runs.find((r) => r.market_id === cell.id) || null;
-      const backing = run ? await pilotBacking(db, run) : null;
+      const proofs = await Promise.all(
+        runs
+          .filter((run) => run.market_id === cell.id)
+          .map(async (run) => {
+            const backing = await pilotBacking(db, run);
+            return {
+              id: run.id,
+              name: run.name,
+              state: run.state,
+              cohortFrozen: !!run.cohort_frozen_at,
+              weeks: backing.weeks,
+              required: backing.required,
+              backed: backing.weeks.length === 4 && !backing.short,
+              evidence: backing.evidence,
+            };
+          }),
+      );
+      /* Enrolling first, so the weeks on display belong to the run a member
+         joining today would land in. The gate still needs every run to hold. */
+      const admitting = proofs[0] ?? null;
+      const unbacked = proofs.filter((proof) => !proof.backed);
       return {
         id: cell.id,
         name: cell.name,
         state: cell.state,
         data_kind: cell.data_kind,
-        run: run
-          ? {
-              id: run.id,
-              name: run.name,
-              state: run.state,
-              cohortFrozen: !!run.cohort_frozen_at,
-            }
-          : null,
-        weeks: backing?.weeks ?? [],
-        required: backing?.required ?? 0,
-        backed: !!backing && backing.weeks.length === 4 && !backing.short,
-        evidence: backing
-          ? backing.evidence
-          : "No pilot run exists for this Market Cell, so no week is backed.",
+        runs: proofs,
+        weeks: admitting?.weeks ?? [],
+        required: admitting?.required ?? 0,
+        backed: proofs.length > 0 && !unbacked.length,
+        evidence: !proofs.length
+          ? "No pilot run is enrolling, live or paused in this Market Cell, so no week is backed."
+          : named(proofs, unbacked.length ? unbacked : proofs),
         approvedSupplies: cell.approved_supplies,
         approvedFallbacks: cell.approved_fallbacks,
         readyDestinations: cell.ready_destinations,
       };
     }),
+  );
+}
+
+/** Whether a signed provider callback has genuinely been observed for the
+    configuration in front of us. One definition, because the readiness gate and
+    the messaging console were each deciding it separately and could disagree
+    about whether STOP and HELP are being received. */
+export function callbackIsCurrent(
+  callback: {
+    last_success_at: string | null;
+    last_success_scope: string | null;
+  },
+  messagingScope: string,
+) {
+  return (
+    !!callback.last_success_at &&
+    callback.last_success_scope === messagingScope &&
+    Date.now() - new Date(callback.last_success_at).getTime() < 7 * 86400000
   );
 }
 
@@ -460,11 +516,7 @@ export async function releaseReadiness(db: DB) {
     checks,
     callbacks: callbacks.map((callback) => ({
       ...callback,
-      current:
-        !!callback.last_success_at &&
-        callback.last_success_scope === messagingScope &&
-        Date.now() - new Date(callback.last_success_at).getTime() <
-          7 * 86400000,
+      current: callbackIsCurrent(callback, messagingScope),
     })),
     messages,
     support: support[0],

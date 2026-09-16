@@ -287,7 +287,8 @@ test("G · the readiness gate, the server blockers and the run-state gate agree"
       },
     );
 
-    /* A real cell in pilot state, with a run and nothing committed behind it.
+    /* A real cell in pilot state, with an enrolling run — one that is actually
+       accepting members — and nothing committed behind it.
        The server blocker and the operator's gate must both be that same
        sentence — not two independently derived opinions. */
     await db.query(
@@ -299,7 +300,7 @@ test("G · the readiness gate, the server blockers and the run-state gate agree"
          operator_owner,support_owner,backup_support_owner,checklist,created_by
        ) values('mr-real-run','mr-real','Real readiness run',
          date_trunc('week',current_date)::date,date_trunc('week',current_date)::date+28,
-         'draft','real',150,150,$1,'support','backup','{}',$1)`,
+         'enrolling','real',150,150,$1,'support','backup','{}',$1)`,
       [fixture.actor.id],
     );
 
@@ -327,5 +328,37 @@ test("G · the readiness gate, the server blockers and the run-state gate agree"
     const market = gates.find((gate) => gate.key === "market")!;
     assert.notEqual(market.state, "ready");
     assert.match(market.blocker, /0 usable units backed for 150 required/);
+  });
+});
+
+test("H · a second obligated run in the same cell cannot be covered by the first", async () => {
+  await withDatabase(async (db) => {
+    const fixture = await seedSyntheticPilot(db, 20, "mr-two-runs");
+    await planRemainingWeeks(db, fixture, "mr-two-runs", 20);
+    const backed = await marketFor(db, fixture.marketId);
+    assert.equal(backed.runs.length, 1);
+    assert.equal(backed.backed, true, "the live run is fully backed");
+
+    /* A paused run in the same cell is still an obligation to the people in it.
+       `pilot_one_active_run` allows exactly one enrolling-or-live run per cell,
+       so paused is the shape a second concurrent obligation actually takes. */
+    await db.query(
+      `insert into pilot_runs(
+         id,market_id,name,starts_on,ends_on,state,data_kind,target_members,hard_cap,
+         operator_owner,support_owner,backup_support_owner,checklist,created_by
+       ) values('mr-two-runs-paused',$1,'Paused synthetic run',
+         date_trunc('week',current_date)::date,date_trunc('week',current_date)::date+28,
+         'paused','synthetic',20,20,$2,'support','backup','{}',$2)`,
+      [fixture.marketId, fixture.actor.id],
+    );
+
+    const cell = await marketFor(db, fixture.marketId);
+    assert.equal(cell.runs.length, 2, "both obligated runs are evaluated");
+    assert.equal(
+      cell.backed,
+      false,
+      "a backed run does not vouch for an unbacked one beside it",
+    );
+    assert.match(cell.evidence, /Paused synthetic run: Week 1: 0 usable units/);
   });
 });

@@ -62,7 +62,7 @@ export function MessagingConsole({
 }: {
   data: MembershipMessagingOperations;
 }) {
-  const { readiness, messages, support, callbacks } = data;
+  const { readiness, messages, support, supportTotal, callbacks } = data;
   const inbound = callbacks.find((c) => c.kind === "inbound");
   const status = callbacks.find((c) => c.kind === "status");
   const unresolved = messages.filter((m) =>
@@ -204,9 +204,12 @@ export function MessagingConsole({
           <section className="u-card u-card-pad">
             <div className="u-head">
               <h2>Support queue</h2>
-              {support.length > 0 && (
-                <Pill tone={support.length > 2 ? "bad" : "warn"}>
-                  {support.length} open
+              {supportTotal > 0 && (
+                /* The list below is capped for readability. The count is the
+                   whole queue, because "20 open" with 35 waiting is the kind of
+                   reassurance that leaves members unanswered. */
+                <Pill tone={supportTotal > 2 ? "bad" : "warn"}>
+                  {supportTotal} open
                 </Pill>
               )}
             </div>

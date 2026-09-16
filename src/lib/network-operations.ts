@@ -14,6 +14,10 @@ import { id, token, hash, normalizePhone } from "./security";
 import { allocateMember, marketCoverage, supplyUsage } from "./network";
 import { prepareMembershipWeek } from "./member-experience";
 import {
+  callbackIsCurrent,
+  messagingCommissioningScope,
+} from "./release-readiness";
+import {
   configureMemberSender,
   dispatchMemberMessages,
   memberMessagingReadiness,
@@ -1020,8 +1024,15 @@ export async function dispatchMembershipMessages(
 /** Operator-only cross-market delivery ledger. Never select private access credentials. */
 export async function membershipMessagingOperations(db: DB, actor: Actor) {
   requireOperator(actor);
-  const [readiness, counts, messages, preparations, support, callbacks] =
-    await Promise.all([
+  const [
+    readiness,
+    counts,
+    messages,
+    preparations,
+    support,
+    supportTotal,
+    callbacks,
+  ] = await Promise.all([
       memberMessagingReadiness(db),
       db.query<{ state: string; count: number }>(
         "select state,count(*)::int count from member_messages group by state order by state",
@@ -1066,16 +1077,50 @@ export async function membershipMessagingOperations(db: DB, actor: Actor) {
         where r.state in ('queued','working')
         order by r.created_at limit 20`,
       ),
+      /* The rows are bounded so the console stays readable; the count must not
+         be. Reading `support.length` as the total told an operator with 35
+         waiting members that 20 were open. */
+      db.query<{ n: number }>(
+        "select count(*)::int n from member_support_requests where state in ('queued','working')",
+      ),
       db.query<{
         kind: string;
         last_success_at: string | null;
+        last_success_scope: string | null;
         last_failure_at: string | null;
         last_failure_code: string | null;
       }>(
-        "select kind,last_success_at,last_failure_at,last_failure_code from member_callback_health order by kind",
+        "select kind,last_success_at,last_success_scope,last_failure_at,last_failure_code from member_callback_health order by kind",
       ),
     ]);
-  return { readiness, counts, messages, preparations, support, callbacks };
+  /* Sending is only half of messaging. Without a current signed inbound
+     callback, STOP and HELP are not being received, and a console that says
+     "ready" while the enrollment gate blocks on exactly that is the same gate
+     disagreeing with itself. The currency rule is the readiness gate's own. */
+  const messagingScope = await messagingCommissioningScope(db);
+  const scoped = callbacks.map((callback) => ({
+    ...callback,
+    current: callbackIsCurrent(callback, messagingScope),
+  }));
+  return {
+    readiness: {
+      ...readiness,
+      /* `ready` now means what the console claims it means: we can send, and we
+         can hear back. `sendReady` keeps the transport-only answer. */
+      sendReady: readiness.ready,
+      ready:
+        readiness.ready &&
+        ["inbound", "status"].every((kind) =>
+          scoped.some((c) => c.kind === kind && c.current),
+        ),
+    },
+    counts,
+    messages,
+    preparations,
+    support,
+    supportTotal: supportTotal[0]?.n ?? 0,
+    callbacks: scoped,
+  };
 }
 export type MembershipMessagingOperations = Awaited<
   ReturnType<typeof membershipMessagingOperations>

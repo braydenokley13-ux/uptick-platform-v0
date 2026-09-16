@@ -1013,9 +1013,13 @@ export async function pilotOperations(
       [run.id],
     ),
   ]);
-  const ready =
-    launchChecks.every((key) => run.checklist[key]) &&
-    capacity.capacity >= run.target_members;
+  /* The shared proof, so this page, the run-state gate, the amendment guard and
+     the readiness map all mean the same thing by "backed". Measuring against
+     `target_members` here said a frozen twenty-member pilot with five
+     withdrawals was blocked at 15 of 20, while `amendPilotSupply` had correctly
+     accepted a 15-unit amendment for the same weeks. */
+  const backing = await pilotBacking(db, run, capacity);
+  const ready = launchChecks.every((key) => run.checklist[key]) && !backing.short;
   // Structured so the command centre can group, rank and route each blocker.
   // `text` stays the single truthful sentence; nothing is summarised into a score.
   const constraints: PilotConstraint[] = [];
@@ -1091,11 +1095,11 @@ export async function pilotOperations(
         );
     }
   }
-  if (capacity.capacity < run.target_members)
+  if (backing.short)
     raise(
       "Supply",
       "bad",
-      `Supply backs ${capacity.capacity} of ${run.target_members} target members across all four weeks.`,
+      `Supply backs ${backing.available} of the ${backing.required} members this run owes a benefit. ${backing.evidence}`,
     );
   for (const c of commitments)
     if (c.state === "planned" && new Date(c.planned_at) < new Date())
