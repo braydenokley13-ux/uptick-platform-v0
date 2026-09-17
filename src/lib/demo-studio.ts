@@ -17,6 +17,23 @@ import {
 } from "./pilot-promise";
 
 export const DEMO_PHONE = "+12025550123";
+
+/* Where each demo sign-in lands.
+
+   The merchant button used to land on `/merchant/results`, which is the growth
+   programme reporting section — it never shows a commitment, a counter, its
+   terms or its fallback, so the demo's "what you provide" story was told on a
+   page that could not tell it. The merchant surface for this demo is the
+   overview at `/merchant`, and the operator surface is the pilot command centre.
+
+   Declaring both here rather than inline in the route means a change to either
+   landing page is a change to a named contract that
+   `tests/demo-surfaces.test.ts` checks, instead of a one-word edit nobody
+   sees. */
+export const DEMO_WORKSPACE_PATHS = {
+  merchant: "/merchant",
+  operator: "/operator/pilot",
+} as const;
 export const demoActor: Actor = {
   id: "demo-operator",
   role: "operator",
@@ -119,6 +136,59 @@ export async function seedDemoStudio(db: DB) {
     dataKind: "demo",
     requestKey: "demo-first-week-release",
     assignments: [{ memberId: requested.member.id, supplyId: "demo-supply-1" }],
+  });
+
+  /* A second counter of the same sample store, backing the same first week.
+
+     A merchant can owe more than one thing in a week — two locations, or two
+     benefits at one counter — and the overview shows all of them. With a single
+     counter the demo never exercises that, and the member's Places tab has only
+     one place to show. This is added after the release so the week's assignment
+     stays the simple one the guided steps describe. */
+  await db.transaction(async (tx) => {
+    await tx.query(
+      "insert into locations(id,organization_id,name,address,postal_code) values('demo-counter-2','demo-store','Sample second counter','Illustrative second sample location',$1)",
+      ["10583"],
+    );
+    await tx.query(
+      "insert into market_locations(market_id,location_id,organization_id,drive_minutes) values('demo-market','demo-counter-2','demo-store',9)",
+    );
+    await tx.query(
+      "insert into redemption_points(id,organization_id,location_id,name,exposure,created_by) values('demo-point-2','demo-store','demo-counter-2','DEMO second staff QR','staff','demo-operator')",
+    );
+    await tx.query(
+      "insert into redemption_credentials(id,point_id,public_token,credential_type,version,created_by) values('demo-qr-2','demo-point-2',$1,'qr',1,'demo-operator')",
+      [token()],
+    );
+    await tx.query(
+      "insert into offers(id,organization_id,location_id,kind,state,title) values('demo-offer-tea','demo-store','demo-counter-2','drop','live','Your week 1 tea')",
+    );
+    await tx.query(
+      "insert into offer_versions(offer_id,version,qualification,reward,terms,starts_at,expires_at,limit_mode,quantity) values('demo-offer-tea',1,'No purchase required','One free 12 oz tea','One per admitted member this week. No purchase required. Sample only.',$1,$2,'claim',5)",
+      [start, end],
+    );
+    await tx.query(
+      `insert into network_drop_supplies(id,market_id,organization_id,location_id,offer_id,offer_version,state,starts_at,expires_at,inventory_policy,quantity,verification_mode,staff_instructions,fallback_plan,approved_by,data_kind)
+      values('demo-supply-tea','demo-market','demo-store','demo-counter-2','demo-offer-tea',1,'approved',$1,$2,'claim',5,'staff_tap','Present the staff QR and hand over one sample item.','Independent bottled-water fallback.','demo-operator','demo')`,
+      [start, end],
+    );
+    await tx.query(
+      `insert into pilot_supply_terms(supply_id,exact_item,item_sku,size_label,usable_hours,dependency_key,funder_organization_id,fulfiller_organization_id,data_kind,created_by)
+      values('demo-supply-tea','One free 12 oz tea','DEMO-TEA','12 oz','Daily, 7am–8pm (sample hours)','tea-urn','demo-store','demo-store','demo','demo-operator')`,
+    );
+    await tx.query(
+      `insert into pilot_supply_fallbacks(id,supply_id,substitute_item,substitute_sku,size_label,dependency_key,usable_capacity,instructions,payer_organization_id,state,approved_by,created_by)
+      values('demo-fallback-tea','demo-supply-tea','One sealed bottle of water','DEMO-WATER','16 oz','sealed-water-stock',5,'Hand over one sealed sample bottle and confirm at the staff QR.','demo-store','approved','demo-operator','demo-operator')`,
+    );
+    await tx.query(
+      `insert into destination_readiness(supply_id,organization_id,location_id,state,owner_approved_by,primary_manager,primary_contact,backup_contact,stock_confirmed_at,exact_item_confirmed,staff_instructions_confirmed,shifts_briefed_at,valid_hours_confirmed,qr_rehearsed_at,support_escalation,valid_until,updated_by)
+      values('demo-supply-tea','demo-store','demo-counter-2','ready','demo-operator','Sample manager','manager@example.test','backup@example.test',$1,true,true,$1,true,$1,'Sample operator handles fulfillment issues.',$2,'demo-operator')`,
+      [ready, end],
+    );
+    await tx.query(
+      "insert into pilot_week_supplies(run_id,week_key,supply_id,committed_quantity,confirmed_by) values('demo-run',$1,'demo-supply-tea',5,'demo-operator')",
+      [window.weekKey],
+    );
   });
 }
 

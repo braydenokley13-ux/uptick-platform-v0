@@ -5,7 +5,11 @@ import {
   sampleDemoMode as demoMode,
   assertSampleDemoStorage as assertDemoStorage,
 } from "@/lib/demo-guard";
-import { demoStockout, demoRecovery } from "@/lib/demo-studio";
+import {
+  DEMO_WORKSPACE_PATHS,
+  demoStockout,
+  demoRecovery,
+} from "@/lib/demo-studio";
 import { assertSameOrigin, apiError } from "@/lib/http";
 import { setSession } from "@/lib/auth";
 import { MEMBER_SESSION_COOKIE } from "@/lib/member-session";
@@ -39,8 +43,10 @@ export async function POST(request: Request) {
     }
     if (action === "operator" || action === "merchant") {
       await setSession(`demo-${action}`);
-      redirect =
-        action === "operator" ? "/operator/pilot" : "/merchant/results";
+      /* The merchant overview, not Results: "what you provide" — every
+         commitment for the week, with its own counter, terms and fallback — is
+         the merchant-facing surface this demo is about. */
+      redirect = DEMO_WORKSPACE_PATHS[action];
     }
     if (action === "stockout") await demoStockout(db);
     if (action === "recovery") await demoRecovery(db);
