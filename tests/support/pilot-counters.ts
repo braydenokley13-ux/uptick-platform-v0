@@ -92,3 +92,132 @@ export async function addEligibleCounter(
     [fixture.runId, weekKey, supplyId, quantity, actor],
   );
 }
+
+/* One Growth Program covering several counters in a week.
+
+   `programForSupply` needs the whole chain — an active programme with an
+   approved version, a week plan, an approval for this run, and a link per
+   supply — before it will report a remaining capacity at all; a partial setup
+   makes every linked counter commercially invalid and a test built on it
+   measures the rejection path instead of the sharing path. `remaining_capacity`
+   is programme-wide and already net of grants attributed to the programme,
+   which is the property the surfaces above it have to respect. */
+export async function linkSharedProgram(
+  db: DB,
+  fixture: SyntheticPilotFixture,
+  options: {
+    programId: string;
+    weekKey: string;
+    plannedPlacements: number;
+    supplyIds: string[];
+  },
+) {
+  const [source] = await db.query<{ organization_id: string }>(
+    "select organization_id from network_drop_supplies where id=$1",
+    [fixture.supplyId],
+  );
+  const org = source.organization_id;
+  const actor = fixture.actor.id;
+  /* `growth_programs.current_version` and `growth_program_versions.program_id`
+     reference each other, so both rows go in one transaction; the version's
+     foreign key is deferrable for exactly this. */
+  await db.transaction(async (tx) => {
+    await tx.query(
+      `insert into growth_programs(id,buyer_organization_id,market_id,status,current_version,approved_version,created_by)
+       values($1,$2,$3,'active',1,1,$4)`,
+      [options.programId, org, fixture.marketId, actor],
+    );
+    await tx.query(
+      `insert into growth_program_versions(
+         program_id,version,name,objective,starts_on,ends_on,buyer_organization_id,
+         funder_organization_id,fulfiller_organization_id,negotiated_fee_cents,
+         commercial_status,benefit_ceiling,operating_constraints,evaluation_plan,proposed_by
+       ) values($1,1,'Synthetic shared program','introduce_store',$2::date,$2::date+28,$3,$3,$3,
+         0,'agreed',$4,'Synthetic operating constraints for this test.',
+         'Synthetic evaluation plan for this test.',$5)`,
+      [
+        options.programId,
+        options.weekKey,
+        org,
+        options.plannedPlacements * 4,
+        actor,
+      ],
+    );
+  });
+  await db.query(
+    "insert into growth_program_week_plans(program_id,program_version,week_key,planned_placements) values($1,1,$2,$3)",
+    [options.programId, options.weekKey, options.plannedPlacements],
+  );
+  await db.query(
+    `insert into growth_program_approvals(id,program_id,program_version,run_id,decision,capacity_snapshot,note,decided_by)
+     values($1||'-approval',$1,1,$2,'approved','{}','Synthetic approval.',$3)`,
+    [options.programId, fixture.runId, actor],
+  );
+  for (const supplyId of options.supplyIds)
+    await db.query(
+      "insert into program_supply_links(program_id,program_version,supply_id,week_key,linked_by) values($1,1,$2,$3,$4)",
+      [options.programId, supplyId, options.weekKey, actor],
+    );
+}
+
+/* Grants attributed to a programme, written directly.
+
+   `releaseWeeklyBenefits` decides which counter each member may use, so a test
+   about capacity arithmetic cannot use it to place grants at a chosen counter
+   without also asserting suitability. These rows carry `source_program_id`,
+   which is what `remaining_capacity` counts. */
+export async function issueProgramGrants(
+  db: DB,
+  fixture: SyntheticPilotFixture,
+  options: {
+    prefix: string;
+    programId: string;
+    weekKey: string;
+    supplyId: string;
+    memberIds: string[];
+  },
+) {
+  await db.query(
+    `insert into weekly_releases(id,run_id,market_id,week_key,state,data_kind,member_count,reviewed_by,request_key,request_fingerprint)
+     values($1||'-release',$2,$3,$4,'published','synthetic',$5,$6,$1||'-release','synthetic')`,
+    [
+      options.prefix,
+      fixture.runId,
+      fixture.marketId,
+      options.weekKey,
+      options.memberIds.length,
+      fixture.actor.id,
+    ],
+  );
+  for (const [index, memberId] of options.memberIds.entries()) {
+    const allocation = `${options.prefix}-alloc-${index}`;
+    await db.query(
+      "insert into member_allocations(id,member_id,market_id,week_key) values($1,$2,$3,$4)",
+      [allocation, memberId, fixture.marketId, options.weekKey],
+    );
+    await db.query(
+      "insert into allocation_options(allocation_id,supply_id,market_id,rank,reason) values($1,$2,$3,1,'{}')",
+      [allocation, options.supplyId, fixture.marketId],
+    );
+    await db.query(
+      `insert into fulfillment_grants(
+         id,release_id,allocation_id,member_id,market_id,week_key,supply_id,
+         organization_id,location_id,offer_id,offer_version,member_snapshot,
+         expires_at,data_kind,source_program_id,source_program_version
+       ) select $1,$2||'-release',$3,$4,$5,$6,s.id,s.organization_id,s.location_id,
+         s.offer_id,s.offer_version,'{}'::jsonb,now()+interval '7 days','synthetic',
+         $7,1
+         from network_drop_supplies s where s.id=$8`,
+      [
+        `${options.prefix}-grant-${index}`,
+        options.prefix,
+        allocation,
+        memberId,
+        fixture.marketId,
+        options.weekKey,
+        options.programId,
+        options.supplyId,
+      ],
+    );
+  }
+}

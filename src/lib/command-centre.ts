@@ -43,6 +43,21 @@ export type DestinationPin = {
   inventory: number;
   /** `backed` less what has already been issued this week. */
   remaining: number;
+  /** What this counter itself can back this week, before the display share:
+      its commitment capped by stock, fallback and eligibility. Zero when the
+      counter fails any eligibility check, including an open outage. */
+  usable: number;
+  /** What this counter can still give one more member, ignoring the display
+      partition: its own unissued headroom, capped by its Growth Program's
+      remaining placements when it has one.
+
+      Two counters under one programme can both report the same shared
+      remainder here. That is wrong for a list an operator routes a whole
+      cohort from — hence `backed` — and right for the single question a
+      member asks about one counter, because the assignment flow graph, which
+      knows who each counter can serve, has not yet chosen between them. Any
+      member-facing surface must read this and never `backed`. */
+  serviceable: number;
   fallbackAvailable: number;
   openIncidents: number;
 };
@@ -97,14 +112,20 @@ export async function destinationPins(
       );
     let left = members[0]?.commercialCapacity ?? Infinity;
     for (const member of members) {
-      const placeable = Math.min(member.total, Math.max(0, left));
+      /* Only what this counter has left to give. A counter that committed ten
+         and has issued nine can place one more, whatever the programme still
+         holds; letting it consume the programme's whole remainder here takes
+         placements away from a sibling that could actually use them, and the
+         list then shows fewer units left than the programme really has. */
+      const headroom = Math.max(0, member.total - member.issued);
+      const placeable = Math.min(headroom, Math.max(0, left));
       left -= placeable;
       display.set(member.supply_id, {
         /* Grants already drawn from this counter are part of what it backs;
            a commercial remainder has already subtracted them, so adding them
            back is what makes "N of M remain" add up. */
         backed: Math.min(member.total, placeable + member.issued),
-        exhausted: placeable < member.total,
+        exhausted: placeable < headroom,
       });
     }
   }
@@ -112,7 +133,8 @@ export async function destinationPins(
   const weeks = pilotWeeks(run);
   const index = weeks.indexOf(weekKey) + 1;
   const when =
-    run.timezone && marketWeekWindow(new Date(), run.timezone).weekKey === weekKey
+    run.timezone &&
+    marketWeekWindow(new Date(), run.timezone).weekKey === weekKey
       ? "this week"
       : index
         ? `in week ${index}`
@@ -185,6 +207,11 @@ export async function destinationPins(
     const shared = display.get(row.supply_id);
     const backed = shared?.backed ?? 0;
     const remaining = Math.max(0, backed - row.issued);
+    const usable = plan?.total ?? 0;
+    const serviceable = Math.max(
+      0,
+      Math.min(usable - row.issued, plan?.commercialCapacity ?? Infinity),
+    );
     let state: DestinationPin["state"] = "active";
     let why = `${remaining} of ${backed} backed units remain ${when}.`;
     if (row.outage_reason) {
@@ -205,11 +232,12 @@ export async function destinationPins(
          supply window that does not cover the week, an exhausted commercial
          limit. Say so plainly rather than reporting "0 of 0 remain". */
       state = "not_ready";
-      why = shared?.exhausted && plan?.commercialCapacity !== null
-        ? `Committed ${row.committed} ${when}, but this counter's Growth Program has no placements left to give here.`
-        : row.committed > 0
-          ? `Committed ${row.committed} ${when}, but none of it is currently usable. Check the fallback, the staff QR credential and the supply's dates.`
-          : `Nothing is committed ${when} at this counter.`;
+      why =
+        shared?.exhausted && plan?.commercialCapacity !== null
+          ? `Committed ${row.committed} ${when}, but this counter's Growth Program has no placements left to give here.`
+          : row.committed > 0
+            ? `Committed ${row.committed} ${when}, but none of it is currently usable. Check the fallback, the staff QR credential and the supply's dates.`
+            : `Nothing is committed ${when} at this counter.`;
     } else if (remaining <= Math.max(3, Math.round(backed * 0.15))) {
       state = "low_supply";
       why = `Only ${remaining} of ${backed} backed units remain ${when}.`;
@@ -234,6 +262,8 @@ export async function destinationPins(
       committed: row.committed,
       inventory: row.inventory,
       remaining,
+      usable,
+      serviceable,
       fallbackAvailable: row.fallback_available,
       openIncidents: row.open_incidents,
     };

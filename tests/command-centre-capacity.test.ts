@@ -29,7 +29,11 @@ import {
   seedSyntheticPilot,
   type SyntheticPilotFixture,
 } from "../scripts/verify-postgres-pilot";
-import { addEligibleCounter } from "./support/pilot-counters";
+import {
+  addEligibleCounter,
+  issueProgramGrants,
+  linkSharedProgram,
+} from "./support/pilot-counters";
 
 function localEnvironment() {
   process.env.UPTICK_ENV = "development";
@@ -62,7 +66,13 @@ async function adjustInventory(
 ) {
   await db.query(
     "insert into supply_adjustments(id,supply_id,delta,reason,actor_id) values($1,$2,$3,$4,$5)",
-    [id(), fixture.supplyId, delta, "Synthetic stock adjustment.", fixture.actor.id],
+    [
+      id(),
+      fixture.supplyId,
+      delta,
+      "Synthetic stock adjustment.",
+      fixture.actor.id,
+    ],
   );
 }
 
@@ -417,11 +427,6 @@ test("I · two counters under one programme share its placements, they do not ea
   await withDatabase(async (db) => {
     const fixture = await seedSyntheticPilot(db, 20, "cc-shared");
     const run = await loadPilotRun(db, fixture.runId);
-    const [source] = await db.query<{ organization_id: string }>(
-      "select organization_id from network_drop_supplies where id=$1",
-      [fixture.supplyId],
-    );
-    const org = source.organization_id;
     /* A second eligible counter in the same week, then one twenty-placement
        programme covering both. The programme's remaining capacity is
        programme-wide, so capping each counter by it separately would let the
@@ -433,75 +438,22 @@ test("I · two counters under one programme share its placements, they do not ea
       20,
       fixture.weekKey,
     );
-    await db.transaction(async (tx) => {
-      await tx.query(
-        `insert into growth_programs(id,buyer_organization_id,market_id,status,current_version,approved_version,created_by)
-         values('cc-shared-p',$1,$2,'active',1,1,$3)`,
-        [org, fixture.marketId, fixture.actor.id],
-      );
-      await tx.query(
-        `insert into growth_program_versions(
-           program_id,version,name,objective,starts_on,ends_on,buyer_organization_id,
-           funder_organization_id,fulfiller_organization_id,negotiated_fee_cents,
-           commercial_status,benefit_ceiling,operating_constraints,evaluation_plan,proposed_by
-         ) values('cc-shared-p',1,'Synthetic shared program','introduce_store',$1::date,$1::date+28,$2,$2,$2,
-           0,'agreed',80,'Synthetic operating constraints for this test.',
-           'Synthetic evaluation plan for this test.',$3)`,
-        [fixture.weekKey, org, fixture.actor.id],
-      );
+    await linkSharedProgram(db, fixture, {
+      programId: "cc-shared-p",
+      weekKey: fixture.weekKey,
+      plannedPlacements: 20,
+      supplyIds: [fixture.supplyId, "cc-shared-second"],
     });
-    await db.query(
-      "insert into growth_program_week_plans(program_id,program_version,week_key,planned_placements) values('cc-shared-p',1,$1,20)",
-      [fixture.weekKey],
-    );
-    await db.query(
-      `insert into growth_program_approvals(id,program_id,program_version,run_id,decision,capacity_snapshot,note,decided_by)
-       values('cc-shared-approval','cc-shared-p',1,$1,'approved','{}','Synthetic approval.',$2)`,
-      [fixture.runId, fixture.actor.id],
-    );
-    for (const supply of [fixture.supplyId, "cc-shared-second"])
-      await db.query(
-        "insert into program_supply_links(program_id,program_version,supply_id,week_key,linked_by) values('cc-shared-p',1,$1,$2,$3)",
-        [supply, fixture.weekKey, fixture.actor.id],
-      );
 
     /* Eighteen placements already made at the first counter, attributed to the
-       programme — which is what `remaining_capacity` counts. Written directly
-       rather than through `releaseWeeklyBenefits` so the test stays about
-       capacity arithmetic rather than about assignment suitability. */
-    await db.query(
-      `insert into weekly_releases(id,run_id,market_id,week_key,state,data_kind,member_count,reviewed_by,request_key,request_fingerprint)
-       values('cc-shared-release',$1,$2,$3,'published','synthetic',18,$4,'cc-shared-release','synthetic')`,
-      [fixture.runId, fixture.marketId, fixture.weekKey, fixture.actor.id],
-    );
-    for (const [index, member] of fixture.members.slice(0, 18).entries()) {
-      await db.query(
-        `insert into member_allocations(id,member_id,market_id,week_key) values($1,$2,$3,$4)`,
-        [`cc-shared-alloc-${index}`, member.id, fixture.marketId, fixture.weekKey],
-      );
-      await db.query(
-        "insert into allocation_options(allocation_id,supply_id,market_id,rank,reason) values($1,$2,$3,1,'{}')",
-        [`cc-shared-alloc-${index}`, fixture.supplyId, fixture.marketId],
-      );
-      await db.query(
-        `insert into fulfillment_grants(
-           id,release_id,allocation_id,member_id,market_id,week_key,supply_id,
-           organization_id,location_id,offer_id,offer_version,member_snapshot,
-           expires_at,data_kind,source_program_id,source_program_version
-         ) select $1,'cc-shared-release',$2,$3,$4,$5,s.id,s.organization_id,s.location_id,
-           s.offer_id,s.offer_version,'{}'::jsonb,now()+interval '7 days','synthetic',
-           'cc-shared-p',1
-           from network_drop_supplies s where s.id=$6`,
-        [
-          `cc-shared-grant-${index}`,
-          `cc-shared-alloc-${index}`,
-          member.id,
-          fixture.marketId,
-          fixture.weekKey,
-          fixture.supplyId,
-        ],
-      );
-    }
+       programme — which is what `remaining_capacity` counts. */
+    await issueProgramGrants(db, fixture, {
+      prefix: "cc-shared",
+      programId: "cc-shared-p",
+      weekKey: fixture.weekKey,
+      supplyId: fixture.supplyId,
+      memberIds: fixture.members.slice(0, 18).map((member) => member.id),
+    });
 
     const capacity = await pilotCapacity(db, run);
     const week = capacity.supplies.filter(
@@ -516,10 +468,7 @@ test("I · two counters under one programme share its placements, they do not ea
        flow graph enforces the programme limit while knowing which members each
        counter can serve — so each counter still reports the programme'"'"'s two.
        What must not double up is the operator'"'"'s list of counters. */
-    assert.deepEqual(
-      week.map((supply) => supply.quantity).sort(),
-      [2, 2],
-    );
+    assert.deepEqual(week.map((supply) => supply.quantity).sort(), [2, 2]);
 
     const pins = await destinationPins(db, run, fixture.weekKey, capacity);
     assert.equal(
@@ -582,5 +531,64 @@ test("J · a commercially invalid counter stays at zero, not at its full commitm
     const pin = (await destinationPins(db, run, fixture.weekKey, capacity))[0];
     assert.equal(pin.backed, 0);
     assert.equal(pin.state, "not_ready");
+  });
+});
+
+test("K · a counter that has issued most of its commitment does not eat the programme's remainder", async () => {
+  await withDatabase(async (db) => {
+    /* Ten committed at each of two counters under one programme, and the
+       programme has two placements left. The first counter has already issued
+       nine of its ten, so it can place exactly one more — whatever the
+       programme still holds. Handing it both placements strands the second
+       counter at zero and reports one placement left in a week that has two. */
+    const fixture = await seedSyntheticPilot(db, 10, "cc-headroom");
+    const run = await loadPilotRun(db, fixture.runId);
+    await addEligibleCounter(
+      db,
+      fixture,
+      "cc-headroom-second",
+      10,
+      fixture.weekKey,
+    );
+    await linkSharedProgram(db, fixture, {
+      programId: "cc-headroom-p",
+      weekKey: fixture.weekKey,
+      plannedPlacements: 11,
+      supplyIds: [fixture.supplyId, "cc-headroom-second"],
+    });
+
+    /* Nine placements already made at the first counter, attributed to the
+       programme, so it has two left and this counter can use only one. */
+    await issueProgramGrants(db, fixture, {
+      prefix: "cc-headroom",
+      programId: "cc-headroom-p",
+      weekKey: fixture.weekKey,
+      supplyId: fixture.supplyId,
+      memberIds: fixture.members.slice(0, 9).map((member) => member.id),
+    });
+
+    const capacity = await pilotCapacity(db, run);
+    assert.equal(
+      capacity.weeks.find((week) => week.week === fixture.weekKey)!.capacity,
+      2,
+      "the programme has two placements left for this week",
+    );
+
+    const pins = await destinationPins(db, run, fixture.weekKey, capacity);
+    assert.equal(
+      pins.reduce((total, pin) => total + pin.remaining, 0),
+      2,
+      "the two rows together offer the two placements the programme has left",
+    );
+    const busy = pins.find((pin) => pin.supplyId === fixture.supplyId)!;
+    const idle = pins.find((pin) => pin.supplyId === "cc-headroom-second")!;
+    assert.equal(busy.remaining, 1, "nine of ten issued leaves one, not two");
+    assert.equal(
+      idle.remaining,
+      1,
+      "the placement the busy counter cannot use stays with the counter that can",
+    );
+    assert.equal(busy.issued, 9);
+    assert.equal(idle.issued, 0);
   });
 });

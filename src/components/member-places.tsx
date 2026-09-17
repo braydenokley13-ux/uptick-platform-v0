@@ -24,16 +24,8 @@ const TONE = {
 } as const;
 
 export function MemberPlaces({ data }: { data: Data }) {
-  const {
-    market,
-    coverage,
-    places,
-    admitted,
-    inCoverage,
-    homeZip,
-    weekState,
-    weekIndex,
-  } = data;
+  const { market, coverage, places, admitted, inCoverage, homeZip, standing } =
+    data;
 
   /* No Market Cell at all. Uptick runs one neighbourhood at a time, and saying
      so is better than showing an empty map that implies one is coming. */
@@ -50,7 +42,10 @@ export function MemberPlaces({ data }: { data: Data }) {
           icon={<MapPin size={22} />}
           eyebrow="NOTHING NEARBY"
           title="Uptick isn't running near you yet."
-          action={{ href: "/your-uptick?view=preferences", label: "Check your ZIPs" }}
+          action={{
+            href: "/your-uptick?view=preferences",
+            label: "Check your ZIPs",
+          }}
         >
           <p>
             Uptick opens one neighborhood at a time. Yours isn&rsquo;t one of
@@ -61,8 +56,6 @@ export function MemberPlaces({ data }: { data: Data }) {
       </section>
     );
 
-  const operating = ["pilot", "live"].includes(market.state);
-
   return (
     <section className="member-places">
       <p className="eyebrow">WHERE UPTICK WORKS</p>
@@ -71,17 +64,10 @@ export function MemberPlaces({ data }: { data: Data }) {
         <br />
         <em>Your neighborhood.</em>
       </h1>
-      <p>
-        {!operating
-          ? "This neighborhood is set up but isn't running yet. Nothing is being handed out here right now."
-          : /* A run whose first week has not begun is not a run handing
-               anything out today, and the page must not imply it is. */
-            weekState === "upcoming"
-            ? `Uptick runs one neighborhood at a time. Yours is getting ready for week ${weekIndex}; nothing is being handed out yet.`
-            : weekState === "ended"
-              ? "Uptick runs one neighborhood at a time. Your four weeks here are finished."
-              : "Uptick runs one neighborhood at a time. This is the one you're in."}
-      </p>
+      {/* Whether Uptick is running here is decided in `memberPlaces`, beside
+          the run and cell state that decide it, so this page and the operator's
+          cannot drift into telling different stories about one neighbourhood. */}
+      <p>{standing}</p>
 
       {coverage.length > 0 && (
         <div className="member-places-coverage">
@@ -89,8 +75,8 @@ export function MemberPlaces({ data }: { data: Data }) {
           <p>{coverage.join(" · ")}</p>
           {!inCoverage && (
             <small>
-              Your home ZIP ({homeZip}) isn&rsquo;t one of them. Update your ZIPs
-              if that&rsquo;s wrong.
+              Your home ZIP ({homeZip}) isn&rsquo;t one of them. Update your
+              ZIPs if that&rsquo;s wrong.
             </small>
           )}
         </div>

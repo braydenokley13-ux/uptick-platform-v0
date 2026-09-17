@@ -209,9 +209,11 @@ export type MemberPlaceWeek = "current" | "upcoming" | "ended";
    The per-counter state comes from `destinationPins`, which reads
    `pilotCapacity`: the same engine admission, release, the readiness gate and
    the operator's command centre use. A member is therefore never told a counter
-   is ready while the operator is being told it is not. The numbers behind that
-   state stay on the operator's side; a member needs to know whether to walk
-   there, not how many units remain. */
+   is ready while the operator is being told it is not. What a member does not
+   inherit is the operator's display partition of a shared Growth Program
+   remainder — see the note at the mapping below — and the numbers behind the
+   state stay on the operator's side either way; a member needs to know whether
+   to walk there, not how many units remain. */
 export async function memberPlaces(
   db: DB,
   credential: string,
@@ -223,10 +225,9 @@ export async function memberPlaces(
     name: string;
     state: string;
     timezone: string;
-  }>(
-    "select id,name,state,timezone from market_cells where id=$1",
-    [member.market_id ?? ""],
-  );
+  }>("select id,name,state,timezone from market_cells where id=$1", [
+    member.market_id ?? "",
+  ]);
   const zips = market
     ? await db.query<{ zip: string }>(
         "select zip from market_zips where market_id=$1 order by zip",
@@ -245,9 +246,8 @@ export async function memberPlaces(
   let weekState: MemberPlaceWeek | null = null;
   let weekIndex: number | null = null;
   if (admission) {
-    const { loadPilotRun, pilotCapacity, pilotWeeks } = await import(
-      "./pilot-operations"
-    );
+    const { loadPilotRun, pilotCapacity, pilotWeeks } =
+      await import("./pilot-operations");
     const { destinationPins } = await import("./command-centre");
     const run = await loadPilotRun(db, admission.run_id);
     const weeks = pilotWeeks(run);
@@ -273,18 +273,40 @@ export async function memberPlaces(
       timeZone: "UTC",
     });
     const capacity = await pilotCapacity(db, run);
-    places = (await destinationPins(db, run, week, capacity)).map((pin) => ({
-      supplyId: pin.supplyId,
-      name: pin.label,
-      address: pin.address,
-      driveMinutes: pin.driveMinutes,
-      state:
+    places = (await destinationPins(db, run, week, capacity)).map((pin) => {
+      /* `pin.state` and `pin.backed` carry the operator's display partition:
+         when one Growth Program backs several counters, its shared remainder
+         is handed out here busiest-counter-first so a routing list cannot
+         offer the same placement twice. That partition is arbitrary — it does
+         not know which counter a member can actually use — so a counter that
+         lost the draw shows `backed: 0` while the assignment flow graph would
+         happily send this member there. Telling them "not handing out Uptick
+         this week" on that basis is false.
+
+         So a member is only told a counter is not handing anything out when
+         the counter genuinely cannot back this week at all — `usable`, which
+         is pilotCapacity's own eligibility: approved, in window, stocked,
+         staffed, with a distinct fallback and a live staff QR. A counter that
+         is eligible but fully spoken for is still open: this member may be one
+         of the people it is spoken for, and it is still honouring passes. That
+         case is scarcity, read from `serviceable` — the counter's unissued
+         headroom capped by its programme's real remainder, never partitioned.
+         An outage is read from the pin: a fact about the store, not a share. */
+      const scarce =
+        pin.serviceable <= Math.max(3, Math.round(pin.usable * 0.15));
+      const state =
         pin.state === "outage"
           ? ("closed" as const)
-          : pin.state === "not_ready"
+          : !pin.usable
             ? ("not_ready" as const)
-            : ("ready" as const),
-      /* The operator's sentence carries unit counts and the reason a counter
+            : ("ready" as const);
+      return {
+        supplyId: pin.supplyId,
+        name: pin.label,
+        address: pin.address,
+        driveMinutes: pin.driveMinutes,
+        state,
+        /* The operator's sentence carries unit counts and the reason a counter
          failed its checks. A member gets the part that changes what they do,
          and only what the database can stand behind.
 
@@ -292,25 +314,50 @@ export async function memberPlaces(
          redemptions, so it cannot be told as "already picked up" — that would
          claim a physical handoff Uptick can never prove. Issued means reserved
          for another member, which is exactly what happened. */
-      why:
-        pin.state === "outage"
-          ? "Closed right now. Nothing to pick up here this week."
-          : pin.state === "not_ready"
-            ? weekState === "current"
-              ? "Not handing out Uptick this week."
-              : `Not set up for week ${weekIndex} yet.`
-            : weekState === "upcoming"
-              ? `Backing week ${weekIndex}, which starts ${starts}.`
-              : weekState === "ended"
-                ? `Backed week ${weekIndex}. This pilot's four weeks are finished.`
-                : pin.state === "low_supply"
-                  ? "Open this week. Most of this week's Uptick is already reserved for other members."
-                  : "Open this week.",
-    }));
+        why:
+          state === "closed"
+            ? "Closed right now. Nothing to pick up here this week."
+            : state === "not_ready"
+              ? weekState === "current"
+                ? "Not handing out Uptick this week."
+                : `Not set up for week ${weekIndex} yet.`
+              : weekState === "upcoming"
+                ? `Backing week ${weekIndex}, which starts ${starts}.`
+                : weekState === "ended"
+                  ? `Backed week ${weekIndex}. This pilot's four weeks are finished.`
+                  : scarce
+                    ? "Open this week. Most of this week's Uptick is already reserved for other members."
+                    : "Open this week.",
+      };
+    });
   }
   const coverage = zips.map((row) => row.zip);
+  /* Whether Uptick is running here, in one sentence.
+
+     This lived in the component, which re-derived it from `market.state` while
+     this function derived the week state — two places deciding one message,
+     which is the same split that let the Places tab exist in the bar and
+     nowhere else. It is decided once, here, beside the facts it is about.
+
+     A paused cell is the case worth naming: pausing stops new routing, and the
+     claim and redemption paths deliberately go on honouring an Uptick already
+     issued. Telling a member with a live pass that nothing is being handed out
+     here contradicts their own pass on the next screen. */
+  const standing = !market
+    ? null
+    : market.state === "paused"
+      ? "Uptick has paused new Upticks in this neighborhood. Anything already on your pass still counts — a pause stops new ones going out, not the one you have."
+      : !["pilot", "live"].includes(market.state)
+        ? "This neighborhood is set up but isn't running yet. Nothing is being handed out here right now."
+        : weekState === "upcoming"
+          ? `Uptick runs one neighborhood at a time. Yours is getting ready for week ${weekIndex}; nothing is being handed out yet.`
+          : weekState === "ended"
+            ? "Uptick runs one neighborhood at a time. Your four weeks here are finished."
+            : "Uptick runs one neighborhood at a time. This is the one you're in.";
   return {
     market: market || null,
+    /* The sentence above; never null while `market` is set. */
+    standing,
     /* The neighbourhood, as the operator actually defined it. */
     coverage,
     homeZip: member.home_zip,

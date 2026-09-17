@@ -14,13 +14,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { memoryDb, type DB } from "../src/lib/db";
+import { destinationPins } from "../src/lib/command-centre";
 import { memberPlaces } from "../src/lib/member-experience";
+import { loadPilotRun, pilotCapacity } from "../src/lib/pilot-operations";
 import { releaseWeeklyBenefits } from "../src/lib/pilot-promise";
 import { hash, id, token, encrypt } from "../src/lib/security";
 import {
   seedSyntheticPilot,
   type SyntheticPilotFixture,
 } from "../scripts/verify-postgres-pilot";
+import {
+  addEligibleCounter,
+  issueProgramGrants,
+  linkSharedProgram,
+} from "./support/pilot-counters";
 
 function localEnvironment() {
   process.env.UPTICK_ENV = "development";
@@ -63,10 +70,7 @@ async function credentialFor(db: DB, memberId: string) {
 }
 
 async function placesFor(db: DB, fixture: SyntheticPilotFixture, index = 0) {
-  return memberPlaces(
-    db,
-    await credentialFor(db, fixture.members[index].id),
-  );
+  return memberPlaces(db, await credentialFor(db, fixture.members[index].id));
 }
 
 test("an admitted member sees their own Market Cell and the counters backing their week", async () => {
@@ -75,7 +79,11 @@ test("an admitted member sees their own Market Cell and the counters backing the
     const data = await placesFor(db, fixture);
 
     assert.equal(data.market?.name, "Synthetic Pilot");
-    assert.deepEqual(data.coverage, ["10001"], "the real defined neighbourhood");
+    assert.deepEqual(
+      data.coverage,
+      ["10001"],
+      "the real defined neighbourhood",
+    );
     assert.equal(data.inCoverage, true);
     assert.equal(data.admitted, true);
     assert.equal(data.week, fixture.weekKey);
@@ -155,9 +163,10 @@ test("a member who is not admitted is shown no counter at all", async () => {
     const fixture = await seedSyntheticPilot(db, 4, "mp-waitlist");
     /* Admissions are immutable, so this member is created outside the cohort —
        which is exactly the waitlisted member's position. */
-    await db.query("insert into customers(id,phone) values($1,'+12125559999')", [
-      "mp-waitlist-outsider-customer",
-    ]);
+    await db.query(
+      "insert into customers(id,phone) values($1,'+12125559999')",
+      ["mp-waitlist-outsider-customer"],
+    );
     await db.query(
       `insert into uptick_members(
          id,customer_id,home_zip,market_id,state,verified_at,data_kind,age_confirmed_at
@@ -181,9 +190,10 @@ test("a member who is not admitted is shown no counter at all", async () => {
 
 test("a member with no Market Cell gets the unavailable state, not an empty map", async () => {
   await withDatabase(async (db) => {
-    await db.query("insert into customers(id,phone) values($1,'+12125558888')", [
-      "mp-nowhere-customer",
-    ]);
+    await db.query(
+      "insert into customers(id,phone) values($1,'+12125558888')",
+      ["mp-nowhere-customer"],
+    );
     await db.query(
       `insert into uptick_members(
          id,customer_id,home_zip,state,verified_at,data_kind,age_confirmed_at
@@ -191,10 +201,7 @@ test("a member with no Market Cell gets the unavailable state, not an empty map"
       ["mp-nowhere-customer"],
     );
 
-    const data = await memberPlaces(
-      db,
-      await credentialFor(db, "mp-nowhere"),
-    );
+    const data = await memberPlaces(db, await credentialFor(db, "mp-nowhere"));
     assert.equal(data.market, null);
     assert.deepEqual(data.coverage, []);
     assert.equal(data.admitted, false);
@@ -208,7 +215,9 @@ test("a week that has not started is never described as open now", async () => {
     /* The fixture starts its run in the current week. Reading the same data a
        week early is exactly the position of a member admitted into an enrolling
        run whose first week is still ahead. */
-    const early = new Date(Date.parse(`${fixture.weekKey}T12:00:00Z`) - 5 * 86400000);
+    const early = new Date(
+      Date.parse(`${fixture.weekKey}T12:00:00Z`) - 5 * 86400000,
+    );
     const data = await memberPlaces(
       db,
       await credentialFor(db, fixture.members[0].id),
@@ -282,13 +291,120 @@ test("issued grants are never told to a member as having been picked up", async 
 test("a home ZIP outside the cell's coverage is stated, not silently ignored", async () => {
   await withDatabase(async (db) => {
     const fixture = await seedSyntheticPilot(db, 4, "mp-coverage");
-    await db.query(
-      "update uptick_members set home_zip='11222' where id=$1",
-      [fixture.members[0].id],
-    );
+    await db.query("update uptick_members set home_zip='11222' where id=$1", [
+      fixture.members[0].id,
+    ]);
     const data = await placesFor(db, fixture);
     assert.equal(data.homeZip, "11222");
     assert.equal(data.inCoverage, false);
     assert.deepEqual(data.coverage, ["10001"]);
+  });
+});
+
+test("a counter the operator's list has no share left for is still open to a member", async () => {
+  await withDatabase(async (db) => {
+    /* Two counters under one Growth Program, eighteen of its twenty
+       placements already made at the first. The operator's list hands the
+       remaining two to the busy counter so a routing list cannot offer the
+       same placement twice — an arbitrary partition that does not know which
+       counter any given member can use.
+
+       The second counter therefore shows `backed: 0` to the operator. It is
+       still eligible, still stocked, still staffed, and the assignment flow
+       graph may well send this member there, so telling the member it is not
+       handing out Uptick this week would be false. */
+    const fixture = await seedSyntheticPilot(db, 20, "mp-shared");
+    await addEligibleCounter(
+      db,
+      fixture,
+      "mp-shared-second",
+      20,
+      fixture.weekKey,
+    );
+    await linkSharedProgram(db, fixture, {
+      programId: "mp-shared-p",
+      weekKey: fixture.weekKey,
+      plannedPlacements: 20,
+      supplyIds: [fixture.supplyId, "mp-shared-second"],
+    });
+    await issueProgramGrants(db, fixture, {
+      prefix: "mp-shared",
+      programId: "mp-shared-p",
+      weekKey: fixture.weekKey,
+      supplyId: fixture.supplyId,
+      memberIds: fixture.members.slice(0, 18).map((member) => member.id),
+    });
+
+    const run = await loadPilotRun(db, fixture.runId);
+    const pins = await destinationPins(
+      db,
+      run,
+      fixture.weekKey,
+      await pilotCapacity(db, run),
+    );
+    const starved = pins.find((pin) => pin.supplyId === "mp-shared-second")!;
+    assert.equal(
+      starved.backed,
+      0,
+      "the precondition: it lost the display draw",
+    );
+    assert.ok(starved.serviceable > 0, "yet it can still serve a member");
+
+    const data = await placesFor(db, fixture, 19);
+    assert.equal(data.places.length, 2, "both counters are listed");
+    const place = data.places.find(
+      (row) => row.supplyId === "mp-shared-second",
+    )!;
+    assert.equal(
+      place.state,
+      "ready",
+      "an operator display share is not a member-facing closure",
+    );
+    assert.doesNotMatch(place.why, /Not handing out/);
+    assert.match(place.why, /Open this week/);
+  });
+});
+
+test("a paused Market Cell stops new Upticks without cancelling an issued one", async () => {
+  await withDatabase(async (db) => {
+    /* Pausing a Market Cell stops new routing. It does not cancel a benefit
+       already issued: the claim and redemption paths deliberately keep
+       honouring those, and `saveMarket` allows the pause without completing
+       the run. Copy that says nothing is being handed out here contradicts the
+       member's own pass on the next screen. */
+    const fixture = await seedSyntheticPilot(db, 4, "mp-paused");
+    await releaseWeeklyBenefits(db, fixture.actor, {
+      runId: fixture.runId,
+      marketId: fixture.marketId,
+      weekKey: fixture.weekKey,
+      dataKind: "synthetic",
+      requestKey: "mp-paused-release",
+      assignments: fixture.members.map((member) => ({
+        memberId: member.id,
+        supplyId: fixture.supplyId,
+      })),
+    });
+    await db.query("update market_cells set state='paused' where id=$1", [
+      fixture.marketId,
+    ]);
+
+    const data = await placesFor(db, fixture);
+    assert.equal(data.market?.state, "paused");
+    assert.match(data.standing!, /paused new Upticks/);
+    assert.match(data.standing!, /still counts/);
+    assert.doesNotMatch(
+      data.standing!,
+      /isn't running yet/,
+      "a paused neighbourhood is not one that never started",
+    );
+    assert.doesNotMatch(
+      data.standing!,
+      /Nothing is being handed out/,
+      "issued benefits are still honoured while a cell is paused",
+    );
+    assert.ok(
+      data.places.length > 0,
+      "the counters stay listed: a pass already issued is still redeemable there",
+    );
   });
 });
