@@ -1,11 +1,4 @@
 import Link from "next/link";
-import {
-  ArrowRight,
-  Users,
-  PackageCheck,
-  ChartNoAxesCombined,
-  Settings2,
-} from "lucide-react";
 import { randomUUID } from "node:crypto";
 import { requireActor } from "@/lib/auth";
 import { getDb } from "@/lib/db";
@@ -18,7 +11,11 @@ import {
 import { Shell } from "@/components/shell";
 import { Badge, Metric, PageHeading } from "@/components/ui";
 import { PilotForm } from "@/components/pilot-form";
+import { CommandCentre } from "@/components/command-centre";
+import { commandCentre } from "@/lib/command-centre";
+import { operatorReadinessRows } from "@/lib/operator-readiness";
 import "@/components/network-operations.css";
+import "@/components/command-centre.css";
 export const dynamic = "force-dynamic";
 const label = (value: string) => value.replaceAll("_", " ");
 const money = (value: string | number) =>
@@ -34,7 +31,7 @@ const stamp = (value: string) =>
 export default async function PilotPage({
   searchParams,
 }: {
-  searchParams: Promise<{ run?: string; view?: string }>;
+  searchParams: Promise<{ run?: string; view?: string; week?: string }>;
 }) {
   const actor = await requireActor(true),
     db = await getDb(),
@@ -83,6 +80,19 @@ export default async function PilotPage({
         "select 'market_cells' entity,id,name,data_kind from market_cells union all select 'acquisition_partners',id,name,data_kind from acquisition_partners union all select 'acquisition_sources',id,name,data_kind from acquisition_sources order by entity,name",
       ),
     ]);
+  // The command centre is the overview. Everything it needs is assembled here so
+  // the view itself stays a pure rendering of already-decided facts.
+  const centre =
+    run && view === "overview"
+      ? await commandCentre(db, actor, run, query.week, data.detail.capacity)
+      : null;
+  const readinessRows = centre ? await operatorReadinessRows(db) : [];
+  const marketName =
+    data.markets.find((m) => m.id === run?.market_id)?.name ||
+    "your Market Cell";
+  const operatorFirstName = (run?.operator_owner || "there").split(/\s+/)[0];
+  const weekHref = (week: string) =>
+    `/operator/pilot?${new URLSearchParams({ ...(run ? { run: run.id } : {}), view: "overview", week })}`;
   const payers = await db.query<{ id: string; name: string }>(
     "select id,name from organizations where ($1::text<>'real' or not is_demo) order by name",
     [run?.data_kind || "internal"],
@@ -106,11 +116,13 @@ export default async function PilotPage({
   return (
     <Shell actor={actor} active="pilot" name={run?.name || "Pilot operations"}>
       <div className="network-operations">
-        <PageHeading
-          eyebrow="FOUR WEEKS · ONE ACCOUNTABLE SERVICE"
-          title={titles[view][0]}
-          description={titles[view][1]}
-        />
+        {view !== "overview" && (
+          <PageHeading
+            eyebrow="FOUR WEEKS · ONE ACCOUNTABLE SERVICE"
+            title={titles[view][0]}
+            description={titles[view][1]}
+          />
+        )}
         <nav
           className="network-tabs pilot-view-tabs"
           aria-label="Pilot workspace"
@@ -149,105 +161,16 @@ export default async function PilotPage({
         )}
         {run && detail && (
           <>
-            {view === "overview" && (
-              <>
-                <div className="pilot-overview-label">
-                  <h2>What do you need to do?</h2>
-                </div>
-                <div className="pilot-task-grid">
-                  <Link href="/operator/pilot/support">
-                    <span>
-                      <Users size={23} />
-                    </span>
-                    <h3>Help a member</h3>
-                    <p>
-                      Find someone, check their account, or resolve a request.
-                    </p>
-                    <strong>
-                      Open member support <ArrowRight size={16} />
-                    </strong>
-                  </Link>
-                  <Link href="/operator/pilot/fulfillment">
-                    <span>
-                      <PackageCheck size={23} />
-                    </span>
-                    <h3>Handle a store issue</h3>
-                    <p>
-                      Check fulfillment, report a failure, or arrange a
-                      recovery.
-                    </p>
-                    <strong>
-                      Open store operations <ArrowRight size={16} />
-                    </strong>
-                  </Link>
-                  <Link href={viewHref("results")}>
-                    <span>
-                      <ChartNoAxesCombined size={23} />
-                    </span>
-                    <h3>Review the results</h3>
-                    <p>
-                      See recorded use and how the four-week pilot is
-                      progressing.
-                    </p>
-                    <strong>
-                      View results <ArrowRight size={16} />
-                    </strong>
-                  </Link>
-                </div>
-                <div className="pilot-overview-label">
-                  <h2>Pilot at a glance</h2>
-                  <span>{run.name}</span>
-                </div>
-                <div className="network-metrics">
-                  <Metric
-                    label="ADMITTED MEMBERS"
-                    value={detail.admissions.length}
-                    note={`Fixed cohort · target ${run.target_members}`}
-                  />
-                  <Metric
-                    label="REMAINING ADMISSIONS"
-                    value={
-                      run.cohort_frozen_at || run.state !== "enrolling"
-                        ? 0
-                        : Math.max(
-                            0,
-                            detail.capacity.capacity - detail.admissions.length,
-                          )
-                    }
-                    note={
-                      run.cohort_frozen_at
-                        ? "Admissions closed · original cohort is frozen"
-                        : `Four-week capacity ${detail.capacity.capacity} · hard cap ${run.hard_cap}`
-                    }
-                  />
-                  <Metric
-                    label="WAITLIST"
-                    value={detail.waitlist.length}
-                    note="No unsupported weekly promise"
-                  />
-                  <Metric
-                    label="DIGITAL USE"
-                    value={detail.scorecard.firstUse}
-                    note="Members with recorded use"
-                  />
-                </div>
-                <Link className="pilot-setup-summary" href={viewHref("setup")}>
-                  <Settings2 size={20} />
-                  <span>
-                    <strong>
-                      {detail.constraints.length
-                        ? `${detail.constraints.length} launch checks still need review`
-                        : "Launch checklist recorded"}
-                    </strong>
-                    <small>
-                      {run.data_kind === "real"
-                        ? "Review all gates before admitting real members."
-                        : "Demo workspace. Real enrollment is not enabled."}
-                    </small>
-                  </span>
-                  <ArrowRight size={18} />
-                </Link>
-              </>
+            {view === "overview" && centre && (
+              <CommandCentre
+                centre={centre}
+                run={run}
+                marketName={marketName}
+                operatorName={operatorFirstName}
+                constraints={detail.constraints}
+                readiness={readinessRows}
+                weekHref={weekHref}
+              />
             )}
             {view === "setup" && (
               <section id="today" className="panel network-panel">
@@ -278,7 +201,7 @@ export default async function PilotPage({
                   <div className="pilot-action-list">
                     <ul>
                       {detail.constraints.slice(0, 3).map((c) => (
-                        <li key={c}>{c}</li>
+                        <li key={`${c.category}-${c.text}`}>{c.text}</li>
                       ))}
                     </ul>
                     {detail.constraints.length > 3 && (
@@ -288,7 +211,7 @@ export default async function PilotPage({
                         </summary>
                         <ul>
                           {detail.constraints.slice(3).map((c) => (
-                            <li key={c}>{c}</li>
+                            <li key={`${c.category}-${c.text}`}>{c.text}</li>
                           ))}
                         </ul>
                       </details>

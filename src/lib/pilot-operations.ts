@@ -193,6 +193,125 @@ export async function commitPilotSupply(db: DB, actor: Actor, raw: unknown) {
     });
   });
 }
+/** A single named blocker. `text` is the whole truth of it; the category and
+    urgency only decide where it is shown and how loudly. */
+export type PilotConstraint = {
+  category:
+    | "Supply"
+    | "Destinations"
+    | "Incidents"
+    | "Messaging"
+    | "Partners"
+    | "Readiness"
+    | "Scheduler";
+  urgency: "bad" | "warn";
+  text: string;
+  href?: string;
+};
+export const constraintOrder: PilotConstraint["urgency"][] = ["bad", "warn"];
+
+/* How many members a week's supply has to back.
+
+   Before the cohort is frozen the run is still admitting, so the requirement is
+   the intention, not the current headcount: a 150-member pilot with five people
+   admitted still needs 150 backed, or every week looks healthy right up until
+   the moment it is not. Once the cohort is frozen the intention stops mattering
+   and the fixed admitted number is the whole obligation.
+
+   This is the rule pilot-supply-amendments.ts already enforced when accepting a
+   replacement supply. It lives here so the amendment path, the command centre
+   and the readiness gate cannot drift apart on what "backed" means. */
+export async function requiredCohort(db: DB, run: PilotRun) {
+  /* The operational audience, not the raw admission count. A withdrawn or
+     suspended member is not owed a benefit — `releaseWeeklyBenefits` refuses a
+     release that does not match this exact set — so counting them would demand
+     backing for people the week will never serve. */
+  const { included } = await operationalPilotAudience(db, run.id);
+  return run.cohort_frozen_at
+    ? included.length
+    : Math.max(included.length, run.target_members);
+}
+
+export type PilotWeekBacking = {
+  week: string;
+  /** 1 to 4. */
+  index: number;
+  /** Usable, eligible, committed units for this week, from pilotCapacity. */
+  usable: number;
+  /** Members this week has to back. */
+  required: number;
+  released: boolean;
+  /** True when the run still has to serve this week, so it still has to be
+      backed. A released week is history; a week already behind a frozen run
+      can no longer be served. */
+  outstanding: boolean;
+  /** How far short this week falls, floored at zero. */
+  short: number;
+};
+
+/* Whether a run is actually backed, week by week.
+
+   One function, because everything that asks "is this backed?" has to get the
+   same answer: the run-state gate, the readiness map, and the operator's
+   command centre. Asking it three ways is how a Market Cell shows a green
+   readiness gate while the run it belongs to cannot be taken live.
+
+   It proves the claim per week. An aggregate — total supplies, total committed
+   units, how many weeks have any commitment at all — cannot: a 200-member
+   cohort with one committed unit in each of four weeks satisfies every
+   aggregate and backs nobody. */
+export async function pilotBacking(
+  db: DB,
+  run: PilotRun,
+  capacity?: Awaited<ReturnType<typeof pilotCapacity>>,
+) {
+  const plan = capacity ?? (await pilotCapacity(db, run));
+  const required = await requiredCohort(db, run);
+  const published = await db.query<{ week_key: string }>(
+    "select week_key from weekly_releases where run_id=$1",
+    [run.id],
+  );
+  const currentWeek = run.timezone
+    ? marketWeekWindow(new Date(), run.timezone).weekKey
+    : new Date().toISOString().slice(0, 10);
+  const weeks: PilotWeekBacking[] = pilotWeeks(run).map((week, index) => {
+    const usable = plan.weeks.find((w) => w.week === week)?.capacity ?? 0;
+    const released = published.some((p) => p.week_key === week);
+    return {
+      week,
+      index: index + 1,
+      usable,
+      required,
+      released,
+      outstanding:
+        !released && (run.cohort_frozen_at ? week >= currentWeek : true),
+      short: Math.max(0, required - usable),
+    };
+  });
+  const outstanding = weeks.filter((w) => w.outstanding);
+  /* A run with nothing left to serve is not short of anything. */
+  const available = outstanding.length
+    ? Math.min(...outstanding.map((w) => w.usable))
+    : required;
+  const worst = outstanding
+    .filter((w) => w.short > 0)
+    .sort((a, b) => b.short - a.short || a.index - b.index)[0];
+  return {
+    capacity: plan,
+    required,
+    weeks,
+    outstanding,
+    available,
+    short: Math.max(0, required - available),
+    /* The sentence an operator can act on, naming the week and both numbers. */
+    evidence: worst
+      ? `Week ${worst.index}: ${worst.usable} usable units backed for ${worst.required} required.`
+      : weeks.length
+        ? `All four weeks back the ${required} members required.`
+        : "This run has no weeks planned.",
+  };
+}
+
 export async function pilotCapacity(
   db: DB,
   run: PilotRun,
@@ -207,6 +326,7 @@ export async function pilotCapacity(
     eligible: boolean;
     fallback_available: number;
     commercial: boolean;
+    own_issued: number;
   }>(
     `select p.week_key,p.supply_id,p.committed_quantity,
       coalesce(s.quantity,0)+(select coalesce(sum(delta),0)::int from supply_adjustments where supply_id=s.id) inventory,
@@ -233,7 +353,9 @@ export async function pilotCapacity(
           and (rg.state='redeemed' or (rg.superseded_at is null and rg.expires_at>now())))
        +(select count(*)::int from fulfillment_grants g join weekly_releases r on r.id=g.release_id
           where g.supply_id=s.id and (r.run_id is distinct from p.run_id or r.week_key<>p.week_key)
-           and (g.state='redeemed' or g.expires_at>now()))) competing
+           and (g.state='redeemed' or g.expires_at>now()))) competing,
+      (select count(*)::int from fulfillment_grants g join weekly_releases r on r.id=g.release_id
+        where g.supply_id=s.id and r.run_id=p.run_id and r.week_key=p.week_key) own_issued
      from effective_pilot_week_supplies p join network_drop_supplies s on s.id=p.supply_id
      join market_cells m on m.id=s.market_id
      left join pilot_supply_terms t on t.supply_id=s.id left join destination_readiness d on d.supply_id=s.id left join pilot_supply_fallbacks f on f.supply_id=s.id
@@ -244,7 +366,7 @@ export async function pilotCapacity(
   // this pilot's reservation and clamps shortages to zero, so adding a whole
   // commitment to it can fabricate units. Issued grants for this same plan are
   // part of its commitment; they must not be subtracted a second time.
-  const quantities = await Promise.all(
+  const measured = await Promise.all(
     plans.map(async (p) => {
       let programId: string | null = null,
         commercialCapacity: number | null = null;
@@ -260,25 +382,52 @@ export async function pilotCapacity(
           commercialCapacity = 0;
         }
       }
+      /* The terms that are totals for the week: the commitment, the stock left
+         after other obligations, and the fallback behind it. */
+      const total = p.eligible
+        ? Math.max(
+            0,
+            Math.min(
+              p.committed_quantity,
+              p.inventory - p.competing,
+              p.fallback_available,
+            ),
+          )
+        : 0;
       return {
         week_key: p.week_key,
         supply_id: p.supply_id,
         programId,
         commercialCapacity,
-        quantity: p.eligible
-          ? Math.max(
-              0,
-              Math.min(
-                p.committed_quantity,
-                p.inventory - p.competing,
-                p.fallback_available,
-                commercialCapacity ?? Infinity,
-              ),
-            )
-          : 0,
+        total,
+        issued: p.own_issued,
       };
     }),
   );
+
+  /* `quantity` is a per-counter cap, and deliberately so: the week totals
+     below, `recommendPilotAssignments` and `releaseWeeklyBenefits` all enforce
+     a programme's shared limit at group level, over a flow graph that also
+     knows which members each counter can actually serve. Partitioning that
+     limit between counters here instead would strand a member who is suitable
+     only for the counter that lost the draw.
+
+     A commercially rejected supply keeps a zero cap, which is the whole point
+     of the catch above: `releaseWeeklyBenefits` will refuse to publish it, so
+     nothing upstream may count it as usable. */
+  const quantities = measured.map((m) => ({
+    week_key: m.week_key,
+    supply_id: m.supply_id,
+    programId: m.programId,
+    commercialCapacity: m.commercialCapacity,
+    quantity: Math.min(m.total, m.commercialCapacity ?? Infinity),
+    /* What this counter could back for the week before any commercial limit,
+       and what has already been drawn from it. Surfaces that list counters
+       together need both to share a programme's remainder once. */
+    total: m.total,
+    issued: m.issued,
+  }));
+
   const weeks = pilotWeeks(run).map((week) => {
     const groups = new Map<string, { quantity: number; limit: number }>();
     for (const supply of quantities.filter((q) => q.week_key === week)) {
@@ -417,34 +566,13 @@ export async function setPilotState(db: DB, actor: Actor, raw: unknown) {
       if (run.data_kind === "real")
         await (
           await import("./release-readiness")
-        ).assertRealEnrollmentCommissioned(tx);
-      const capacity = await pilotCapacity(tx, run);
-      const published = run.cohort_frozen_at
-        ? await tx.query<{ week_key: string }>(
-            "select week_key from weekly_releases where run_id=$1",
-            [run.id],
-          )
-        : [];
-      const operational = run.cohort_frozen_at
-        ? await operationalPilotAudience(tx, run.id)
-        : null;
-      const requiredMembers = operational
-        ? operational.included.length
-        : run.target_members;
-      const currentWeek = marketWeekWindow(new Date(), run.timezone!).weekKey;
-      const upcoming = run.cohort_frozen_at
-        ? capacity.weeks.filter(
-            (w) =>
-              w.week >= currentWeek &&
-              !published.some((p) => p.week_key === w.week),
-          )
-        : capacity.weeks;
-      const available = upcoming.length
-        ? Math.min(...upcoming.map((w) => w.capacity))
-        : requiredMembers;
-      if (available < requiredMembers)
+        ).assertRealEnrollmentCommissioned(tx, run.id);
+      /* The shared proof, so this gate and the readiness map cannot disagree
+         about whether the same run is backed. */
+      const backing = await pilotBacking(tx, run);
+      if (backing.available < backing.required)
         throw new RequestError(
-          `Four-week supply backs ${available} members for the unreleased operating weeks; ${requiredMembers} are required. Confirm backing before continuing. Issued history remains unchanged.`,
+          `Four-week supply backs ${backing.available} members for the unreleased operating weeks; ${backing.required} are required. ${backing.evidence} Confirm backing before continuing. Issued history remains unchanged.`,
         );
       const missing = launchChecks.filter((key) => !checklist[key]);
       if (missing.length)
@@ -915,10 +1043,22 @@ export async function pilotOperations(
       [run.id],
     ),
   ]);
-  const ready =
-    launchChecks.every((key) => run.checklist[key]) &&
-    capacity.capacity >= run.target_members;
-  const constraints = [];
+  /* The shared proof, so this page, the run-state gate, the amendment guard and
+     the readiness map all mean the same thing by "backed". Measuring against
+     `target_members` here said a frozen twenty-member pilot with five
+     withdrawals was blocked at 15 of 20, while `amendPilotSupply` had correctly
+     accepted a 15-unit amendment for the same weeks. */
+  const backing = await pilotBacking(db, run, capacity);
+  const ready = launchChecks.every((key) => run.checklist[key]) && !backing.short;
+  // Structured so the command centre can group, rank and route each blocker.
+  // `text` stays the single truthful sentence; nothing is summarised into a score.
+  const constraints: PilotConstraint[] = [];
+  const raise = (
+    category: PilotConstraint["category"],
+    urgency: PilotConstraint["urgency"],
+    text: string,
+    href?: string,
+  ) => constraints.push({ category, urgency, text, href });
   const [openIncidents, unready, jobs, failures] = await Promise.all([
     db.query<{ owner: string; n: number }>(
       "select i.owner,count(*)::int n from fulfillment_incidents i join fulfillment_grants g on g.id=i.grant_id join weekly_releases r on r.id=g.release_id where r.run_id=$1 and i.state in ('open','recovering') group by i.owner",
@@ -937,16 +1077,25 @@ export async function pilotOperations(
     ),
   ]);
   for (const incident of openIncidents)
-    constraints.push(
+    raise(
+      "Incidents",
+      "bad",
       `${incident.n} unresolved fulfillment incident(s). Owner: ${incident.owner}. Open fulfillment recovery.`,
+      "/operator/pilot/fulfillment",
     );
   for (const destination of unready)
-    constraints.push(
+    raise(
+      "Destinations",
+      "warn",
       `${destination.merchant}: readiness or fallback is unavailable. Confirm before new releases.`,
+      "/operator/pilot/fulfillment",
     );
   if (failures[0]?.n)
-    constraints.push(
+    raise(
+      "Messaging",
+      "bad",
       `${failures[0].n} failed or uncertain messages need review. Do not blindly retry unknown delivery.`,
+      "/operator/network/messaging",
     );
   if (run.state === "live") {
     for (const key of ["membership_prepare", "membership_dispatch"]) {
@@ -956,7 +1105,9 @@ export async function pilotOperations(
         job.state !== "succeeded" ||
         Date.now() - new Date(job.last_success).getTime() > 15 * 60 * 1000
       )
-        constraints.push(
+        raise(
+          "Scheduler",
+          "bad",
           `${key.replaceAll("_", " ")}: scheduler health needs attention.`,
         );
     }
@@ -967,25 +1118,33 @@ export async function pilotOperations(
         [run.id, currentWeek],
       );
       if (n)
-        constraints.push(
+        raise(
+          "Supply",
+          "warn",
           `${n} admitted members await this week's backed release.`,
         );
     }
   }
-  if (capacity.capacity < run.target_members)
-    constraints.push(
-      `Supply backs ${capacity.capacity} of ${run.target_members} target members across all four weeks.`,
+  if (backing.short)
+    raise(
+      "Supply",
+      "bad",
+      `Supply backs ${backing.available} of the ${backing.required} members this run owes a benefit. ${backing.evidence}`,
     );
   for (const c of commitments)
     if (c.state === "planned" && new Date(c.planned_at) < new Date())
-      constraints.push(
+      raise(
+        "Partners",
+        "warn",
         `${c.partner}: ${c.channel.replaceAll("_", " ")} is overdue. Owner: ${c.owner}.`,
       );
   if (!commitments.length)
-    constraints.push("Record a partner distribution commitment.");
+    raise("Partners", "warn", "Record a partner distribution commitment.");
   for (const key of launchChecks)
     if (!run.checklist[key])
-      constraints.push(
+      raise(
+        "Readiness",
+        "warn",
         `Confirm ${key.replace(/([A-Z])/g, " $1").toLowerCase()}.`,
       );
   return {

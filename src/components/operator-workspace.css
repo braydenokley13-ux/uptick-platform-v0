@@ -49,3 +49,50 @@
     width: 100%;
   }
 }
+
+/* Issued-promise ledger: counts first, full table on request. */
+.operator-ledger-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  margin: 12px 0;
+}
+.operator-ledger-summary span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  background: var(--canvas-deep);
+  border: 1px solid var(--line);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.operator-ledger-summary strong {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.operator-ledger > summary {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mint-deep);
+}
+.operator-readiness > details > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.operator-readiness > details > summary h2 {
+  display: inline;
+}
+
+/* The one record an operator arrived here to see, when support deep-linked it. */
+.operator-ledger tr.is-focused {
+  background: #fdf3e2;
+}
+.operator-ledger tr.is-focused code {
+  font-weight: 600;
+}

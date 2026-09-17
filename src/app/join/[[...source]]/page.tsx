@@ -8,6 +8,7 @@ import {
 import { MemberFrame, PerkIllustration } from "@/components/member-ui";
 import { JoinUptick, RecoverMemberAccess } from "@/components/member-controls";
 import { Badge } from "@/components/ui";
+import { Scene } from "@/components/system";
 import Link from "next/link";
 import { sampleDemoMode as demoMode } from "@/lib/demo-guard";
 export const dynamic = "force-dynamic";
@@ -120,6 +121,13 @@ export default async function JoinPage({
           </p>
           <RecoverMemberAccess />
         </section>
+      </div>
+      <div className="member-join-close">
+        <Scene height={124} script="good things closer to home." />
+        <p>
+          Uptick runs one neighborhood at a time, with real stores that have
+          agreed to take part. Free to join, and never a purchase.
+        </p>
       </div>
       {source && <SourceVisit token={sourceToken!} />}
     </MemberFrame>

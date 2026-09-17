@@ -224,6 +224,16 @@ export default async function DemoStudio({
             <Link className="button" href="/your-uptick">
               Open Your Uptick
             </Link>
+            <p>
+              The <strong>Places</strong> tab answers the other question a
+              member asks: where does Uptick work around me. It shows the
+              neighborhood, the ZIPs in it, and only the counters actually
+              backing this member&rsquo;s week — no browsable offers, and no
+              counter that nobody has backed for them.
+            </p>
+            <Link className="text-link" href="/your-uptick?view=places">
+              Open Places <ArrowRight size={15} />
+            </Link>
           </article>
         )}
         {step === 3 && (
@@ -269,7 +279,19 @@ export default async function DemoStudio({
               The merchant and operator views use these same sample records.
             </p>
             <DemoButton action="merchant">Open merchant view</DemoButton>
+            <p className="fine">
+              The merchant sees every commitment for the week — this sample
+              store backs two counters — each with its own item, quantity,
+              address and fallback. Figures are named for what was recorded: a
+              benefit issued, and a redemption recorded at the counter.
+            </p>
             <DemoButton action="operator">Open operator view</DemoButton>
+            <p className="fine">
+              The operator sees what each counter can actually serve this week,
+              and a four-week backing panel comparing every week&rsquo;s usable
+              supply against the members the run owes a benefit — the same check
+              that decides whether anyone may be admitted.
+            </p>
           </article>
         )}
         {step === 5 && (

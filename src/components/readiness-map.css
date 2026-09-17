@@ -1,0 +1,218 @@
+/* Readiness dependency map. */
+
+.rm {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* --- Verdict -------------------------------------------------------------- */
+.rm-verdict {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 18px 20px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(120deg, var(--marine), var(--marine-2));
+  color: #fff;
+  box-shadow: var(--lift-2);
+}
+.rm-verdict-mark {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #ffffff1f;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 40px;
+}
+.rm-verdict .eyebrow {
+  color: var(--mint);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+}
+.rm-verdict h2 {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: clamp(19px, 2.4vw, 25px);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  margin-top: 4px;
+}
+.rm-first {
+  margin-top: 10px;
+  font-size: 13.5px;
+  color: #ffffffd6;
+  line-height: 1.5;
+  border-top: 1px solid #ffffff26;
+  padding-top: 10px;
+}
+.rm-first strong {
+  color: var(--mint);
+}
+
+/* --- Graph ---------------------------------------------------------------- */
+.rm-graph {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 1100px) {
+  .rm-graph {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    align-items: start;
+    gap: 22px;
+  }
+}
+.rm-layer {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  min-width: 0;
+}
+.rm-layer-label {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--canvas-deep);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 22px;
+  margin-top: 2px;
+}
+.rm-layer-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+/* Dependency connectors: a rule from each layer to the next. */
+@media (min-width: 1100px) {
+  .rm-layer:not(:last-child):after {
+    content: "";
+    position: absolute;
+    top: 13px;
+    right: -18px;
+    width: 14px;
+    height: 1px;
+    background: var(--line);
+  }
+  .rm-layer-label {
+    position: absolute;
+    left: 0;
+    top: -30px;
+  }
+  .rm-layer {
+    padding-top: 0;
+  }
+  .rm-graph {
+    margin-top: 30px;
+  }
+}
+
+/* --- Gate card ------------------------------------------------------------ */
+.rm-gate {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  padding: 14px;
+  box-shadow: var(--lift-1);
+  min-width: 0;
+}
+.rm-gate.blocked {
+  border-color: #eec9c3;
+}
+.rm-gate.pending {
+  border-color: #f0e0c2;
+}
+.rm-gate.critical {
+  box-shadow:
+    0 0 0 2px #087f6833,
+    var(--lift-2);
+  border-color: var(--mint-deep);
+}
+.rm-gate header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.rm-gate header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  /* Wrap between words, never inside one: "Real enrollment" must not
+     become "enrollmen / t" when the state pill is wide. */
+  flex: 1 1 auto;
+  min-width: 7ch;
+  overflow-wrap: break-word;
+}
+.rm-gate header .u-pill {
+  flex: 0 0 auto;
+}
+.rm-blocker {
+  font-size: 13px;
+  line-height: 1.5;
+  margin-top: 9px;
+  overflow-wrap: anywhere;
+}
+.rm-detail {
+  margin: 12px 0 0;
+  padding-top: 11px;
+  border-top: 1px dashed var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.rm-detail div {
+  min-width: 0;
+}
+.rm-detail dt {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.rm-detail dd {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.rm-detail dd em {
+  display: block;
+  font-style: normal;
+  font-size: 11.5px;
+  color: var(--amber-deep);
+  margin-top: 2px;
+}
+.rm-detail dd em.stale {
+  color: var(--danger-deep);
+  font-weight: 600;
+}
+.rm-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--mint-deep);
+}
+.rm-go:hover {
+  text-decoration: underline;
+}
+.rm-note {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.55;
+  max-width: 76ch;
+}

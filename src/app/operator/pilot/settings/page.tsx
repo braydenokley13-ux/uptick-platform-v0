@@ -4,6 +4,8 @@ import { getDb } from "@/lib/db";
 import { uptickEnvironment } from "@/lib/environment";
 import { appUrl } from "@/lib/config";
 import { releaseReadiness } from "@/lib/release-readiness";
+import { readinessGates } from "@/lib/operator-readiness";
+import { ReadinessMap } from "@/components/readiness-map";
 import { Shell } from "@/components/shell";
 import { Badge, PageHeading } from "@/components/ui";
 import { PilotForm } from "@/components/pilot-form";
@@ -11,7 +13,9 @@ import "@/components/network-operations.css";
 export const dynamic = "force-dynamic";
 export default async function PilotSettings() {
   const actor = await requireActor(true),
-    data = await releaseReadiness(await getDb());
+    db = await getDb(),
+    data = await releaseReadiness(db),
+    gates = await readinessGates(db, data);
   const { schema, messaging } = data;
   const controls = [
     ["Canonical app origin", appUrl() === "https://pilot.upticklocal.com"],
@@ -35,6 +39,7 @@ export default async function PilotSettings() {
           title="Know what is ready."
           description="Record evidence for this release. Deployment, carrier delivery, working accounts and backed member promises need their own proof."
         />
+        <ReadinessMap gates={gates} />
         <p>
           <Link href="/operator/pilot/access">
             Manage operator and merchant access
@@ -258,9 +263,32 @@ export default async function PilotSettings() {
             </Link>
           </p>
           {data.markets.map((market) => (
-            <p key={market.id}>
-              {market.name} · {market.data_kind} · {market.state}
-            </p>
+            <div className="network-status-row" key={market.id}>
+              <Badge tone={market.backed ? "mint" : "amber"}>
+                {market.backed ? "Backed" : "Not backed"}
+              </Badge>
+              <p>
+                {market.name} · {market.data_kind} · {market.state}
+                <br />
+                {/* The proof, per week, in the same words the server uses to
+                    refuse. A count of cells never showed whether the cohort
+                    could actually be served. */}
+                <small>{market.evidence}</small>
+                {market.weeks.length > 0 && (
+                  <>
+                    <br />
+                    <small>
+                      {market.weeks
+                        .map(
+                          (week) =>
+                            `Week ${week.index}: ${week.usable}/${week.required}${week.released ? " (released)" : ""}`,
+                        )
+                        .join(" · ")}
+                    </small>
+                  </>
+                )}
+              </p>
+            </div>
           ))}
         </section>
         <section className="panel network-panel">

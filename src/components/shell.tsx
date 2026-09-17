@@ -19,6 +19,7 @@ import { ActionButton } from "./forms";
 import type { Actor } from "@/lib/domain";
 import { sampleDemoMode } from "@/lib/demo-guard";
 const merchantLinks = [
+  ["overview", "Overview", LayoutDashboard],
   ["program", "Program", ClipboardCheck],
   ["fulfillment", "Fulfillment", Store],
   ["results", "Results", ChartNoAxesCombined],

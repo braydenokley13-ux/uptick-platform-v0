@@ -197,7 +197,10 @@ export async function getActor(): Promise<Actor | null> {
       organization_id: string;
       can_export: boolean;
     }>(
-      "select * from memberships where user_id=$1 order by role desc limit 1",
+      /* A user can hold memberships in several organizations. The tiebreak is
+         explicit so the same person does not land in a different store between
+         two requests; choosing between them deliberately is a separate feature. */
+      "select * from memberships where user_id=$1 order by role desc,organization_id limit 1",
       [session.userId],
     );
     if (

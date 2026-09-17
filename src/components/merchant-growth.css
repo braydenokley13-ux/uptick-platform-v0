@@ -10,7 +10,7 @@
   gap: 24px;
   padding: 38px;
   border-radius: 16px;
-  background: #142437;
+  background: var(--marine);
   color: #f4f8fb;
   margin: 10px 0 24px;
   overflow: hidden;

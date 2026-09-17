@@ -3,7 +3,11 @@ import type { DB } from "./db";
 import { audit, authorize, type Actor } from "./domain";
 import { RequestError } from "./http";
 import { id } from "./security";
-import { loadPilotRun, pilotCapacity } from "./pilot-operations";
+import {
+  loadPilotRun,
+  pilotCapacity,
+  requiredCohort,
+} from "./pilot-operations";
 import { marketWeekWindow } from "./network";
 
 export const programObjectives = [
@@ -867,13 +871,17 @@ export async function approveGrowthProgramVersion(
       bookedRows.map((row) => [dateValue(row.week_key), Number(row.booked)]),
     );
     const backed = await pilotCapacity(tx, run, { reviewingCommercial: true });
-    const [{ admitted }] = await tx.query<{ admitted: number }>(
-      "select count(*)::int admitted from pilot_admissions where run_id=$1",
-      [run.id],
-    );
+    /* The shared rule for who a run owes a benefit to, rather than a third
+       inline definition of it. The question here is different from the
+       readiness gate's — it asks how many members a paid placement can reach,
+       not whether every week is backed — so the capacity bound stays where it
+       was: a cohort that is already admitted is the audience, while a run still
+       enrolling can only promise what its weeks can back. What changes is that
+       a withdrawn member no longer counts towards a placement's reach. */
+    const owed = await requiredCohort(tx, run);
     const effectiveAudience = run.cohort_frozen_at
-      ? Number(admitted)
-      : Math.min(Number(run.target_members), Number(backed.capacity));
+      ? owed
+      : Math.min(owed, Number(backed.capacity));
     if (effectiveAudience < 1)
       throw new RequestError(
         "The selected pilot has no backed audience available for paid placements.",

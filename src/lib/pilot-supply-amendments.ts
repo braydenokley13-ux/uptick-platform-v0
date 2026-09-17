@@ -9,6 +9,7 @@ import {
   pilotCapacity,
   pilotWeeks,
   requirePilotOperator,
+  requiredCohort,
 } from "./pilot-operations";
 
 const note = z.string().trim().min(10).max(1500);
@@ -229,13 +230,7 @@ export async function amendPilotSupply(db: DB, actor: Actor, raw: unknown) {
       ],
     );
     const backing = await pilotCapacity(tx, run, { reviewingCommercial: true });
-    const [{ count }] = await tx.query<{ count: number }>(
-      "select count(*)::int count from pilot_admissions where run_id=$1",
-      [run.id],
-    );
-    const required = run.cohort_frozen_at
-      ? count
-      : Math.max(count, run.target_members);
+    const required = await requiredCohort(tx, run);
     if (
       (backing.weeks.find((week) => week.week === input.weekKey)?.capacity ||
         0) < required

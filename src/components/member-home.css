@@ -1,0 +1,410 @@
+/* Member — mobile first, app-like.
+   Widths verified at 320 / 360 / 390 / 430. Nothing here may introduce a
+   horizontal scrollbar at 320. */
+
+.mh {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--canvas);
+  /* room for the fixed tab bar plus the iOS home indicator */
+  padding-bottom: calc(66px + env(safe-area-inset-bottom, 0px));
+}
+
+/* --- Chrome --------------------------------------------------------------- */
+.mh-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 10px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: color-mix(in srgb, var(--canvas) 88%, transparent);
+  backdrop-filter: blur(10px);
+}
+.mh-bell {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink);
+  flex: 0 0 38px;
+}
+.mh-label {
+  margin: 0 16px 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--mint-deep);
+  background: #e7f4ec;
+  border: 1px solid #cbe7d8;
+  border-radius: 999px;
+  padding: 5px 10px;
+  text-align: center;
+}
+.mh-main {
+  flex: 1;
+  padding: 4px 16px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+}
+.mh-greet h1 {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: clamp(24px, 7vw, 30px);
+  letter-spacing: -0.02em;
+  line-height: 1.12;
+}
+
+/* --- Bottom tab bar ------------------------------------------------------- */
+.mh-tabs {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  background: color-mix(in srgb, var(--paper) 94%, transparent);
+  backdrop-filter: blur(14px);
+  border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.mh-tabs a {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 9px 2px 8px;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--muted);
+  min-width: 0;
+}
+.mh-tabs a span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.mh-tabs a.active {
+  color: var(--mint-deep);
+  font-weight: 600;
+}
+
+/* --- The reveal ----------------------------------------------------------- */
+.mh-reveal {
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  box-shadow: var(--lift-3);
+}
+.mh-scene {
+  position: relative;
+  aspect-ratio: 5 / 3;
+  background: #e8c79a;
+}
+.mh-scene svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.mh-reveal-body {
+  padding: 16px 18px 18px;
+}
+.mh-reveal-eyebrow {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  color: var(--mint-deep);
+}
+.mh-reveal h2 {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: clamp(28px, 8.5vw, 38px);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+}
+.mh-reveal-where {
+  font-size: 15px;
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+}
+.mh-reveal-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.mh-reveal-meta span:not(:first-child):before {
+  content: "·";
+  margin-right: 8px;
+}
+.mh-reveal.redeemed .mh-scene {
+  filter: saturate(0.72);
+}
+
+/* Primary action: one per screen. */
+.mh-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 16px;
+  padding: 15px 18px;
+  border-radius: 12px;
+  background: var(--marine);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  box-shadow: var(--lift-2);
+}
+.mh-cta:hover {
+  background: var(--marine-2);
+}
+.mh-cta.ghost {
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  box-shadow: none;
+}
+.mh-cta.ghost:hover {
+  border-color: var(--mint-deep);
+  color: var(--mint-deep);
+  background: var(--paper);
+}
+
+/* --- Other member states -------------------------------------------------- */
+.mh-state {
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background: var(--paper);
+  padding: 22px 18px;
+  box-shadow: var(--lift-1);
+  text-align: center;
+}
+.mh-state.waiting {
+  background: linear-gradient(180deg, #fdf8ee, var(--paper) 70%);
+  border-color: #f0e3c9;
+}
+.mh-state.care {
+  background: linear-gradient(180deg, #f3f8f4, var(--paper) 70%);
+  border-color: #cfe4d7;
+}
+.mh-state-mark {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--canvas-deep);
+  color: var(--mint-deep);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+.mh-state h2 {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: clamp(21px, 6vw, 25px);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+.mh-state-body {
+  font-size: 14px;
+  color: var(--muted);
+  line-height: 1.55;
+  margin-top: 8px;
+}
+.mh-state-body p + p {
+  margin-top: 8px;
+}
+.mh-state .mh-cta {
+  max-width: 320px;
+  margin-inline: auto;
+}
+
+/* --- Quiet note ----------------------------------------------------------- */
+.mh-note {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 13px 15px;
+  border-radius: var(--radius);
+  background: #fdf6ea;
+  border: 1px solid #f2e3c6;
+}
+.mh-note > span {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #f6e3c0;
+  color: var(--amber-deep);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 32px;
+}
+.mh-note strong {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.mh-note small {
+  display: block;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* --- Join journey --------------------------------------------------------- */
+.mj-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.mj-progress-track {
+  flex: 1;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--canvas-deep);
+  overflow: hidden;
+}
+.mj-progress-track i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--mint-deep);
+  transition: width 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.mj-progress-step {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mj-progress-track i {
+    transition: none;
+  }
+}
+.mj-title {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: clamp(27px, 8vw, 34px);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+}
+.mj-lede {
+  font-size: 15px;
+  color: var(--muted);
+  margin-top: 8px;
+  line-height: 1.5;
+}
+.mj-fine {
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.55;
+  margin-top: 12px;
+}
+.mj-fine a {
+  text-decoration: underline;
+}
+.mj-closing {
+  margin-top: 6px;
+  text-align: center;
+}
+
+/* --- Narrow guard --------------------------------------------------------- */
+@media (max-width: 340px) {
+  .mh-main {
+    padding-inline: 12px;
+  }
+  .mh-tabs a {
+    font-size: 9.5px;
+  }
+  .mh-reveal-body {
+    padding-inline: 14px;
+  }
+}
+
+/* --- Places ---------------------------------------------------------------
+   The neighbourhood, its ZIPs and the counters actually backing this member's
+   week. No imagery: Uptick never shows a picture of a store it cannot vouch
+   for, and that rule does not relax because this tab is about places. */
+.member-places {
+  display: grid;
+  gap: 16px;
+}
+.member-places h1 {
+  font-size: 30px;
+  line-height: 1.12;
+  letter-spacing: -0.03em;
+  font-weight: 600;
+}
+.member-places h1 em {
+  font-style: normal;
+  color: var(--mint-deep);
+}
+.member-places-coverage {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: var(--paper);
+}
+.member-places-coverage strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+}
+.member-places-coverage p {
+  font-size: 13.5px;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+.member-places-coverage small {
+  display: block;
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+.member-places-list {
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+.member-places-state {
+  display: block;
+  font-size: 12.5px;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+.member-places-state.ok {
+  color: var(--mint-deep);
+}
+.member-places-state.warn {
+  color: var(--amber-deep);
+}
+.member-places-state.idle {
+  color: var(--muted);
+}

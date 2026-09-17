@@ -1,0 +1,218 @@
+/* Three surfaces that said more than their data supported.
+
+   All three are the same shape as the findings this repair pass began with: a
+   number or a verdict presented as one thing while being computed from another.
+   Each is pinned here so the shortcut cannot come back. */
+import assert from "node:assert/strict";
+import test from "node:test";
+import { memoryDb, type DB } from "../src/lib/db";
+import { pilotOperations } from "../src/lib/pilot-operations";
+import { membershipMessagingOperations } from "../src/lib/network-operations";
+import { recordMemberServiceEvent } from "../src/lib/member-service";
+import { id } from "../src/lib/security";
+import { seedSyntheticPilot } from "../scripts/verify-postgres-pilot";
+
+function localEnvironment() {
+  process.env.UPTICK_ENV = "development";
+  process.env.UPTICK_LOCAL_MODE = "true";
+  process.env.APP_URL = "http://localhost:3000";
+  process.env.SMS_TRANSPORT = "development";
+  process.env.PASS_ENCRYPTION_KEY = "p".repeat(64);
+  process.env.SESSION_SECRET = "s".repeat(64);
+  delete process.env.DATABASE_URL;
+  delete process.env.VERCEL;
+  delete process.env.VERCEL_ENV;
+}
+
+async function withDatabase(run: (db: DB) => Promise<void>) {
+  localEnvironment();
+  const db = await memoryDb();
+  try {
+    await run(db);
+  } finally {
+    await db.close?.();
+  }
+}
+
+test("the blocking supply alarm measures the cohort the run owes, not its original target", async () => {
+  await withDatabase(async (db) => {
+    const fixture = await seedSyntheticPilot(db, 20, "tc-alarm");
+    /* Five members leave a frozen twenty-member run. `amendPilotSupply` would
+       now accept fifteen units for the remaining weeks, so an alarm that still
+       compares against twenty calls a valid plan blocked. */
+    for (const member of fixture.members.slice(0, 5))
+      await recordMemberServiceEvent(db, fixture.actor, {
+        memberId: member.id,
+        kind: "withdrawn",
+        reason: "Synthetic member withdrew before this week.",
+        requestKey: `tc-alarm-withdraw-${member.id}`,
+      });
+    await db.query(
+      "insert into supply_adjustments(id,supply_id,delta,reason,actor_id) values($1,$2,-5,'Synthetic reduction to the remaining cohort.',$3)",
+      [id(), fixture.supplyId, fixture.actor.id],
+    );
+
+    const operations = await pilotOperations(db, fixture.actor, fixture.runId);
+    assert.ok(operations.detail);
+    const supply = operations.detail.constraints.filter(
+      (constraint) => constraint.category === "Supply",
+    );
+    const blocking = supply.filter((constraint) => constraint.urgency === "bad");
+    assert.ok(
+      !blocking.some((constraint) => /of 20 target members/.test(constraint.text)),
+      `week one backs the fifteen members still owed a benefit: ${blocking.map((c) => c.text).join(" | ")}`,
+    );
+    assert.ok(
+      !blocking.some((constraint) => /Week 1:/.test(constraint.text)),
+      "week one is not the short week",
+    );
+  });
+});
+
+test("messaging is not called ready while STOP and HELP are not being received", async () => {
+  await withDatabase(async (db) => {
+    await seedSyntheticPilot(db, 2, "tc-messaging");
+    const actor = {
+      id: "tc-operator",
+      role: "operator" as const,
+      organizationId: "tc-messaging-merchant",
+    };
+    const data = await membershipMessagingOperations(db, actor);
+    /* Development transport can send, so the transport-only answer is yes. The
+       console's verdict must still be no: without a current signed inbound
+       callback, a member's STOP is not reaching Uptick. */
+    assert.equal(data.readiness.sendReady, true);
+    assert.equal(
+      data.readiness.ready,
+      false,
+      "no signed callback has been observed for this scope",
+    );
+    assert.ok(
+      !data.callbacks.some((callback) => callback.current),
+      "and none of them is current",
+    );
+  });
+});
+
+test("the support queue reports every waiting member, not the page it shows", async () => {
+  await withDatabase(async (db) => {
+    await seedSyntheticPilot(db, 2, "tc-support");
+    for (let n = 0; n < 25; n++)
+      await db.query(
+        "insert into member_support_requests(id,origin,state) values($1,'member_web','queued')",
+        [`tc-support-${n}`],
+      );
+
+    const data = await membershipMessagingOperations(db, {
+      id: "tc-operator",
+      role: "operator",
+      organizationId: "tc-support-merchant",
+    });
+    assert.equal(data.support.length, 20, "the rendered list stays bounded");
+    assert.equal(
+      data.supportTotal,
+      25,
+      "twenty-five waiting members are not reported as twenty",
+    );
+  });
+});
+
+test("the unresolved-message badge counts every failure, not the page it shows", async () => {
+  await withDatabase(async (db) => {
+    const fixture = await seedSyntheticPilot(db, 2, "tc-unresolved");
+    const member = fixture.members[0].id;
+    /* One old failure, then ninety delivered messages on top of it. The
+       activity list is capped at eighty, so counting the visible rows loses the
+       failure and reports zero unresolved while a member is still undelivered. */
+    const message = async (n: number, state: string, ageDays: number) => {
+      const accessId = `tc-unresolved-access-${n}`;
+      await db.query(
+        `insert into member_access(id,member_id,token_hash,token_encrypted,purpose,expires_at,age_attested,disclosure,home_zip)
+         values($1,$2,$1,$1,'access',now()+interval '30 days',true,'Synthetic disclosure for this test.','10001')`,
+        [accessId, member],
+      );
+      await db.query(
+        `insert into member_messages(id,member_id,access_id,purpose,expires_at,environment,state,created_at)
+         values($1,$2,$3,'access',now()+interval '30 days','development',$4,now()-($5||' days')::interval)`,
+        [`tc-unresolved-${n}`, member, accessId, state, String(ageDays)],
+      );
+    };
+    await message(0, "failed", 30);
+    for (let n = 1; n <= 90; n++) await message(n, "delivered", 0);
+
+    const data = await membershipMessagingOperations(db, {
+      id: "tc-operator",
+      role: "operator",
+      organizationId: "tc-unresolved-merchant",
+    });
+    assert.ok(
+      !data.messages.some((row) => row.id === "tc-unresolved-0"),
+      "the old failure is outside the rendered window",
+    );
+    const unresolved = data.counts
+      .filter((c) => ["failed", "undelivered", "unknown"].includes(c.state))
+      .reduce((n, c) => n + c.count, 0);
+    assert.equal(unresolved, 1, "and is still counted");
+  });
+});
+
+test("a callback row is green only when the shared currency rule says so", async () => {
+  await withDatabase(async (db) => {
+    await seedSyntheticPilot(db, 2, "tc-callback");
+    /* A success that is old, and older still than nothing — no failure has ever
+       been recorded. Ordering the timestamps calls that healthy; the rule the
+       enrollment gate uses does not, because it is not a success for this
+       sender and release inside seven days. */
+    await db.query(
+      `insert into member_callback_health(kind,successful_count,failed_count,last_success_at,last_success_scope)
+       values('inbound',1,0,now()-interval '30 days','some-earlier-scope')`,
+    );
+
+    const data = await membershipMessagingOperations(db, {
+      id: "tc-operator",
+      role: "operator",
+      organizationId: "tc-callback-merchant",
+    });
+    const inbound = data.callbacks.find((c) => c.kind === "inbound")!;
+    assert.ok(inbound.last_success_at, "a success is on record");
+    assert.equal(inbound.last_failure_at, null, "and no failure is");
+    assert.equal(
+      inbound.current,
+      false,
+      "but it is not current for this sender and release",
+    );
+    assert.equal(data.readiness.ready, false);
+  });
+});
+
+test("a failure after the last good callback is the current state of that webhook", async () => {
+  await withDatabase(async (db) => {
+    await seedSyntheticPilot(db, 2, "tc-newer-failure");
+    const { messagingCommissioningScope } = await import(
+      "../src/lib/release-readiness"
+    );
+    const scope = await messagingCommissioningScope(db);
+    /* A success for the current scope an hour ago, then a failure since. The
+       recency-and-scope test alone still passes, so ignoring the failure kept
+       the gate green for a week while STOP and HELP were failing. */
+    await db.query(
+      `insert into member_callback_health(kind,successful_count,failed_count,last_success_at,last_success_scope,last_failure_at,last_failure_code)
+       values('inbound',1,1,now()-interval '1 hour',$1,now()-interval '5 minutes','processing_failed')`,
+      [scope],
+    );
+
+    const data = await membershipMessagingOperations(db, {
+      id: "tc-operator",
+      role: "operator",
+      organizationId: "tc-newer-failure-merchant",
+    });
+    const inbound = data.callbacks.find((c) => c.kind === "inbound")!;
+    assert.equal(inbound.last_success_scope, scope, "the scope is right");
+    assert.equal(
+      inbound.current,
+      false,
+      "but a failure since is what this webhook is doing now",
+    );
+    assert.equal(data.readiness.ready, false);
+  });
+});

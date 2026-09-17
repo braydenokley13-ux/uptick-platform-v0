@@ -25,6 +25,7 @@ import {
 } from "@/lib/network-operations";
 import { Shell } from "@/components/shell";
 import { memberMessageText } from "@/lib/member-messaging";
+import { MessagingConsole } from "@/components/messaging-console";
 import { Badge, ButtonLink, Empty, Metric, PageHeading } from "@/components/ui";
 import {
   LocalCoordinateMap,
@@ -2207,7 +2208,10 @@ export default async function NetworkPage({
   return (
     <Shell
       actor={actor}
-      active="network"
+      /* The sidebar keys on the route, so the route is what it is told.
+         Passing a bare "network" matched no entry, leaving Markets and
+         Messaging permanently unlit and the drawer that holds them closed. */
+      active={active ? `network/${active}` : "network"}
       name={data.market?.name || "Local demand network"}
     >
       <div className="network-operations">
@@ -2235,7 +2239,10 @@ export default async function NetworkPage({
           <MarketSelect data={data} section={active} />
         )}
         {messaging ? (
-          <MembershipMessaging data={messaging} />
+          <>
+            <MessagingConsole data={messaging} />
+            <MembershipMessaging data={messaging} />
+          </>
         ) : active === "members" && !data.market ? (
           <NetworkMemberLookup />
         ) : !data.market ? (

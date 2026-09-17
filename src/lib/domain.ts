@@ -669,7 +669,8 @@ export async function saveDraft(db: DB, actor: Actor, input: DraftInput) {
     } else {
       offerId = id();
       const [location] = await tx.query<{ id: string }>(
-        "select id from locations where organization_id=$1 order by created_at limit 1",
+        // Bulk-created locations share a created_at, so id breaks the tie.
+        "select id from locations where organization_id=$1 order by created_at,id limit 1",
         [input.organizationId],
       );
       if (!location) throw Error("Add a business location first.");

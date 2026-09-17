@@ -375,13 +375,22 @@ export async function memberMessageEligibility(
     [recipient],
   );
   if (globalSuppression?.suppressed) return "Uptick program opt-out.";
-  if (process.env.PRIVACY_SUPPRESSION_KEY || localMode()) {
-    const [erasedSuppression] = await db.query<{ suppressed: boolean }>(
-      "select suppressed from privacy_phone_suppressions where phone_fingerprint=$1",
-      [privacyPhoneFingerprint(recipient)],
-    );
-    if (erasedSuppression?.suppressed) return "Uptick program opt-out.";
-  }
+  /* The erasure do-not-contact list is keyed by an HMAC of the phone, because
+     erasure deletes the number itself and this fingerprint is all that remains
+     of the request (db/migrations/028_privacy_administration.sql:30).
+
+     Guarding the lookup on the key being present made a missing key skip the
+     check entirely — so the one environment that cannot compute the
+     fingerprint was also the one that messaged every person who had asked to
+     be forgotten. A privacy control has to fail closed: outside local mode, a
+     missing key stops the send instead of waving it through. */
+  if (!process.env.PRIVACY_SUPPRESSION_KEY && !localMode())
+    return "Privacy suppression key is not configured.";
+  const [erasedSuppression] = await db.query<{ suppressed: boolean }>(
+    "select suppressed from privacy_phone_suppressions where phone_fingerprint=$1",
+    [privacyPhoneFingerprint(recipient)],
+  );
+  if (erasedSuppression?.suppressed) return "Uptick program opt-out.";
   const [suppression] = await db.query<{ suppressed: boolean }>(
     "select suppressed from member_suppressions where phone=$1 and sender_id=$2",
     [recipient, message.sender_id],
@@ -737,10 +746,23 @@ export async function memberInbound(db: DB, fields: Record<string, string>) {
             : "Uptick Local received your message. A support person will review it. Reply STOP to stop texts.",
       };
     if (normalized === "STOP" || normalized === "START") {
-      if (process.env.PRIVACY_SUPPRESSION_KEY || localMode())
+      /* STOP may strengthen the erasure do-not-contact record. START must
+         never clear it.
+
+         That row is what survives an erasure request: the number itself is
+         gone, and the fingerprint is the only way Uptick can still honour
+         "do not contact me". A START is a carrier-level unblock sent by
+         whoever holds that number today, which is not the erased person
+         revoking their request — and if the number has been recycled, it is
+         someone else entirely. START still lifts the sender and program
+         suppressions written below; it just cannot reach this one. */
+      if (
+        normalized === "STOP" &&
+        (process.env.PRIVACY_SUPPRESSION_KEY || localMode())
+      )
         await tx.query(
-          "update privacy_phone_suppressions set suppressed=$2,updated_at=now() where phone_fingerprint=$1",
-          [privacyPhoneFingerprint(fields.From), normalized === "STOP"],
+          "update privacy_phone_suppressions set suppressed=true,updated_at=now() where phone_fingerprint=$1",
+          [privacyPhoneFingerprint(fields.From)],
         );
       await tx.query(
         "insert into member_suppressions(phone,sender_id,suppressed) values($1,$2,$3) on conflict(phone,sender_id) do update set suppressed=excluded.suppressed,updated_at=now()",

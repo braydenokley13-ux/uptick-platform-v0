@@ -1,20 +1,24 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { ArrowUpRight, Check, Clock3 } from "lucide-react";
+import { ArrowUpRight, Check, Clock3, Gift, MapPin } from "lucide-react";
 import { getDb } from "@/lib/db";
 import { decrypt } from "@/lib/security";
-import { memberHome } from "@/lib/member-experience";
+import { memberHome, memberPlaces } from "@/lib/member-experience";
 import { MEMBER_SESSION_COOKIE } from "@/lib/member-session";
 import { MemberPrivacyRequest } from "@/components/member-privacy";
 import { memberPrivacyRequests } from "@/lib/privacy-admin";
+import { MemberInvite } from "@/components/member-ui";
+import { MemberPlaces } from "@/components/member-places";
+import { activeMemberTab, memberView } from "@/lib/member-views";
 import {
-  DropCard,
-  MemberFrame,
-  MemberInvite,
-  PerkIllustration,
-} from "@/components/member-ui";
+  MemberShell,
+  MemberState,
+  MemberNote,
+  UptickReveal,
+} from "@/components/member-home";
 import {
+  ClaimUptick,
   MemberAccountControls,
   MemberHelp,
   MemberPreferences,
@@ -35,7 +39,10 @@ export default async function YourUptick({
   } catch {
     redirect("/join");
   }
-  const { view } = await searchParams;
+  /* Anything that is not a real view is Home, including the greeting. An
+     unrecognised value used to render Home with `greet` suppressed, so a typo
+     or a stale link produced a subtly broken page rather than the home one. */
+  const view = memberView((await searchParams).view);
   const current = data.current as
     | (NonNullable<typeof data.current> & {
         grant?: {
@@ -67,32 +74,45 @@ export default async function YourUptick({
   const earlierRecoveries = data.outstandingRecoveries.filter(
     (recovery) => !recovery.current_week,
   );
-  const currentRecoveryStatus =
-    current?.recovery?.state === "issued" && !currentRecoveryPass
-      ? "expired"
-      : current?.recovery?.state;
+  /* A make-good's own state and expiry decide this. It previously read
+     "expired" whenever the recovery was missing from outstandingRecoveries —
+     but that list is filtered to unsuperseded, unexpired rows that join
+     through an original claim, and capped at ten, so absence from it means
+     several different things and only one of them is expiry. A live make-good
+     whose original_claim_id was never bound (the column is nullable) was being
+     told to the member as expired while it was still usable. */
+  const currentRecovery = current?.recovery;
+  const currentRecoveryStatus = !currentRecovery
+    ? undefined
+    : currentRecovery.state === "redeemed"
+      ? "redeemed"
+      : currentRecovery.expires_at &&
+          new Date(currentRecovery.expires_at) <= new Date()
+        ? "expired"
+        : "issued";
 
   return (
-    <MemberFrame privateView>
-      <nav className="member-tabs">
-        <Link aria-current={!view ? "page" : undefined} href="/your-uptick">
-          Your Uptick
-        </Link>
-        <Link
-          aria-current={view === "history" ? "page" : undefined}
-          href="/your-uptick?view=history"
-        >
-          Your good things
-        </Link>
-        <Link
-          aria-current={view === "preferences" ? "page" : undefined}
-          href="/your-uptick?view=preferences"
-        >
-          Preferences
-        </Link>
-      </nav>
-
-      {view === "preferences" ? (
+    <MemberShell
+      /* Every tab in the bottom bar has to light its own view. `places` used
+         to fall through to Home, so the one tab that changed nothing also
+         looked like it had not been pressed. */
+      active={activeMemberTab(view)}
+      greet={!view}
+      subtitle={
+        data.serviceStatus?.blocks_future_release
+          ? "Your future weekly releases are paused. Anything already issued still works."
+          : saved?.state === "redeemed"
+            ? "You picked this one up. Nice."
+            : saved
+              ? "Your pass is saved and ready."
+              : current?.options.length
+                ? "Your weekly Uptick is here."
+                : "Your membership is active."
+      }
+    >
+      {view === "places" ? (
+        <MemberPlaces data={await memberPlaces(await getDb(), credential)} />
+      ) : view === "preferences" ? (
         <section className="member-settings">
           <p className="eyebrow">LOCAL, ON YOUR TERMS</p>
           <h1>
@@ -162,22 +182,6 @@ export default async function YourUptick({
         </section>
       ) : (
         <>
-          <header className="member-your-heading">
-            <p className="eyebrow">
-              {data.market?.name || "YOUR LOCAL MEMBERSHIP"}
-            </p>
-            <h1>
-              What’s your
-              <br />
-              <em>Uptick this week?</em>
-            </h1>
-            <p>
-              {data.serviceStatus?.blocks_future_release
-                ? "Your future weekly releases are paused. Already-issued benefits and support remain available."
-                : "Your free membership stays active with or without promotional texts."}
-            </p>
-          </header>
-
           {earlierRecoveries.length > 0 && (
             <section className="member-saved">
               <p className="eyebrow">EARLIER UPTICK RECOVERY</p>
@@ -254,62 +258,114 @@ export default async function YourUptick({
           )}
 
           {saved ? (
-            <section className="member-saved">
-              <p className="eyebrow">
-                {saved.state === "redeemed"
-                  ? "REDEMPTION RECORDED"
-                  : "YOUR UPTICK IS SAVED"}
-              </p>
-              <PerkIllustration reward={saved.snapshot.reward} />
-              <h2>{saved.snapshot.reward}</h2>
-              <p>{saved.snapshot.merchant}</p>
-              <Link
+            <>
+              <UptickReveal
+                tone={saved.state === "redeemed" ? "redeemed" : "saved"}
+                benefit={saved.snapshot.reward}
+                merchant={saved.snapshot.merchant}
+                endsLabel={
+                  saved.state === "redeemed"
+                    ? "Enjoyed this week"
+                    : "Ready at the counter"
+                }
                 href={`/p/${decrypt(saved.token_encrypted)}`}
-                className="button"
-              >
-                {saved.state === "redeemed"
-                  ? "View my redemption"
-                  : "Open my pass"}
-                <ArrowUpRight size={16} />
-              </Link>
-            </section>
+                cta={
+                  saved.state === "redeemed"
+                    ? "View my redemption"
+                    : "Open my pass"
+                }
+              />
+              <MemberNote />
+            </>
           ) : current?.options.length ? (
-            <DropCard supply={current.options[0]} available />
+            <>
+              <UptickReveal
+                benefit={current.options[0].reward}
+                merchant={current.options[0].merchant}
+                qualification={current.options[0].qualification}
+                driveMinutes={current.options[0].drive_minutes}
+                endsLabel={`Through ${new Date(
+                  current.options[0].expires_at,
+                ).toLocaleDateString("en-US", {
+                  weekday: "long",
+                  timeZone: current.options[0].timezone,
+                })}`}
+                /* Claiming writes a pass; it is not a page you can navigate
+                   to. This previously linked to /u/<supplyId>, but /u/[token]
+                   resolves a member access token, so the one CTA in the whole
+                   member journey that turns a benefit into a pass led to a
+                   URL that could never resolve. */
+                action={<ClaimUptick supplyId={current.options[0].id} />}
+              />
+              <MemberNote />
+            </>
           ) : data.serviceStatus?.blocks_future_release ? (
-            <div className="member-empty">
-              <h2>Future weekly benefits are paused.</h2>
+            <MemberState
+              tone="care"
+              icon={<Clock3 size={22} />}
+              eyebrow="YOUR MEMBERSHIP IS SAFE"
+              title="Your weekly Uptick is paused."
+              action={{ href: "/sms", label: "Talk to us" }}
+            >
               <p>
-                Account status: {data.serviceStatus.kind.replaceAll("_", " ")}.
-                Your original pilot record stays intact. Contact Uptick support
-                if you want to return.
+                Nothing you have already been given goes away, and your record
+                stays exactly as it is.
               </p>
-            </div>
+              <p>
+                Status: {data.serviceStatus.kind.replaceAll("_", " ")}. Tell us
+                whenever you would like to come back.
+              </p>
+            </MemberState>
           ) : data.admission.state === "waitlisted" ? (
-            <div className="member-empty">
-              <h2>You’re a member and on the pilot waitlist.</h2>
+            <MemberState
+              tone="waiting"
+              icon={<Clock3 size={22} />}
+              eyebrow="YOU'RE A MEMBER"
+              title="You're next in line."
+              action={{
+                href: "/your-uptick?view=preferences",
+                label: "Check your ZIPs",
+              }}
+            >
               <p>
-                Your membership is active. We have not promised a weekly benefit
-                until backed four-week capacity opens for you.
+                Your membership is active. We only promise a weekly Uptick once
+                a nearby store has actually backed one for you — so we have not
+                promised you one yet.
               </p>
-            </div>
+              <p>You will get a text the moment a place opens.</p>
+            </MemberState>
           ) : data.admission.state === "admitted" ? (
-            <div className="member-empty">
-              <PerkIllustration />
-              <h2>Your pilot place is confirmed.</h2>
+            <MemberState
+              tone="waiting"
+              icon={<Gift size={22} />}
+              eyebrow="YOUR PLACE IS CONFIRMED"
+              title="Something good is on its way."
+              action={{
+                href: "/your-uptick?view=history",
+                label: "See your good things",
+              }}
+            >
               <p>
-                Uptick is preparing the backed benefit for this week. It will
-                appear here after the reviewed weekly release.
+                A nearby store is getting this week&rsquo;s Uptick ready. It
+                lands here as soon as it is confirmed, and we will text you.
               </p>
-            </div>
+            </MemberState>
           ) : (
-            <div className="member-empty">
-              <PerkIllustration />
-              <h2>Your free membership is active.</h2>
+            <MemberState
+              icon={<MapPin size={22} />}
+              eyebrow="YOUR MEMBERSHIP IS ACTIVE"
+              title="We're still building your neighborhood."
+              action={{
+                href: "/your-uptick?view=preferences",
+                label: "Update your ZIPs",
+              }}
+            >
               <p>
-                A backed pilot place is not available for this account yet. We
-                will show admission here when capacity is confirmed.
+                Uptick runs one neighborhood at a time. Yours does not have a
+                backed pilot place yet — we would rather tell you that than
+                promise something no store has agreed to.
               </p>
-            </div>
+            </MemberState>
           )}
 
           <MemberHelp
@@ -323,6 +379,6 @@ export default async function YourUptick({
             )}
         </>
       )}
-    </MemberFrame>
+    </MemberShell>
   );
 }

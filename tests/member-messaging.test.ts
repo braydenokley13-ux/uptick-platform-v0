@@ -100,6 +100,9 @@ function staging() {
   process.env.SUPPORT_EMAIL = "support@uptick.example";
   process.env.TWILIO_ACCOUNT_SID = `AC${"a".repeat(32)}`;
   process.env.TWILIO_AUTH_TOKEN = "test-token";
+  /* A hosted environment that can send at all must be able to compute the
+     erasure do-not-contact fingerprint; sending is refused without it. */
+  process.env.PRIVACY_SUPPRESSION_KEY = "s".repeat(64);
 }
 async function access(purpose: "access" | "drop" = "access") {
   const accessId = id(),
@@ -548,4 +551,29 @@ test("protected staging personas require both explicit tester access and current
   assert.equal(await pilotPersona(db, actor.id, "merchant"), null);
   process.env.UPTICK_ENV = "production";
   assert.equal(await pilotPrincipal(db, actor.id), null);
+});
+
+test("a hosted environment that cannot compute the erasure fingerprint refuses to send", async () => {
+  staging();
+  await configureMemberSender(db, actor, {
+    serviceSid,
+    phone: "+12015550199",
+    approved: true,
+  });
+  /* privacy_phone_suppressions is keyed by an HMAC of the phone, because
+     erasure deletes the number itself and the fingerprint is all that is left
+     of the request. Without the key that list cannot be consulted — and the
+     old behaviour was to skip the check, so the one environment unable to
+     honour an erasure was also the one that messaged those people anyway. */
+  delete process.env.PRIVACY_SUPPRESSION_KEY;
+  const message = await queueMemberAccess(db, await access());
+  let called = false;
+  await dispatchMemberMessages(db, 20, async () => {
+    called = true;
+    return { sid: providerSid };
+  });
+  assert.equal(called, false, "nothing may be handed to the provider");
+  const row = await saved(message.id);
+  assert.equal(row.state, "suppressed");
+  assert.match(row.suppression_reason || "", /suppression key/i);
 });
