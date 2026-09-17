@@ -12,7 +12,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { memoryDb, type DB } from "../src/lib/db";
-import { destinationPins, weekBacking } from "../src/lib/command-centre";
+import {
+  commandCentre,
+  destinationPins,
+  weekBacking,
+} from "../src/lib/command-centre";
 import {
   loadPilotRun,
   pilotCapacity,
@@ -590,5 +594,65 @@ test("K · a counter that has issued most of its commitment does not eat the pro
     );
     assert.equal(busy.issued, 9);
     assert.equal(idle.issued, 0);
+  });
+});
+
+test("L · a counter with no placements left is low on supply, not an unavailable counter", async () => {
+  await withDatabase(async (db) => {
+    /* The counter that lost the display draw in test I is eligible, ready,
+       stocked and staffed. Reporting it as "not ready" tells an operator to
+       re-confirm stock and briefings that are fine, and adds it to the
+       "counters unavailable" headline beside a line claiming every counter is
+       routable. Having no placements left is the extreme of low supply. */
+    const fixture = await seedSyntheticPilot(db, 20, "cc-spent");
+    const run = await loadPilotRun(db, fixture.runId);
+    await addEligibleCounter(
+      db,
+      fixture,
+      "cc-spent-second",
+      20,
+      fixture.weekKey,
+    );
+    await linkSharedProgram(db, fixture, {
+      programId: "cc-spent-p",
+      weekKey: fixture.weekKey,
+      plannedPlacements: 20,
+      supplyIds: [fixture.supplyId, "cc-spent-second"],
+    });
+    await issueProgramGrants(db, fixture, {
+      prefix: "cc-spent",
+      programId: "cc-spent-p",
+      weekKey: fixture.weekKey,
+      supplyId: fixture.supplyId,
+      memberIds: fixture.members.slice(0, 18).map((member) => member.id),
+    });
+
+    const capacity = await pilotCapacity(db, run);
+    const pins = await destinationPins(db, run, fixture.weekKey, capacity);
+    const spent = pins.find((pin) => pin.supplyId === "cc-spent-second")!;
+    assert.equal(
+      spent.backed,
+      0,
+      "the precondition: no share of the remainder",
+    );
+    assert.equal(
+      spent.state,
+      "low_supply",
+      "nothing about this counter needs re-confirming",
+    );
+    assert.match(spent.why, /Growth Program has no placements left/);
+
+    const centre = await commandCentre(
+      db,
+      fixture.actor,
+      run,
+      fixture.weekKey,
+      capacity,
+    );
+    assert.equal(
+      centre.unavailableDestinations,
+      0,
+      "a counter with nothing to give is still a counter that is routable",
+    );
   });
 });

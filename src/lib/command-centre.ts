@@ -101,7 +101,7 @@ export async function destinationPins(
   const plans = capacity.supplies.filter(
     (supply) => supply.week_key === weekKey,
   );
-  const display = new Map<string, { backed: number; exhausted: boolean }>();
+  const display = new Map<string, number>();
   for (const key of new Set(
     plans.map((plan) => plan.programId || plan.supply_id),
   )) {
@@ -120,13 +120,13 @@ export async function destinationPins(
       const headroom = Math.max(0, member.total - member.issued);
       const placeable = Math.min(headroom, Math.max(0, left));
       left -= placeable;
-      display.set(member.supply_id, {
-        /* Grants already drawn from this counter are part of what it backs;
-           a commercial remainder has already subtracted them, so adding them
-           back is what makes "N of M remain" add up. */
-        backed: Math.min(member.total, placeable + member.issued),
-        exhausted: placeable < headroom,
-      });
+      /* Grants already drawn from this counter are part of what it backs; a
+         commercial remainder has already subtracted them, so adding them back
+         is what makes "N of M remain" add up. */
+      display.set(
+        member.supply_id,
+        Math.min(member.total, placeable + member.issued),
+      );
     }
   }
 
@@ -204,8 +204,7 @@ export async function destinationPins(
       (supply) =>
         supply.week_key === weekKey && supply.supply_id === row.supply_id,
     );
-    const shared = display.get(row.supply_id);
-    const backed = shared?.backed ?? 0;
+    const backed = display.get(row.supply_id) ?? 0;
     const remaining = Math.max(0, backed - row.issued);
     const usable = plan?.total ?? 0;
     const serviceable = Math.max(
@@ -227,17 +226,28 @@ export async function destinationPins(
           ? "Readiness confirmation has expired. Re-confirm stock and staff."
           : `Destination readiness is ${(row.ready_state || "not recorded").replaceAll("_", " ")}. Confirm before the next release.`;
     } else if (!backed) {
-      /* Eligibility failed for a reason the columns above do not name — an
-         unapproved or colliding fallback, a missing staff QR credential, a
-         supply window that does not cover the week, an exhausted commercial
-         limit. Say so plainly rather than reporting "0 of 0 remain". */
-      state = "not_ready";
-      why =
-        shared?.exhausted && plan?.commercialCapacity !== null
-          ? `Committed ${row.committed} ${when}, but this counter's Growth Program has no placements left to give here.`
+      if (usable && plan?.programId) {
+        /* Eligible, ready, stocked — and out of placements, because its Growth
+           Program's remainder went to counters that could use it or the
+           programme has none left at all. Nothing here needs re-confirming, so
+           this is not a readiness failure and must not be counted as an
+           unavailable counter; it is the extreme of low supply. */
+        state = "low_supply";
+        why = `Committed ${row.committed} ${when}, but this counter's Growth Program has no placements left to give here.`;
+      } else {
+        /* Eligibility failed for a reason the columns above do not name — an
+           unapproved or colliding fallback, a missing staff QR credential, a
+           supply window that does not cover the week, or a Growth Program that
+           is not approved to place anything for this run, which
+           `releaseWeeklyBenefits` will refuse outright. Say so plainly rather
+           than reporting "0 of 0 remain". */
+        state = "not_ready";
+        why = usable
+          ? `Committed ${row.committed} ${when}, but this counter's Growth Program is not approved to place anything for this run.`
           : row.committed > 0
             ? `Committed ${row.committed} ${when}, but none of it is currently usable. Check the fallback, the staff QR credential and the supply's dates.`
             : `Nothing is committed ${when} at this counter.`;
+      }
     } else if (remaining <= Math.max(3, Math.round(backed * 0.15))) {
       state = "low_supply";
       why = `Only ${remaining} of ${backed} backed units remain ${when}.`;
